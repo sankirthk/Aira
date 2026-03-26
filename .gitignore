@@ -1,0 +1,54 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Xcode
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+xcuserdata/
+*.xcscmblueprint
+*.xcscheme
+DerivedData/
+build/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+
+# Swift Package Manager
+.build/
+.swiftpm/
+*.resolved
+
+# CocoaPods (not used, but safe to include)
+Pods/
+Podfile.lock
+
+# Carthage (not used, but safe to include)
+Carthage/Build/
+
+# Build artifacts
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Notchapp (React mockup — not part of the Swift app)
+Notchapp
+
+
+# Environment / secrets
+*.env
+.env.*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Claude Code internal files
+.claude/settings.local.json
