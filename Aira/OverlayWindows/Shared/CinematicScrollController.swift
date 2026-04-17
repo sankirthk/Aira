@@ -4,7 +4,7 @@ import AppKit
 @MainActor
 class CinematicScrollController {
     var onScrollTick: ((CGFloat) -> Void)?
-    
+
     private var scrollTask: Task<Void, Never>?
     private var isSpeaking: Bool = false
     private var autoScrollWPM: Double = 135
@@ -17,7 +17,10 @@ class CinematicScrollController {
 
     private var lastFrameTime: CFTimeInterval = 0
     private let postSpeechGlideDuration: Double = 0.42
-    private let voiceSpeedMultiplier: Double = 1.45
+    private let voiceSpeedMultiplier: Double = 1.18
+    private let speakingCatchUpFactorRange: ClosedRange<Double> = 1.0...2.6
+    private let glideCatchUpFactorRange: ClosedRange<Double> = 1.0...1.2
+    private let postGlideGapSpeedMultiplier: Double = 1.6
     private var remainingPostSpeechGlide: Double = 0
 
     func configure(
@@ -48,6 +51,11 @@ class CinematicScrollController {
 
     func setAnchorOffset(_ offset: CGFloat?) {
         anchorOffset = offset
+        // If the task stopped and a new anchor is set ahead of the current position,
+        // restart the task so blank-line gaps are traversed without waiting for speech.
+        if offset != nil && scrollTask == nil {
+            updateTask()
+        }
     }
 
     func setInitialOffset(_ offset: CGFloat) {
@@ -61,12 +69,20 @@ class CinematicScrollController {
         remainingPostSpeechGlide = 0
     }
 
+    private var anchorDriftPixels: Double {
+        guard let anchor = anchorOffset else { return 0 }
+        let maxOff = Double(max(contentHeight - viewportHeight, 0))
+        guard maxOff > 0 else { return 0 }
+        return (Double(anchor) * maxOff) - (Double(currentScrollOffset) * maxOff)
+    }
+
     private func updateTask() {
-        if isSpeaking || remainingPostSpeechGlide > 0 {
+        let shouldRun = isSpeaking || remainingPostSpeechGlide > 0 || anchorDriftPixels > 4
+        if shouldRun {
             if scrollTask == nil {
                 lastFrameTime = CACurrentMediaTime()
                 let tickInterval: UInt64 = 16_666_667 // ~60 fps
-                
+
                 scrollTask = Task { [weak self] in
                     while !Task.isCancelled {
                         try? await Task.sleep(nanoseconds: tickInterval)
@@ -99,33 +115,57 @@ class CinematicScrollController {
         var pixelAdvancePerSecond = ((autoScrollWPM * voiceSpeedMultiplier) / 60.0) * calibratedPointsPerWord
 
         if !isSpeaking {
-            remainingPostSpeechGlide = max(remainingPostSpeechGlide - dt, 0)
-            let glideProgress = remainingPostSpeechGlide / postSpeechGlideDuration
-            let easedGlide = glideProgress * glideProgress
-            pixelAdvancePerSecond *= easedGlide
+            if remainingPostSpeechGlide > 0 {
+                // Normal post-speech deceleration glide.
+                remainingPostSpeechGlide = max(remainingPostSpeechGlide - dt, 0)
+                let glideProgress = remainingPostSpeechGlide / postSpeechGlideDuration
+                let easedGlide = glideProgress * glideProgress
+                pixelAdvancePerSecond *= easedGlide
+            } else {
+                // Glide expired. If the anchor is still ahead (blank-line gap), crawl
+                // toward it gently so sparse layouts do not suddenly surge in speed.
+                // If there is no gap, tick() will stop the task below.
+                let drift = anchorDriftPixels
+                if drift > 4 {
+                    pixelAdvancePerSecond = (autoScrollWPM / 60.0) * calibratedPointsPerWord * postGlideGapSpeedMultiplier
+                } else {
+                    pixelAdvancePerSecond = 0
+                }
+            }
         }
 
-        // Anchor correction should never make voice mode feel slower than the configured WPM.
-        // Use the WPM-derived pace as the floor and allow only a modest forward catch-up boost.
+        // Anchor correction: while speaking, scale aggressively with drift so blank-line
+        // gaps are traversed in under a second when the user starts a new section.
+        // During glide/crawl phases, apply only a gentle nudge to avoid overshoot.
         if let anchor = anchorOffset {
-            let anchorPixelY = anchor * maxOffset
-            let currentPixelY = currentScrollOffset * maxOffset
+            let anchorPixelY = Double(anchor) * Double(maxOffset)
+            let currentPixelY = Double(currentScrollOffset) * Double(maxOffset)
             let drift = anchorPixelY - currentPixelY
 
-            let driftRatio = min(max(drift / max(viewportHeight, 1), 0.0), 1.0)
-            let catchUpFactor = 1.0 + (driftRatio * 0.18)
-            pixelAdvancePerSecond *= catchUpFactor
+            if drift > 0 {
+                let driftRatio = min(max(drift / max(Double(viewportHeight), 1), 0.0), 1.0)
+                let catchUpFactor: Double
+                if isSpeaking {
+                    catchUpFactor = speakingCatchUpFactorRange.lowerBound
+                        + (driftRatio * (speakingCatchUpFactorRange.upperBound - speakingCatchUpFactorRange.lowerBound))
+                } else {
+                    catchUpFactor = glideCatchUpFactorRange.lowerBound
+                        + (driftRatio * (glideCatchUpFactorRange.upperBound - glideCatchUpFactorRange.lowerBound))
+                }
+                pixelAdvancePerSecond *= catchUpFactor
+            }
         }
 
         let pixelAdvance = pixelAdvancePerSecond * dt
-        let normalizedAdvance = pixelAdvance / maxOffset
+        let normalizedAdvance = pixelAdvance / Double(maxOffset)
 
         currentScrollOffset = min(currentScrollOffset + CGFloat(normalizedAdvance), 1.0)
         onScrollTick?(currentScrollOffset)
 
         if currentScrollOffset >= 1.0 {
             stop()
-        } else if !isSpeaking && remainingPostSpeechGlide <= 0 {
+        } else if !isSpeaking && remainingPostSpeechGlide <= 0 && anchorDriftPixels <= 4 {
+            // Gap fully traversed (or no gap) — stop the task.
             scrollTask?.cancel()
             scrollTask = nil
         }

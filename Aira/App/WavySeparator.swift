@@ -7,6 +7,7 @@ struct WavySeparator: View {
     var opacity: Double = 0.3
     var lineHeight: CGFloat = 4
     var amplitudeScale: CGFloat = 0.25
+    var verticalPadding: CGFloat = 6
 
     var body: some View {
         WavyLine(amplitudeScale: amplitudeScale)
@@ -14,7 +15,7 @@ struct WavySeparator: View {
                     style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
             .frame(height: lineHeight)
             .blur(radius: 0.3)
-            .padding(.vertical, 6)
+            .padding(.vertical, verticalPadding)
     }
 }
 

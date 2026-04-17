@@ -3,6 +3,7 @@ import SwiftUI
 struct PillContentView: View {
     let script: Script
     let appearance: OverlayAppearance
+    let defaultAppearance: OverlayAppearance
     let countdownDuration: Int
     let voiceSyncEnabled: Bool
     let autoScrollWPM: Double
@@ -14,6 +15,9 @@ struct PillContentView: View {
     @ObservedObject var voiceSync: VoiceSyncEngine
     @ObservedObject var audioMonitor: AudioLevelMonitor
     let onClose: () -> Void
+    let onAppearanceChange: (OverlayAppearance) -> Void
+    let onSwapWithNotch: (() -> Void)?
+    let onResetDefaultSize: () -> Void
 
     @State private var currentAppearance: OverlayAppearance
     @State private var showAppearancePopover: Bool = false
@@ -27,9 +31,14 @@ struct PillContentView: View {
          scrollCoordinator: SessionScrollCoordinator,
          reportsPrimaryMetrics: Bool = false,
          mode: PillContentMode, voiceSyncMode: VoiceSyncMode = .voice, voiceSync: VoiceSyncEngine, audioMonitor: AudioLevelMonitor,
-         onClose: @escaping () -> Void) {
+         onClose: @escaping () -> Void,
+         onAppearanceChange: @escaping (OverlayAppearance) -> Void = { _ in },
+         onSwapWithNotch: (() -> Void)? = nil,
+         defaultAppearance: OverlayAppearance = .default,
+         onResetDefaultSize: @escaping () -> Void = { }) {
         self.script = script
         self.appearance = appearance
+        self.defaultAppearance = defaultAppearance
         self.countdownDuration = countdownDuration
         self.voiceSyncEnabled = voiceSyncEnabled
         self.autoScrollWPM = autoScrollWPM
@@ -41,6 +50,9 @@ struct PillContentView: View {
         self.voiceSync = voiceSync
         self.audioMonitor = audioMonitor
         self.onClose = onClose
+        self.onAppearanceChange = onAppearanceChange
+        self.onSwapWithNotch = onSwapWithNotch
+        self.onResetDefaultSize = onResetDefaultSize
         _currentAppearance = State(initialValue: appearance)
     }
 
@@ -81,16 +93,26 @@ struct PillContentView: View {
         }
         .contextMenu {
             Button("Appearance…") { showAppearancePopover = true }
-            Button("Reset to Defaults") { currentAppearance = appearance }
+            Button("Reset to Defaults") { currentAppearance = defaultAppearance }
+            Button("Reset to Default Size") { onResetDefaultSize() }
+            if mode != .voiceSync, let onSwapWithNotch {
+                Button("Swap Script with Notch") { onSwapWithNotch() }
+            }
             Divider()
             Button("Close Pill") { onClose() }
         }
         .popover(isPresented: $showAppearancePopover) {
             OverlayAppearancePopover(
                 appearance: $currentAppearance,
-                defaultAppearance: appearance,
+                defaultAppearance: defaultAppearance,
                 windowTitle: "Pill Window"
             )
+        }
+        .onAppear {
+            onAppearanceChange(currentAppearance)
+        }
+        .onChange(of: currentAppearance) { _, newAppearance in
+            onAppearanceChange(newAppearance)
         }
     }
 }

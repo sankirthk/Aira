@@ -1,8 +1,105 @@
 import SwiftUI
 
+enum NotchOverlayGeometry {
+    static let outerCornerRadius: CGFloat = 10
+    static let minimumSideOverscan: CGFloat = 0.0
+    static let proportionalSideOverscan: CGFloat = 0.006
+    static let maximumSideOverscan: CGFloat = 0.0
+
+    static func fallbackPath(in rect: CGRect) -> Path {
+        var path = Path()
+        let radius = min(outerCornerRadius, rect.width / 2, rect.height / 2)
+
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.width - radius, y: rect.height),
+            control: CGPoint(x: rect.width, y: rect.height)
+        )
+        path.addLine(to: CGPoint(x: radius, y: rect.height))
+        path.addQuadCurve(
+            to: CGPoint(x: 0, y: rect.height - radius),
+            control: CGPoint(x: 0, y: rect.height)
+        )
+        path.closeSubpath()
+
+        return path
+    }
+
+    static func cutoutDepth(for notchHeight: CGFloat) -> CGFloat {
+        max(notchHeight - min(1.0, notchHeight * 0.08), 0)
+    }
+
+    static func sideOverscan(for notchWidth: CGFloat) -> CGFloat {
+        min(max(minimumSideOverscan, notchWidth * proportionalSideOverscan), maximumSideOverscan)
+    }
+
+    static func overlayPath(in rect: CGRect, notchSize: CGSize) -> Path {
+        let nW = notchSize.width
+        let nH = notchSize.height
+
+        guard nW > 0, nH > 0 else {
+            return fallbackPath(in: rect)
+        }
+
+        let cutoutDepth = cutoutDepth(for: nH)
+        let ir: CGFloat = cutoutDepth * 0.5
+        let or_: CGFloat = outerCornerRadius
+
+        let sideOverscan = sideOverscan(for: nW)
+        let nL = rect.midX - nW / 2 - sideOverscan
+        let nR = rect.midX + nW / 2 + sideOverscan
+
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: nL, y: 0))
+        path.addLine(to: CGPoint(x: nL, y: cutoutDepth - ir))
+        path.addQuadCurve(
+            to: CGPoint(x: nL + ir, y: cutoutDepth),
+            control: CGPoint(x: nL, y: cutoutDepth)
+        )
+        path.addLine(to: CGPoint(x: nR - ir, y: cutoutDepth))
+        path.addQuadCurve(
+            to: CGPoint(x: nR, y: cutoutDepth - ir),
+            control: CGPoint(x: nR, y: cutoutDepth)
+        )
+        path.addLine(to: CGPoint(x: nR, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: 0))
+        path.addLine(to: CGPoint(x: rect.width, y: rect.height - or_))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.width - or_, y: rect.height),
+            control: CGPoint(x: rect.width, y: rect.height)
+        )
+        path.addLine(to: CGPoint(x: or_, y: rect.height))
+        path.addQuadCurve(
+            to: CGPoint(x: 0, y: rect.height - or_),
+            control: CGPoint(x: 0, y: rect.height)
+        )
+        path.addLine(to: CGPoint(x: 0, y: cutoutDepth))
+        path.closeSubpath()
+
+        return path
+    }
+}
+
+enum NotchTextFadeGeometry {
+    static let minimumFadeHeight: CGFloat = 28
+    static let maximumFadeHeight: CGFloat = 72
+
+    static func fadeHeight(availableHeight: CGFloat, notchHeight: CGFloat) -> CGFloat {
+        min(
+            availableHeight,
+            maximumFadeHeight,
+            max(minimumFadeHeight, notchHeight * 0.95 + 18)
+        )
+    }
+}
+
 struct NotchContentView: View {
     let script: Script
     let appearance: OverlayAppearance
+    let defaultAppearance: OverlayAppearance
     let countdownDuration: Int
     let voiceSyncEnabled: Bool
     let autoScrollWPM: Double
@@ -14,6 +111,10 @@ struct NotchContentView: View {
     @ObservedObject var voiceSync: VoiceSyncEngine
     @ObservedObject var audioMonitor: AudioLevelMonitor
     let onEndSession: () -> Void
+    let onAppearanceChange: (OverlayAppearance) -> Void
+    let onResize: (NotchResizeEdge, CGSize) -> Void
+    let onResizeEnd: () -> Void
+    let onResetDefaultSize: () -> Void
 
     @State private var currentAppearance: OverlayAppearance
     @State private var showAppearancePopover: Bool = false
@@ -23,9 +124,15 @@ struct NotchContentView: View {
          playheadCoordinator: SessionPlayheadCoordinator,
          scrollCoordinator: SessionScrollCoordinator, reportsPrimaryMetrics: Bool = true,
          notchSize: CGSize, voiceSyncMode: VoiceSyncMode = .voice, voiceSync: VoiceSyncEngine, audioMonitor: AudioLevelMonitor,
-         onEndSession: @escaping () -> Void) {
+         defaultAppearance: OverlayAppearance? = nil,
+         onEndSession: @escaping () -> Void,
+         onAppearanceChange: @escaping (OverlayAppearance) -> Void = { _ in },
+         onResize: @escaping (NotchResizeEdge, CGSize) -> Void = { _, _ in },
+         onResizeEnd: @escaping () -> Void = { },
+         onResetDefaultSize: @escaping () -> Void = { }) {
         self.script = script
         self.appearance = appearance
+        self.defaultAppearance = defaultAppearance ?? appearance
         self.countdownDuration = countdownDuration
         self.voiceSyncEnabled = voiceSyncEnabled
         self.autoScrollWPM = autoScrollWPM
@@ -37,6 +144,10 @@ struct NotchContentView: View {
         self.voiceSync = voiceSync
         self.audioMonitor = audioMonitor
         self.onEndSession = onEndSession
+        self.onAppearanceChange = onAppearanceChange
+        self.onResize = onResize
+        self.onResizeEnd = onResizeEnd
+        self.onResetDefaultSize = onResetDefaultSize
         _currentAppearance = State(initialValue: appearance)
     }
 
@@ -56,6 +167,10 @@ struct NotchContentView: View {
                     scrollPresentation: .bottomEntry,
                     showsEmbeddedAudioIndicator: false,
                     syncsSessionScroll: true,
+                    textExitFadeHeight: NotchTextFadeGeometry.fadeHeight(
+                        availableHeight: max(geometry.size.height - notchSize.height, 0),
+                        notchHeight: notchSize.height
+                    ),
                     voiceSyncMode: voiceSyncMode,
                     voiceSync: voiceSync,
                     audioMonitor: audioMonitor
@@ -71,21 +186,80 @@ struct NotchContentView: View {
                         .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
                         .allowsHitTesting(false)
                 }
+
+                NotchResizeHandles(onResize: onResize, onResizeEnd: onResizeEnd)
             }
             .contextMenu {
                 Button("Appearance…") { showAppearancePopover = true }
-                Button("Reset to Defaults") { currentAppearance = appearance }
+                Button("Reset to Defaults") { currentAppearance = defaultAppearance }
+                Button("Reset to Default Size") { onResetDefaultSize() }
                 Divider()
                 Button("End Session") { onEndSession() }
             }
             .popover(isPresented: $showAppearancePopover) {
                 OverlayAppearancePopover(
                     appearance: $currentAppearance,
-                    defaultAppearance: appearance,
+                    defaultAppearance: defaultAppearance,
                     windowTitle: "Notch Window"
                 )
             }
+            .onAppear {
+                onAppearanceChange(currentAppearance)
+            }
+            .onChange(of: currentAppearance) { _, newAppearance in
+                onAppearanceChange(newAppearance)
+            }
         }
+    }
+}
+
+private struct NotchResizeHandles: View {
+    let onResize: (NotchResizeEdge, CGSize) -> Void
+    let onResizeEnd: () -> Void
+
+    private let handleThickness: CGFloat = 12
+    private let cornerSize: CGFloat = 18
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                resizeHandle(.leading)
+                    .frame(width: handleThickness)
+                    .frame(maxHeight: .infinity)
+                    .position(x: handleThickness / 2, y: geometry.size.height / 2)
+                resizeHandle(.trailing)
+                    .frame(width: handleThickness)
+                    .frame(maxHeight: .infinity)
+                    .position(x: geometry.size.width - handleThickness / 2, y: geometry.size.height / 2)
+
+                resizeHandle(.bottomLeading)
+                    .frame(width: cornerSize, height: cornerSize)
+                    .position(x: cornerSize / 2, y: geometry.size.height - cornerSize / 2)
+                resizeHandle(.bottom)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: handleThickness)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height - handleThickness / 2)
+                resizeHandle(.bottomTrailing)
+                    .frame(width: cornerSize, height: cornerSize)
+                    .position(x: geometry.size.width - cornerSize / 2, y: geometry.size.height - cornerSize / 2)
+            }
+        }
+        .allowsHitTesting(true)
+    }
+
+    @ViewBuilder
+    private func resizeHandle(_ edge: NotchResizeEdge) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        onResize(edge, value.translation)
+                    }
+                    .onEnded { _ in
+                        onResizeEnd()
+                    }
+            )
     }
 }
 
@@ -163,83 +337,6 @@ private struct NotchOverlayShape: Shape {
     let notchSize: CGSize  // physical notch width and height in screen points
 
     func path(in rect: CGRect) -> Path {
-        let nW = notchSize.width
-        let nH = notchSize.height
-
-        // Non-notched Mac: render as a plain rounded rectangle.
-        guard nW > 0, nH > 0 else {
-            return Path(roundedRect: rect, cornerRadius: 10)
-        }
-
-        // Pull the visible cutout upward slightly so the overlay tucks under the
-        // physical notch corners instead of leaving a hairline seam.
-        let cutoutDepth = max(nH - min(1.5, nH * 0.08), 0)
-
-        // Inner corner radius at the bottom of the notch cutout.
-        // The MacBook notch has gently rounded inner corners where the camera housing
-        // meets the display. Using 25% of the notch height gives a physically plausible
-        // curve that scales correctly across Mac models without hardcoding.
-        let ir: CGFloat = cutoutDepth * 0.25
-        let or_: CGFloat = 10         // outer panel corner radius
-
-        let sideOverscan = min(1.0, max(0.5, nW * 0.004))
-        let nL = rect.midX - nW / 2 - sideOverscan   // notch left edge in panel coords
-        let nR = rect.midX + nW / 2 + sideOverscan   // notch right edge in panel coords
-
-        var path = Path()
-
-        // Start at the left edge of the panel at the notch-bottom level and
-        // draw clockwise (in screen coordinates) around the entire visible boundary.
-        // Going through the notch opening and back creates the cutout automatically
-        // using SwiftUI's non-zero winding fill rule.
-
-        path.move(to: CGPoint(x: 0, y: cutoutDepth))
-
-        // ── Left edge upward ──────────────────────────────────────────────────
-        path.addLine(to: CGPoint(x: 0, y: or_))
-        // Top-left outer corner
-        path.addQuadCurve(to: CGPoint(x: or_, y: 0), control: CGPoint(x: 0, y: 0))
-
-        // ── Top edge to notch ──────────────────────────────────────────────────
-        path.addLine(to: CGPoint(x: nL, y: 0))
-
-        // ── Down notch left inner edge ────────────────────────────────────────
-        path.addLine(to: CGPoint(x: nL, y: cutoutDepth - ir))
-        // Inner bottom-left corner
-        path.addQuadCurve(to: CGPoint(x: nL + ir, y: cutoutDepth),
-                          control: CGPoint(x: nL, y: cutoutDepth))
-
-        // ── Notch bottom ──────────────────────────────────────────────────────
-        path.addLine(to: CGPoint(x: nR - ir, y: cutoutDepth))
-        // Inner bottom-right corner
-        path.addQuadCurve(to: CGPoint(x: nR, y: cutoutDepth - ir),
-                          control: CGPoint(x: nR, y: cutoutDepth))
-
-        // ── Up notch right inner edge ─────────────────────────────────────────
-        path.addLine(to: CGPoint(x: nR, y: 0))
-
-        // ── Top edge to right side ────────────────────────────────────────────
-        path.addLine(to: CGPoint(x: rect.width - or_, y: 0))
-        // Top-right outer corner
-        path.addQuadCurve(to: CGPoint(x: rect.width, y: or_),
-                          control: CGPoint(x: rect.width, y: 0))
-
-        // ── Right edge downward ───────────────────────────────────────────────
-        path.addLine(to: CGPoint(x: rect.width, y: rect.height - or_))
-        // Bottom-right outer corner
-        path.addQuadCurve(to: CGPoint(x: rect.width - or_, y: rect.height),
-                          control: CGPoint(x: rect.width, y: rect.height))
-
-        // ── Bottom edge ───────────────────────────────────────────────────────
-        path.addLine(to: CGPoint(x: or_, y: rect.height))
-        // Bottom-left outer corner
-        path.addQuadCurve(to: CGPoint(x: 0, y: rect.height - or_),
-                          control: CGPoint(x: 0, y: rect.height))
-
-        // ── Left edge back to start ───────────────────────────────────────────
-        path.addLine(to: CGPoint(x: 0, y: cutoutDepth))
-        path.closeSubpath()
-
-        return path
+        NotchOverlayGeometry.overlayPath(in: rect, notchSize: notchSize)
     }
 }

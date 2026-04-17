@@ -2,37 +2,41 @@ import AppKit
 import ApplicationServices
 
 @MainActor
-final class VoiceSyncKeyboardMonitor {
+final class KeyboardShortcutMonitor {
+    struct Binding {
+        let shortcut: String
+        let suppressAutoRepeat: Bool
+        let action: () -> Void
+
+        init(shortcut: String, suppressAutoRepeat: Bool = false, action: @escaping () -> Void) {
+            self.shortcut = shortcut
+            self.suppressAutoRepeat = suppressAutoRepeat
+            self.action = action
+        }
+    }
+
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var localKeyMonitor: Any?
     private var globalKeyMonitor: Any?
+    private var bindings: [Binding] = []
 
-    private var toggleShortcut: String = ""
-    private var scrollUpShortcut: String = ""
-    private var scrollDownShortcut: String = ""
-
-    private var onToggle: (() -> Void)?
-    private var onScrollUp: (() -> Void)?
-    private var onScrollDown: (() -> Void)?
-
-    func start(
-        toggleShortcut: String,
-        scrollUpShortcut: String,
-        scrollDownShortcut: String,
-        onToggle: @escaping () -> Void,
-        onScrollUp: @escaping () -> Void,
-        onScrollDown: @escaping () -> Void
-    ) {
+    func start(bindings: [Binding]) {
         stop()
-        self.toggleShortcut = toggleShortcut
-        self.scrollUpShortcut = scrollUpShortcut
-        self.scrollDownShortcut = scrollDownShortcut
-        self.onToggle = onToggle
-        self.onScrollUp = onScrollUp
-        self.onScrollDown = onScrollDown
+        self.bindings = bindings.filter { !$0.shortcut.isEmpty }
 
-        requestAccessibilityPermission()
+        guard self.bindings.isEmpty == false else {
+            return
+        }
+
+        // Prompt for Accessibility if not yet granted so the CGEventTap can be
+        // created. During a session the app runs in .accessory mode, which means
+        // NSEvent local/global monitors are unreliable — the CGEventTap is the
+        // only mechanism that reliably captures keyboard events system-wide.
+        guard Self.checkAccessibilityTrusted(prompt: true) else {
+            installEventMonitorFallback()
+            return
+        }
 
         let mask = (1 << CGEventType.keyDown.rawValue)
         let userInfo = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
@@ -42,7 +46,7 @@ final class VoiceSyncKeyboardMonitor {
                 return Unmanaged.passUnretained(event)
             }
 
-            let monitor = Unmanaged<VoiceSyncKeyboardMonitor>
+            let monitor = Unmanaged<KeyboardShortcutMonitor>
                 .fromOpaque(userInfo)
                 .takeUnretainedValue()
 
@@ -60,7 +64,7 @@ final class VoiceSyncKeyboardMonitor {
         guard let eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
-            options: .defaultTap,
+            options: .listenOnly,
             eventsOfInterest: CGEventMask(mask),
             callback: callback,
             userInfo: userInfo
@@ -94,28 +98,31 @@ final class VoiceSyncKeyboardMonitor {
         eventTap = nil
         localKeyMonitor = nil
         globalKeyMonitor = nil
-        onToggle = nil
-        onScrollUp = nil
-        onScrollDown = nil
-        toggleShortcut = ""
-        scrollUpShortcut = ""
-        scrollDownShortcut = ""
+        bindings = []
     }
 
     private func handle(event: CGEvent) {
         guard let nsEvent = NSEvent(cgEvent: event) else { return }
-        if !toggleShortcut.isEmpty, KeyboardShortcutDisplay.matches(event: nsEvent, shortcut: toggleShortcut) {
-            onToggle?()
-        } else if !scrollUpShortcut.isEmpty, KeyboardShortcutDisplay.matches(event: nsEvent, shortcut: scrollUpShortcut) {
-            onScrollUp?()
-        } else if !scrollDownShortcut.isEmpty, KeyboardShortcutDisplay.matches(event: nsEvent, shortcut: scrollDownShortcut) {
-            onScrollDown?()
-        }
+        handle(event: nsEvent)
     }
 
-    private func requestAccessibilityPermission() {
+    /// Returns true if Accessibility is already granted. If not, shows the system
+    /// prompt once so the user can grant it, then returns false. Callers should
+    /// install the NSEvent fallback and retry tapCreate on the next start() call.
+    @discardableResult
+    static func checkAccessibilityTrusted(prompt: Bool) -> Bool {
+        if AXIsProcessTrusted() { return true }
+        guard prompt else {
+            return false
+        }
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
+        return false
+    }
+
+    @discardableResult
+    private func checkAccessibilityTrusted() -> Bool {
+        Self.checkAccessibilityTrusted(prompt: true)
     }
 
     private func installEventMonitorFallback() {
@@ -129,12 +136,40 @@ final class VoiceSyncKeyboardMonitor {
     }
 
     private func handle(event: NSEvent) {
-        if !toggleShortcut.isEmpty, KeyboardShortcutDisplay.matches(event: event, shortcut: toggleShortcut) {
-            onToggle?()
-        } else if !scrollUpShortcut.isEmpty, KeyboardShortcutDisplay.matches(event: event, shortcut: scrollUpShortcut) {
-            onScrollUp?()
-        } else if !scrollDownShortcut.isEmpty, KeyboardShortcutDisplay.matches(event: event, shortcut: scrollDownShortcut) {
-            onScrollDown?()
+        for binding in bindings where KeyboardShortcutDisplay.matches(event: event, shortcut: binding.shortcut) {
+            guard Self.shouldTriggerBinding(binding, isAutoRepeat: event.isARepeat) else {
+                return
+            }
+            binding.action()
+            return
         }
+    }
+
+    static func shouldTriggerBinding(_ binding: Binding, isAutoRepeat: Bool) -> Bool {
+        !(binding.suppressAutoRepeat && isAutoRepeat)
+    }
+}
+
+@MainActor
+final class VoiceSyncKeyboardMonitor {
+    private let monitor = KeyboardShortcutMonitor()
+
+    func start(
+        toggleShortcut: String,
+        scrollUpShortcut: String,
+        scrollDownShortcut: String,
+        onToggle: @escaping () -> Void,
+        onScrollUp: @escaping () -> Void,
+        onScrollDown: @escaping () -> Void
+    ) {
+        monitor.start(bindings: [
+            .init(shortcut: toggleShortcut, suppressAutoRepeat: true, action: onToggle),
+            .init(shortcut: scrollUpShortcut, action: onScrollUp),
+            .init(shortcut: scrollDownShortcut, action: onScrollDown)
+        ])
+    }
+
+    func stop() {
+        monitor.stop()
     }
 }

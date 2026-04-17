@@ -6,6 +6,8 @@ class OverlayWindowController {
     weak var appState: AppState?
     private var notchController: NotchWindowController?
     private var pillControllers: [PillWindowController] = []
+    private let sessionShortcutMonitor = KeyboardShortcutMonitor()
+    private let voiceSyncKeyboardMonitor = VoiceSyncKeyboardMonitor()
 
     let voiceSync = VoiceSyncEngine()
     let audioMonitor = AudioLevelMonitor()
@@ -35,10 +37,13 @@ class OverlayWindowController {
                         pillModes: [PillContentMode] = []) {
         endSession()
         prepareSharedSession(script: script)
+        AiraLogger.shared.info("Started session scriptId=\(script.id.uuidString) pills=\(pillModes.count)", category: "session")
 
         // Launch notch window
         let notch = NotchWindowController()
         notch.present(script: script, appearance: appearance,
+                      notchWindowWidth: appState?.settings.notchWindowWidth ?? NotchWidthConfiguration.defaultWidth,
+                      notchWindowHeight: appState?.settings.notchWindowHeight ?? NotchHeightConfiguration.defaultHeight,
                       countdownDuration: countdownDuration,
                       voiceSyncEnabled: voiceSyncEnabled,
                       autoScrollWPM: autoScrollWPM,
@@ -61,6 +66,7 @@ class OverlayWindowController {
 
         appState?.stealthWarning = !stealthIsHonored
         syncPresenterSessionState()
+        startSessionKeyboardMonitorsIfNeeded()
     }
 
     func addPill(mode: PillContentMode, script: Script, appearance: OverlayAppearance,
@@ -84,13 +90,23 @@ class OverlayWindowController {
                      onClose: { [weak self, weak pill] in
                          guard let self, let pill else { return }
                          self.removePill(pill)
+                     },
+                     onSwapWithNotch: notchController == nil ? nil : { [weak self, weak pill] in
+                         guard let self, let pill else { return }
+                         self.swapManualPillScriptWithNotch(pill)
                      })
         pillControllers.append(pill)
+        AiraLogger.shared.info("Added pill scriptId=\(script.id.uuidString) mode=\(String(describing: mode))", category: "overlay")
         appState?.stealthWarning = !stealthIsHonored
         syncPresenterSessionState()
+        startSessionKeyboardMonitorsIfNeeded()
     }
 
     func endSession() {
+        AiraLogger.shared.info(
+            "Ended session notchActive=\(notchController != nil) pillCount=\(pillControllers.count)",
+            category: "session"
+        )
         voiceSync.stop()
         audioMonitor.reset()
         playheadCoordinator.endSession()
@@ -99,6 +115,7 @@ class OverlayWindowController {
         notchController = nil
         pillControllers.forEach { $0.close() }
         pillControllers = []
+        stopSessionKeyboardMonitors()
         appState?.setPresenterSessionState(isActive: false, scriptIDs: [])
     }
 
@@ -107,6 +124,10 @@ class OverlayWindowController {
             return
         }
         removePill(pill)
+    }
+
+    func refreshSessionKeyboardMonitorsIfNeeded() {
+        startSessionKeyboardMonitorsIfNeeded()
     }
 
     private var stealthIsHonored: Bool {
@@ -127,6 +148,7 @@ class OverlayWindowController {
         do {
             return try appState.readScript(id: scriptID)
         } catch {
+            AiraLogger.shared.error(error, category: "overlay", context: "Failed to load manual pill script \(scriptID.uuidString)")
             return fallbackScript
         }
     }
@@ -134,6 +156,7 @@ class OverlayWindowController {
     private func removePill(_ pill: PillWindowController) {
         pill.close()
         pillControllers.removeAll { $0 === pill }
+        AiraLogger.shared.info("Removed pill remainingCount=\(pillControllers.count)", category: "overlay")
         appState?.stealthWarning = !stealthIsHonored
         if hasActiveOverlays {
             syncPresenterSessionState()
@@ -157,11 +180,82 @@ class OverlayWindowController {
         playheadCoordinator.beginSession()
     }
 
+    private func swapManualPillScriptWithNotch(_ pill: PillWindowController) {
+        guard pill.mode != .voiceSync,
+              let notchController,
+              let notchScriptID = notchController.scriptID,
+              let pillScriptID = pill.scriptID,
+              let notchScript = loadScript(id: notchScriptID),
+              let pillScript = loadScript(id: pillScriptID) else {
+            return
+        }
+
+        voiceSync.loadScript(text: pillScript.body)
+        audioMonitor.reset()
+        playheadCoordinator.beginSession()
+        scrollCoordinator.clearPrimaryMetrics()
+        notchController.updateScript(pillScript)
+        pill.updateScript(notchScript)
+        syncPresenterSessionState()
+    }
+
+    private func loadScript(id: UUID) -> Script? {
+        guard let appState else { return nil }
+
+        do {
+            return try appState.readScript(id: id)
+        } catch {
+            AiraLogger.shared.error(error, category: "overlay", context: "Failed to load script \(id.uuidString)")
+            return nil
+        }
+    }
+
     private func shutdownSharedSession() {
         voiceSync.stop()
         audioMonitor.reset()
         playheadCoordinator.endSession()
         scrollCoordinator.clearPrimaryMetrics()
+        stopSessionKeyboardMonitors()
         appState?.setPresenterSessionState(isActive: false, scriptIDs: [])
+    }
+
+    private func startSessionKeyboardMonitorsIfNeeded() {
+        guard hasActiveOverlays, let appState else {
+            stopSessionKeyboardMonitors()
+            return
+        }
+
+        let settings = appState.settings
+        sessionShortcutMonitor.start(bindings: [
+            .init(shortcut: settings.shortcutEndSession) { [weak self] in
+                self?.endSession()
+            }
+        ])
+
+        voiceSyncKeyboardMonitor.start(
+            toggleShortcut: settings.shortcutToggleVoiceSync,
+            scrollUpShortcut: settings.shortcutScrollUp,
+            scrollDownShortcut: settings.shortcutScrollDown,
+            onToggle: { [weak self] in
+                Task { @MainActor in
+                    self?.voiceSync.togglePause()
+                }
+            },
+            onScrollUp: { [weak self] in
+                Task { @MainActor in
+                    self?.voiceSync.requestManualLineNudge(direction: -1)
+                }
+            },
+            onScrollDown: { [weak self] in
+                Task { @MainActor in
+                    self?.voiceSync.requestManualLineNudge(direction: 1)
+                }
+            }
+        )
+    }
+
+    private func stopSessionKeyboardMonitors() {
+        sessionShortcutMonitor.stop()
+        voiceSyncKeyboardMonitor.stop()
     }
 }

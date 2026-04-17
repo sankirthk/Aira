@@ -17,6 +17,7 @@ struct PrompterContentView: View {
     let showsEmbeddedAudioIndicator: Bool
     let syncsSessionScroll: Bool
     let manualAutoScrollEnabled: Bool
+    let textExitFadeHeight: CGFloat
     let voiceSyncMode: VoiceSyncMode
     @ObservedObject var voiceSync: VoiceSyncEngine
     @ObservedObject var audioMonitor: AudioLevelMonitor
@@ -46,6 +47,7 @@ struct PrompterContentView: View {
         showsEmbeddedAudioIndicator: Bool = true,
         syncsSessionScroll: Bool = false,
         manualAutoScrollEnabled: Bool = true,
+        textExitFadeHeight: CGFloat = 0,
         voiceSyncMode: VoiceSyncMode = .voice,
         voiceSync: VoiceSyncEngine,
         audioMonitor: AudioLevelMonitor
@@ -63,6 +65,7 @@ struct PrompterContentView: View {
         self.showsEmbeddedAudioIndicator = showsEmbeddedAudioIndicator
         self.syncsSessionScroll = syncsSessionScroll
         self.manualAutoScrollEnabled = manualAutoScrollEnabled
+        self.textExitFadeHeight = textExitFadeHeight
         self.voiceSyncMode = voiceSyncMode
         self.voiceSync = voiceSync
         self.audioMonitor = audioMonitor
@@ -136,6 +139,9 @@ struct PrompterContentView: View {
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                             .offset(y: baseContentOffset(for: textGeometry.size.height) - scrollDistance(for: textGeometry.size.height))
                             .clipped()
+                            .mask(alignment: .top) {
+                                textExitFadeMask(readableHeight: textGeometry.size.height)
+                            }
                             .onAppear {
                                 viewportHeight = textGeometry.size.height
                                 viewportWidth = textGeometry.size.width
@@ -372,7 +378,18 @@ struct PrompterContentView: View {
         guard maxOffset > 0 else { return }
 
         let trueAnchorLine = lineMetrics[lineIndex]
-        let exactNormalized = min(trueAnchorLine.y / maxOffset, 1.0)
+
+        // If blank lines follow this line, advance the anchor to the first speakable
+        // line after the gap (≥3 blank lines). The cinematic controller's aggressive
+        // catch-up will then traverse the gap quickly once speech resumes.
+        var anchorY = trueAnchorLine.y
+        let lookahead = lineMetrics[(lineIndex + 1)...]
+        if let nextSpeakableIdx = lookahead.firstIndex(where: { !$0.wordRange.isEmpty }),
+           nextSpeakableIdx - lineIndex >= 2 {
+            anchorY = lineMetrics[nextSpeakableIdx].y
+        }
+
+        let exactNormalized = min(anchorY / maxOffset, 1.0)
         cinematicController.setAnchorOffset(exactNormalized)
     }
 
@@ -479,13 +496,49 @@ struct PrompterContentView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
                 .padding(.top, scrollPresentation == .topAnchored ? topContentInset + 12 : 0)
-                .padding(.bottom, scrollPresentation == .bottomEntry ? max(readableHeight * 0.22, 18) : 12)
+                .padding(.bottom, trailingReadablePadding(for: readableHeight))
         }
     }
 
     private func baseContentOffset(for readableHeight: CGFloat) -> CGFloat {
         guard scrollPresentation == .bottomEntry else { return 0 }
         return max(readableHeight * 0.34, PrompterScrollMath.lineHeight(fontSize: appearance.fontSize) * 1.6)
+    }
+
+    private func trailingReadablePadding(for readableHeight: CGFloat) -> CGFloat {
+        let minimumReadableTail = PrompterScrollMath.lineHeight(fontSize: appearance.fontSize) * 3.5
+
+        switch scrollPresentation {
+        case .topAnchored:
+            return max(readableHeight * 0.38, minimumReadableTail)
+        case .bottomEntry:
+            return max(readableHeight * 0.58, minimumReadableTail)
+        }
+    }
+
+    @ViewBuilder
+    private func textExitFadeMask(readableHeight: CGFloat) -> some View {
+        let fadeHeight = min(textExitFadeHeight, readableHeight)
+
+        if fadeHeight <= 0 {
+            Rectangle()
+                .fill(Color.white)
+        } else {
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .white, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: fadeHeight)
+
+                Rectangle()
+                    .fill(Color.white)
+            }
+        }
     }
 
     private func updatePrimaryMetrics() {
@@ -588,13 +641,12 @@ struct PrompterContentView: View {
     }
 
     private func updateManualScrollDriver() {
+        let scrollable = max(contentHeight - viewportHeight, 0)
         let velocity = manualAutoScrollVelocityPerSecond()
         manualScrollDriver.configure(
-            maxOffset: max(contentHeight - viewportHeight, 0),
+            maxOffset: scrollable,
             normalizedVelocityPerSecond: velocity
         )
-        // No autoScrollStep override — the driver advances linearly using
-        // normalizedVelocityPerSecond, which avoids the progress round-trip jitter.
         manualScrollDriver.autoScrollStep = nil
         manualScrollDriver.setCurrentOffset(renderedScrollOffset)
         manualScrollDriver.setAutoScrollEnabled(
@@ -893,9 +945,10 @@ private final class ManualScrollDisplayLinkNSView: NSView {
     }
 }
 
-/// Wraps an NSView that intercepts scroll wheel events on the overlay panel.
-/// NSPanel with .nonactivatingPanel style does not deliver SwiftUI scroll gestures,
-/// so we use an AppKit NSView to capture them directly.
+/// Wraps an NSView whose sole purpose is to discover its enclosing NSWindow and
+/// install scroll-wheel event monitors scoped to that window's frame. This is the
+/// reliable path for capturing scroll in an overlay panel that runs while the app
+/// is in `.accessory` activation policy.
 private struct ScrollWheelInterceptor: NSViewRepresentable {
     let onScroll: (CGFloat) -> Void
 
@@ -910,7 +963,10 @@ private struct ScrollWheelInterceptor: NSViewRepresentable {
     }
 }
 
-private class ScrollWheelNSView: NSView {
+/// Installs both a local and global NSEvent scroll-wheel monitor to cover all
+/// activation-policy states. Also attempts direct `scrollWheel(with:)` delivery
+/// if AppKit routes the event to this view.
+final class ScrollWheelNSView: NSView {
     var onScroll: ((CGFloat) -> Void)?
     private var localScrollMonitor: Any?
     private var globalScrollMonitor: Any?
@@ -920,15 +976,21 @@ private class ScrollWheelNSView: NSView {
 
         removeScrollMonitors()
 
-        guard window != nil else { return }
+        guard let window else { return }
 
+        // Local monitor — fires when the app processes the event itself (panel
+        // receives the scroll because the cursor is over it).
         localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            self?.handleMonitoredScroll(event)
+            guard let self else { return event }
+            self.handleMonitoredScroll(event, in: window)
             return event
         }
 
+        // Global monitor — fires when another app is active but the cursor
+        // is still over our panel (common in .accessory activation policy).
         globalScrollMonitor = NSEvent.addGlobalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
-            self?.handleMonitoredScroll(event)
+            guard let self else { return }
+            self.handleMonitoredScroll(event, in: window)
         }
     }
 
@@ -940,8 +1002,7 @@ private class ScrollWheelNSView: NSView {
         handleScroll(event)
     }
 
-    private func handleMonitoredScroll(_ event: NSEvent) {
-        guard let window else { return }
+    private func handleMonitoredScroll(_ event: NSEvent, in window: NSWindow) {
         let mouseLocation = NSEvent.mouseLocation
         guard window.frame.contains(mouseLocation) else { return }
         handleScroll(event)
@@ -949,7 +1010,6 @@ private class ScrollWheelNSView: NSView {
 
     private func handleScroll(_ event: NSEvent) {
         let delta = event.scrollingDeltaY
-        // If the trackpad is in pixel mode, use directly; otherwise scale
         let pixelDelta = event.hasPreciseScrollingDeltas ? delta : delta * 10
         onScroll?(pixelDelta)
     }

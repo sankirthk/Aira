@@ -15,7 +15,9 @@ class VoiceSyncEngine: ObservableObject {
 
     private var audioEngine: AVAudioEngine?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    // Thread-safe box so the AVAudioEngine tap (audio thread) can append buffers
+    // without racing against @MainActor restarts that swap the request out.
+    private let recognitionBox = RecognitionRequestBox()
     private let recognizer = SFSpeechRecognizer(locale: .current)
     weak var audioLevelMonitor: AudioLevelMonitor?
     private var silenceDeadlineTask: Task<Void, Never>?
@@ -53,7 +55,7 @@ class VoiceSyncEngine: ObservableObject {
         silenceDeadlineTask = nil
         recognitionTask?.cancel()
         recognitionTask = nil
-        recognitionRequest = nil
+        recognitionBox.set(nil)
         audioEngine?.stop()
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine = nil
@@ -125,9 +127,11 @@ class VoiceSyncEngine: ObservableObject {
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self, recognitionBox] buffer, _ in
+            // recognitionBox is captured by reference and is lock-protected,
+            // so this audio-thread access is safe across recognition restarts.
             if self?.recognitionEnabled == true {
-                self?.recognitionRequest?.append(buffer)
+                recognitionBox.append(buffer)
             }
             Task { @MainActor [weak self] in
                 self?.audioLevelMonitor?.processBuffer(buffer)
@@ -140,7 +144,7 @@ class VoiceSyncEngine: ObservableObject {
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.requiresOnDeviceRecognition = true
             request.shouldReportPartialResults = true
-            recognitionRequest = request
+            recognitionBox.set(request)
 
             recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
                 if let result {
@@ -162,7 +166,10 @@ class VoiceSyncEngine: ObservableObject {
                     // Code 1110 = no speech detected — ignore these
                     let ignoredCodes = [216, 301, 1110]
                     guard !ignoredCodes.contains(nsError.code) else { return }
-                    print("VoiceSyncEngine: recognition error \(nsError.code) — \(error.localizedDescription)")
+                    AiraLogger.shared.error(
+                        "Recognition error code=\(nsError.code) message=\(error.localizedDescription)",
+                        category: "voice"
+                    )
                     Task { @MainActor [weak self] in
                         self?.restartRecognitionIfNeeded()
                     }
@@ -177,7 +184,7 @@ class VoiceSyncEngine: ObservableObject {
                 scheduleSilenceDeadline()
             }
         } catch {
-            print("VoiceSyncEngine: failed to start audio engine — \(error)")
+            AiraLogger.shared.error(error, category: "voice", context: "Failed to start audio engine")
         }
     }
 
@@ -267,7 +274,7 @@ class VoiceSyncEngine: ObservableObject {
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.requiresOnDeviceRecognition = true
         request.shouldReportPartialResults = true
-        recognitionRequest = request
+        recognitionBox.set(request)
 
         recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
             if let result {
@@ -284,7 +291,10 @@ class VoiceSyncEngine: ObservableObject {
                 let nsError = error as NSError
                 let ignoredCodes = [216, 301, 1110]
                 guard !ignoredCodes.contains(nsError.code) else { return }
-                print("VoiceSyncEngine: recognition error \(nsError.code) — \(error.localizedDescription)")
+                AiraLogger.shared.error(
+                    "Recognition error code=\(nsError.code) message=\(error.localizedDescription)",
+                    category: "voice"
+                )
                 Task { @MainActor [weak self] in
                     self?.restartRecognitionIfNeeded()
                 }
@@ -311,6 +321,24 @@ class VoiceSyncEngine: ObservableObject {
 
     enum EngineState {
         case idle, running, paused
+    }
+}
+
+/// Thread-safe container for the active SFSpeechAudioBufferRecognitionRequest.
+/// The AVAudioEngine tap runs on an audio thread and must not access @MainActor
+/// state directly. This box uses NSLock to allow safe concurrent reads from the
+/// audio thread while @MainActor code swaps requests during recognition restarts.
+final class RecognitionRequestBox {
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private let lock = NSLock()
+
+    func set(_ request: SFSpeechAudioBufferRecognitionRequest?) {
+        lock.withLock { self.request = request }
+    }
+
+    func append(_ buffer: AVAudioPCMBuffer) {
+        let r = lock.withLock { request }
+        r?.append(buffer)
     }
 }
 
