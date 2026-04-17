@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 class PillWindowController {
   private static let defaultFrameSize = CGSize(width: 600, height: 180)
 
