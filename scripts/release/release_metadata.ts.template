@@ -29,9 +29,5 @@ export const latestRelease: ReleaseMetadata = {
   dmgUrl: "__DMG_URL__",
   releaseNotesUrl: "__RELEASE_NOTES_URL__",
   distributionRepo: "sankirthk/aira-releases",
-  summary: [
-    "Voice activated scrolling follows your script with on-device speech recognition.",
-    "Notch and pill overlays stay hidden from screen sharing.",
-    "Built-in script editing and local-first storage are included in the beta.",
-  ],
+  summary: __SUMMARY_ITEMS__,
 };

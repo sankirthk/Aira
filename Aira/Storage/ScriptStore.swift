@@ -12,16 +12,30 @@ class ScriptStore {
     body.split(whereSeparator: \.isWhitespace).count
   }
 
+  static func defaultScriptsDirectory(
+    fileManager: FileManager = .default,
+    applicationSupportDirectory: () -> URL? = {
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    }
+  ) -> URL {
+    let baseDirectory =
+      applicationSupportDirectory()
+      ?? {
+        let fallback = fileManager.homeDirectoryForCurrentUser
+          .appending(path: "Library/Application Support", directoryHint: .isDirectory)
+        AiraLogger.shared.warning(
+          "Application Support lookup failed; falling back to \(fallback.path) for script storage",
+          category: "storage"
+        )
+        return fallback
+      }()
+
+    return baseDirectory.appending(path: "Aira/Scripts", directoryHint: .isDirectory)
+  }
+
   /// Production init — uses ~/Library/Application Support/Aira/Scripts/
   convenience init() {
-    guard
-      let base = FileManager.default.urls(
-        for: .applicationSupportDirectory, in: .userDomainMask
-      ).first
-    else {
-      fatalError("ScriptStore: cannot resolve Application Support directory")
-    }
-    self.init(directory: base.appending(path: "Aira/Scripts"))
+    self.init(directory: Self.defaultScriptsDirectory())
   }
 
   /// Testable init — uses the provided directory
