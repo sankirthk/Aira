@@ -850,6 +850,17 @@ Hardened Runtime and App Sandbox must both be enabled in Xcode build settings. T
 
 Tests are co-authored alongside implementation. A feature is not considered complete until its tests exist and pass.
 
+**Repository CI quality gate:**
+
+The main app repository should have a single CI workflow that runs on pull requests and on pushes to `main`. That workflow should:
+
+1. check Swift formatting against the committed source tree
+2. run Swift lint-style checks
+3. run `xcodebuild build` for the `Aira` scheme on macOS
+4. run `xcodebuild test` for the `Aira` scheme on macOS
+
+The release workflow may reuse the same `xcodebuild test` command for tag validation, but release publishing must remain separate from day-to-day CI.
+
 ### Unit Tests
 
 | Module | What to test |

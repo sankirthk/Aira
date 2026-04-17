@@ -1,0 +1,43 @@
+name: App CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Format, Lint, and Test
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install swift-format
+        run: brew install swift-format
+
+      - name: Format Check
+        run: |
+          swift-format format --in-place --recursive Aira AiraTests
+          git diff --exit-code
+
+      - name: Lint
+        run: swift-format lint --recursive Aira AiraTests
+
+      - name: Run Tests
+        run: |
+          xcodebuild test \
+            -project Aira.xcodeproj \
+            -scheme Aira \
+            -destination "platform=macOS" \
+            -resultBundlePath build/TestResults/Aira.xcresult
