@@ -240,6 +240,12 @@ jobs:
           DMG_URL: ${{ needs.publish-public-release.outputs.dmg_url }}
           RELEASE_NOTES_URL: ${{ needs.publish-public-release.outputs.release_notes_url }}
         run: |
+          TEMPLATE_PATH="$GITHUB_WORKSPACE/scripts/release/release_metadata.ts.template"
+          if [[ ! -f "$TEMPLATE_PATH" ]]; then
+            echo "error: release metadata template not found at $TEMPLATE_PATH" >&2
+            exit 1
+          fi
+
           AFTER_LATEST=$(awk '/^export const changelog/,0' aira-site/src/content/release.ts)
           sed \
             -e "s|__VERSION__|${VERSION}|g" \
@@ -247,7 +253,7 @@ jobs:
             -e "s|__RELEASE_DATE__|${RELEASE_DATE}|g" \
             -e "s|__DMG_URL__|${DMG_URL}|g" \
             -e "s|__RELEASE_NOTES_URL__|${RELEASE_NOTES_URL}|g" \
-            scripts/release/release_metadata.ts.template > aira-site/src/content/release.ts
+            "$TEMPLATE_PATH" > aira-site/src/content/release.ts
           printf "\n%s\n" "${AFTER_LATEST}" >> aira-site/src/content/release.ts
 
       - name: Commit and push site metadata
