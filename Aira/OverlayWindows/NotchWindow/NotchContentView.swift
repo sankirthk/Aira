@@ -2,9 +2,9 @@ import SwiftUI
 
 enum NotchOverlayGeometry {
   static let outerCornerRadius: CGFloat = 10
-  static let minimumSideOverscan: CGFloat = 2.0
+  static let minimumSideOverscan: CGFloat = 0.0
   static let proportionalSideOverscan: CGFloat = 0.05
-  static let maximumSideOverscan: CGFloat = 8.0
+  static let maximumSideOverscan: CGFloat = 0.0
 
   static func fallbackPath(in rect: CGRect) -> Path {
     var path = Path()
@@ -32,6 +32,8 @@ enum NotchOverlayGeometry {
   }
 
   static func sideOverscan(for notchWidth: CGFloat) -> CGFloat {
+    // The cutout must align exactly with the physical notch edges. Keep the
+    // effective side overscan clamped to zero even if proportional tuning changes.
     min(max(minimumSideOverscan, notchWidth * proportionalSideOverscan), maximumSideOverscan)
   }
 

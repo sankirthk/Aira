@@ -322,6 +322,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - `NSPanel` subclass, always-on-top, excluded from screen capture (`sharingType = .none`)
 - No title bar, no traffic lights, no visible chrome
 - Positioned: horizontally centered on the built-in display, top edge touching the bottom of the notch
+- The runtime notch cutout matches the measured hardware width exactly; the live cutout does not add left/right overscan beyond the physical notch walls
 - Width: user-configured (400–800pt range), default 600pt (from global defaults)
 - Height: auto-calculated to show approximately 2–3 lines of script text
 

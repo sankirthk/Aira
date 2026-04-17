@@ -165,6 +165,8 @@ let panelWidth = min(max(460, appearance.fontSize * 22), 520)
 
 // Panel top MUST be at screen.frame.maxY (the very top of the screen).
 // NotchWrapShape clips the physical notch cutout within the panel bounds.
+// Runtime notch geometry keeps both side-overscan clamps at 0.0 so the cutout
+// width remains identical to the measured physical notch width.
 // Positioning the top below screen.frame.maxY creates a visible gap between
 // the overlay and the actual notch.
 let x = screen.frame.midX - panelWidth / 2
