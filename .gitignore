@@ -52,3 +52,7 @@ Notchapp
 
 # Claude Code internal files
 .claude/settings.local.json
+.secrets
+
+
+frontend/
