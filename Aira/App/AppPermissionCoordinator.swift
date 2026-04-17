@@ -1,44 +1,45 @@
-import AppKit
 import AVFoundation
+import AppKit
 import ApplicationServices
 import Speech
 
 @MainActor
 final class AppPermissionCoordinator {
-    static let shared = AppPermissionCoordinator()
+  static let shared = AppPermissionCoordinator()
 
-    private var didRequestLaunchPermissions = false
+  private var didRequestLaunchPermissions = false
 
-    private init() {}
+  private init() {}
 
-    func requestLaunchPermissionsIfNeeded() {
-        guard !didRequestLaunchPermissions else {
-            return
-        }
-
-        didRequestLaunchPermissions = true
-        promptForAccessibilityIfNeeded()
-        requestSpeechRecognition()
-        requestMicrophone()
+  func requestLaunchPermissionsIfNeeded() {
+    guard !didRequestLaunchPermissions else {
+      return
     }
 
-    func promptForAccessibilityIfNeeded() {
-        // If already trusted, nothing to do.
-        // If not trusted, show the System Settings prompt on every launch until
-        // the user grants it — AXIsProcessTrusted() is the correct stop condition.
-        guard !AXIsProcessTrusted() else { return }
+    didRequestLaunchPermissions = true
+    promptForAccessibilityIfNeeded()
+    requestSpeechRecognition()
+    requestMicrophone()
+  }
 
-        let options = [
-            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
-        ] as CFDictionary
-        AXIsProcessTrustedWithOptions(options)
-    }
+  func promptForAccessibilityIfNeeded() {
+    // If already trusted, nothing to do.
+    // If not trusted, show the System Settings prompt on every launch until
+    // the user grants it — AXIsProcessTrusted() is the correct stop condition.
+    guard !AXIsProcessTrusted() else { return }
 
-    private func requestSpeechRecognition() {
-        SFSpeechRecognizer.requestAuthorization { _ in }
-    }
+    let options =
+      [
+        kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true
+      ] as CFDictionary
+    AXIsProcessTrustedWithOptions(options)
+  }
 
-    private func requestMicrophone() {
-        AVAudioApplication.requestRecordPermission { _ in }
-    }
+  private func requestSpeechRecognition() {
+    SFSpeechRecognizer.requestAuthorization { _ in }
+  }
+
+  private func requestMicrophone() {
+    AVAudioApplication.requestRecordPermission { _ in }
+  }
 }
