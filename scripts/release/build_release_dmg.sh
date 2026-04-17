@@ -119,6 +119,8 @@ xcodebuild archive \
   -archivePath "$ARCHIVE_PATH" \
   -derivedDataPath "$DERIVED_DATA_PATH" \
   -destination "generic/platform=macOS" \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY="Developer ID Application" \
   DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
   OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
   SPARKLE_FEED_URL="$SPARKLE_FEED_URL"
