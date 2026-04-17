@@ -33,4 +33,3 @@ jobs:
 
       - name: Lint
         run: swift-format lint --recursive Aira AiraTests
-

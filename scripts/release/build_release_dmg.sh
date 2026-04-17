@@ -7,7 +7,7 @@ PROJECT_PATH="$ROOT_DIR/Aira.xcodeproj"
 SCHEME="Aira"
 CONFIGURATION="Release"
 APP_NAME="Aira"
-RUNNER_TEMP_DIR="${RUNNER_TEMP:-$ROOT_DIR/build/tmp}"
+RUNNER_TEMP_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 WORK_DIR="$RUNNER_TEMP_DIR/aira-release"
 ARCHIVE_PATH="$WORK_DIR/$APP_NAME.xcarchive"
 DERIVED_DATA_PATH="$WORK_DIR/DerivedData"
@@ -18,6 +18,15 @@ KEYCHAIN_PATH="$WORK_DIR/aira-release.keychain-db"
 CERT_PATH="$WORK_DIR/developer-id.p12"
 APPCAST_FILENAME="appcast.xml"
 RELEASE_REPOSITORY="${RELEASE_REPOSITORY:-sankirthk/aira-releases}"
+DEBUG_RELEASE="${DEBUG_RELEASE:-0}"
+RESOLVE_LOG_PATH="$WORK_DIR/resolve-packages.log"
+ARCHIVE_LOG_PATH="$WORK_DIR/archive.log"
+ARCHIVE_XATTR_LOG_PATH="$WORK_DIR/archive-app-xattrs.log"
+SOURCEPACKAGES_XATTR_LOG_PATH="$WORK_DIR/sourcepackages-xattrs.log"
+
+if [[ "$DEBUG_RELEASE" == "1" ]]; then
+  set -x
+fi
 
 required_env=(
   APPLE_SIGNING_CERT_BASE64
@@ -40,6 +49,33 @@ cleanup() {
   if [[ -f "$KEYCHAIN_PATH" ]]; then
     security delete-keychain "$KEYCHAIN_PATH" >/dev/null 2>&1 || true
   fi
+}
+
+dump_archive_diagnostics() {
+  local archive_app_path="$ARCHIVE_PATH/Products/Applications/${APP_NAME}.app"
+  local install_app_path="$DERIVED_DATA_PATH/Build/Intermediates.noindex/ArchiveIntermediates/${APP_NAME}/InstallationBuildProductsLocation/Applications/${APP_NAME}.app"
+
+  echo "==> Debug: collecting archive diagnostics"
+
+  if [[ -d "$install_app_path" ]]; then
+    xattr -lr "$install_app_path" > "$ARCHIVE_XATTR_LOG_PATH" 2>/dev/null || true
+    codesign --verify --deep --strict --verbose=4 "$install_app_path" 2>&1 || true
+  fi
+
+  if [[ -d "$archive_app_path" ]]; then
+    xattr -lr "$archive_app_path" >> "$ARCHIVE_XATTR_LOG_PATH" 2>/dev/null || true
+    codesign --verify --deep --strict --verbose=4 "$archive_app_path" 2>&1 || true
+  fi
+
+  if [[ -d "$DERIVED_DATA_PATH/SourcePackages" ]]; then
+    xattr -lr "$DERIVED_DATA_PATH/SourcePackages" > "$SOURCEPACKAGES_XATTR_LOG_PATH" 2>/dev/null || true
+  fi
+
+  echo "==> Debug logs:"
+  echo "    resolve packages: $RESOLVE_LOG_PATH"
+  echo "    archive:          $ARCHIVE_LOG_PATH"
+  echo "    archive xattrs:   $ARCHIVE_XATTR_LOG_PATH"
+  echo "    source xattrs:    $SOURCEPACKAGES_XATTR_LOG_PATH"
 }
 
 find_sparkle_tool() {
@@ -68,6 +104,44 @@ find_sparkle_tool() {
 trap cleanup EXIT
 
 mkdir -p "$WORK_DIR" "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR" "$OUTPUT_DIR"
+
+strip_bundle_metadata() {
+  local target_path="$1"
+
+  if [[ -e "$target_path" ]]; then
+    xattr -cr "$target_path" 2>/dev/null || true
+    find "$target_path" -name .DS_Store -delete 2>/dev/null || true
+  fi
+}
+
+resign_embedded_sparkle() {
+  local app_path="$1"
+  local framework_path="$app_path/Contents/Frameworks/Sparkle.framework"
+
+  if [[ ! -d "$framework_path" ]]; then
+    return
+  fi
+
+  echo "==> Re-signing embedded Sparkle helpers"
+
+  while IFS= read -r nested_path; do
+    codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$nested_path"
+  done < <(
+    find "$framework_path" \
+      \( -path '*/XPCServices/*.xpc' -o -path '*/Updater.app' \) \
+      -print | sort
+  )
+
+  while IFS= read -r nested_binary; do
+    codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$nested_binary"
+  done < <(
+    find "$framework_path" \
+      \( -path '*/Autoupdate' -o -path '*/Updater.app/Contents/MacOS/*' -o -path '*/XPCServices/*.xpc/Contents/MacOS/*' \) \
+      -type f -print | sort
+  )
+
+  codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime "$framework_path"
+}
 
 echo "==> Decoding Developer ID certificate"
 if ! printf '%s' "$APPLE_SIGNING_CERT_BASE64" | base64 -D > "$CERT_PATH" 2>/dev/null; then
@@ -111,19 +185,46 @@ echo "==> (Identity used for DMG signing only; xcodebuild uses automatic signing
 rm -rf "$ARCHIVE_PATH" "$DERIVED_DATA_PATH" "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR"
 mkdir -p "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR"
 
+echo "==> Resolving Swift package dependencies"
+if ! xcodebuild \
+  -resolvePackageDependencies \
+  -project "$PROJECT_PATH" \
+  -scheme "$SCHEME" \
+  -derivedDataPath "$DERIVED_DATA_PATH" \
+  -clonedSourcePackagesDirPath "$DERIVED_DATA_PATH/SourcePackages" \
+  2>&1 | tee "$RESOLVE_LOG_PATH"; then
+  echo "error: package resolution failed; see $RESOLVE_LOG_PATH" >&2
+  exit 1
+fi
+
+echo "==> Removing extended attributes from resolved package artifacts"
+strip_bundle_metadata "$DERIVED_DATA_PATH/SourcePackages"
+
+echo "==> Refreshing package metadata cleanup before archive"
+strip_bundle_metadata "$DERIVED_DATA_PATH/SourcePackages"
+
 echo "==> Archiving app"
-xcodebuild archive \
+if ! xcodebuild archive \
   -project "$PROJECT_PATH" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
   -archivePath "$ARCHIVE_PATH" \
   -derivedDataPath "$DERIVED_DATA_PATH" \
+  -clonedSourcePackagesDirPath "$DERIVED_DATA_PATH/SourcePackages" \
+  -disableAutomaticPackageResolution \
   -destination "generic/platform=macOS" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="Developer ID Application" \
   DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
   OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
-  SPARKLE_FEED_URL="$SPARKLE_FEED_URL"
+  SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
+  2>&1 | tee "$ARCHIVE_LOG_PATH"; then
+  if [[ "$DEBUG_RELEASE" == "1" ]]; then
+    dump_archive_diagnostics
+  fi
+  echo "error: archive failed; see $ARCHIVE_LOG_PATH" >&2
+  exit 1
+fi
 
 APP_PATH="$ARCHIVE_PATH/Products/Applications/${APP_NAME}.app"
 
@@ -131,6 +232,10 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "error: archived app not found at $APP_PATH" >&2
   exit 1
 fi
+
+echo "==> Removing extended attributes from archived app"
+strip_bundle_metadata "$APP_PATH"
+resign_embedded_sparkle "$APP_PATH"
 
 VERSION="$(defaults read "$APP_PATH/Contents/Info" CFBundleShortVersionString)"
 BUILD="$(defaults read "$APP_PATH/Contents/Info" CFBundleVersion)"
@@ -156,6 +261,7 @@ codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
 echo "==> Staging DMG contents"
 cp -R "$APP_PATH" "$STAGING_DIR/"
+strip_bundle_metadata "$STAGING_DIR/$APP_NAME.app"
 ln -s /Applications "$STAGING_DIR/Applications"
 
 echo "==> Creating DMG"
@@ -170,11 +276,24 @@ echo "==> Signing DMG"
 codesign --force --sign "$SIGNING_IDENTITY" --timestamp "$DMG_PATH"
 
 echo "==> Notarizing DMG"
-xcrun notarytool submit "$DMG_PATH" \
+NOTARIZE_OUTPUT="$(xcrun notarytool submit "$DMG_PATH" \
   --apple-id "$APPLE_ID" \
   --password "$APPLE_APP_SPECIFIC_PASSWORD" \
   --team-id "$APPLE_TEAM_ID" \
-  --wait
+  --wait 2>&1)"
+echo "$NOTARIZE_OUTPUT"
+
+SUBMISSION_ID="$(echo "$NOTARIZE_OUTPUT" | awk '/^  id:/ { print $2; exit }')"
+NOTARIZE_STATUS="$(echo "$NOTARIZE_OUTPUT" | awk '/^  status:/ { print $2; exit }')"
+
+if [[ "$NOTARIZE_STATUS" != "Accepted" ]]; then
+  echo "==> Notarization failed — fetching log for submission $SUBMISSION_ID"
+  xcrun notarytool log "$SUBMISSION_ID" \
+    --apple-id "$APPLE_ID" \
+    --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+    --team-id "$APPLE_TEAM_ID"
+  exit 1
+fi
 
 echo "==> Stapling notarization ticket"
 xcrun stapler staple "$DMG_PATH"
@@ -183,6 +302,7 @@ echo "==> Verifying final DMG artifact"
 spctl --assess --type open --verbose=4 "$DMG_PATH"
 
 echo "==> Creating Sparkle ZIP"
+strip_bundle_metadata "$APP_PATH"
 ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 cp "$ZIP_PATH" "$SPARKLE_ARCHIVES_DIR/$ZIP_NAME"
 
