@@ -3,11 +3,29 @@ import Foundation
 class CollectionStore {
   private let collectionsURL: URL
 
+  static func defaultDirectory(
+    fileManager: FileManager = .default,
+    applicationSupportDirectory: () -> URL? = {
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    }
+  ) -> URL {
+    let baseDirectory =
+      applicationSupportDirectory()
+      ?? {
+        let fallback = fileManager.homeDirectoryForCurrentUser
+          .appending(path: "Library/Application Support", directoryHint: .isDirectory)
+        AiraLogger.shared.warning(
+          "Application Support lookup failed; falling back to \(fallback.path) for collection storage",
+          category: "storage"
+        )
+        return fallback
+      }()
+
+    return baseDirectory.appending(path: "Aira", directoryHint: .isDirectory)
+  }
+
   convenience init() {
-    let appSupport = FileManager.default.urls(
-      for: .applicationSupportDirectory, in: .userDomainMask
-    ).first!.appending(path: "Aira")
-    self.init(directory: appSupport)
+    self.init(directory: Self.defaultDirectory())
   }
 
   init(directory: URL) {

@@ -58,6 +58,14 @@ struct CollectionStoreTests {
     }
   }
 
+  @Test func productionDirectoryFallsBackWhenApplicationSupportIsUnavailable() {
+    let expected = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Application Support/Aira", directoryHint: .isDirectory)
+    let fallback = CollectionStore.defaultDirectory(applicationSupportDirectory: { nil })
+
+    #expect(fallback == expected)
+  }
+
   @Test func renamePersistsNewName() throws {
     let (store, dir) = try makeCollectionStore()
     defer { cleanup(dir) }

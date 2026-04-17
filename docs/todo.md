@@ -30,6 +30,7 @@ Work one task at a time. Read the REQ, read the relevant design/architecture sec
 Wire the stores into AppState so all views have a consistent, reactive source of truth.
 
 - [x] **T-001** Wire AppState to ScriptStore: load index on init, expose createScript / saveScript / deleteScript / duplicateScript / toggleStarred / loadScript(id:) / importScript(from:) — REQ-014, REQ-015, REQ-035, REQ-036. Added AppState script APIs, preserved starred state across saves, and verified with unit/integration tests.
+- [x] **T-001a** Startup storage hardening: make production `ScriptStore` / `CollectionStore` initialization fall back safely if `FileManager` cannot resolve the user Application Support directory so app launch never crashes before the UI appears. — REQ-014, REQ-037. Both stores now fall back to `~/Library/Application Support` instead of crashing at launch, and focused regression tests cover the fallback path.
 - [x] **T-002** Wire AppState to CollectionStore: expose createCollection / renameCollection / deleteCollection — REQ-037. Added AppState collection APIs, refreshed collection state on init and mutation, and verified CollectionStore persistence behavior with unit tests.
 - [x] **T-003** Wire AppState to SettingsStore: load settings on init, persist on every change — REQ-022, REQ-023, REQ-024, REQ-013, REQ-039. AppState now loads persisted settings at startup, autosaves every settings mutation through SettingsStore, and is covered by SettingsStore/AppState tests.
 

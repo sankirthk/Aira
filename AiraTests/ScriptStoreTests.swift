@@ -147,6 +147,14 @@ struct ScriptStoreTests {
     }
   }
 
+  @Test func productionDirectoryFallsBackWhenApplicationSupportIsUnavailable() {
+    let expected = FileManager.default.homeDirectoryForCurrentUser
+      .appending(path: "Library/Application Support/Aira/Scripts", directoryHint: .isDirectory)
+    let fallback = ScriptStore.defaultScriptsDirectory(applicationSupportDirectory: { nil })
+
+    #expect(fallback == expected)
+  }
+
   // UT-004: load throws when file does not exist
   @Test func loadMissingThrows() throws {
     let (store, dir) = try makeStore()
