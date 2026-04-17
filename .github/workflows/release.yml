@@ -32,9 +32,12 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
       - name: Verify tagged commit is on main
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch origin main --depth=1
-          git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main
+          SOURCE_DEFAULT_BRANCH="$(gh api "repos/${{ github.repository }}" --jq '.default_branch')"
+          git fetch origin "$SOURCE_DEFAULT_BRANCH" --depth=1
+          git merge-base --is-ancestor "$(git rev-parse HEAD)" "origin/$SOURCE_DEFAULT_BRANCH"
 
 
   package-and-notarize:
@@ -102,6 +105,12 @@ jobs:
           name: release-artifacts-${{ needs.package-and-notarize.outputs.tag }}
           path: build/public-release
 
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package-and-notarize.outputs.tag }}
+          path: aira-source
+
       - name: Mint token for aira-releases
         id: releases-token
         uses: actions/create-github-app-token@v1
@@ -122,9 +131,17 @@ jobs:
           DMG_NAME: ${{ needs.package-and-notarize.outputs.dmg_name }}
           ZIP_NAME: ${{ needs.package-and-notarize.outputs.zip_name }}
         run: |
+          RELEASE_LABEL="${TAG#v}"
+          RELEASE_NOTES_PATH="$GITHUB_WORKSPACE/aira-source/docs/releases/${RELEASE_LABEL}.md"
           DMG_PATH="build/public-release/$DMG_NAME"
           ZIP_PATH="build/public-release/$ZIP_NAME"
+          TARGET_BRANCH="$(gh api "repos/$RELEASE_REPO" --jq '.default_branch')"
           RELEASE_ARGS=()
+
+          if [[ ! -f "$RELEASE_NOTES_PATH" ]]; then
+            echo "error: release notes not found at $RELEASE_NOTES_PATH" >&2
+            exit 1
+          fi
 
           if [[ "$IS_PRERELEASE" == "true" ]]; then
             RELEASE_ARGS+=(--prerelease)
@@ -133,14 +150,15 @@ jobs:
           if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
             gh release edit "$TAG" \
               --repo "$RELEASE_REPO" \
-              --title "Aira $VERSION" \
+              --title "Aira $RELEASE_LABEL" \
+              --notes-file "$RELEASE_NOTES_PATH" \
               "${RELEASE_ARGS[@]}"
           else
             gh release create "$TAG" \
               --repo "$RELEASE_REPO" \
-              --target main \
-              --title "Aira $VERSION" \
-              --generate-notes \
+              --target "$TARGET_BRANCH" \
+              --title "Aira $RELEASE_LABEL" \
+              --notes-file "$RELEASE_NOTES_PATH" \
               "${RELEASE_ARGS[@]}"
           fi
 
@@ -195,17 +213,18 @@ jobs:
           APPCAST_NAME: ${{ needs.package-and-notarize.outputs.appcast_name }}
           TAG: ${{ needs.package-and-notarize.outputs.tag }}
         run: |
+          TARGET_BRANCH="$(git branch --show-current)"
           cp "../build/public-release/$APPCAST_NAME" "./$APPCAST_NAME"
+          git add "$APPCAST_NAME"
 
-          if git diff --quiet -- "$APPCAST_NAME"; then
+          if git diff --cached --quiet -- "$APPCAST_NAME"; then
             exit 0
           fi
 
           git config user.name "aira-release-bot[bot]"
           git config user.email "aira-release-bot[bot]@users.noreply.github.com"
-          git add "$APPCAST_NAME"
           git commit -m "Update Sparkle appcast for $TAG"
-          git push origin HEAD:main
+          git push origin "HEAD:$TARGET_BRANCH"
 
   update-website-metadata:
     name: Update Website Metadata
@@ -228,7 +247,7 @@ jobs:
       - name: Check out Aira source (for release template)
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ needs.package-and-notarize.outputs.tag }}
           path: aira-source
 
       - name: Check out aira-site
@@ -240,42 +259,50 @@ jobs:
 
       - name: Rewrite release metadata
         env:
-          VERSION: ${{ needs.package-and-notarize.outputs.version }}
           TAG: ${{ needs.package-and-notarize.outputs.tag }}
           RELEASE_DATE: ${{ needs.package-and-notarize.outputs.release_date }}
           DMG_URL: ${{ needs.publish-public-release.outputs.dmg_url }}
           RELEASE_NOTES_URL: ${{ needs.publish-public-release.outputs.release_notes_url }}
         run: |
           TEMPLATE_PATH="$GITHUB_WORKSPACE/aira-source/scripts/release/release_metadata.ts.template"
+          RELEASE_NOTES_PATH="$GITHUB_WORKSPACE/aira-source/docs/releases/${TAG#v}.md"
+
           if [[ ! -f "$TEMPLATE_PATH" ]]; then
             echo "error: release metadata template not found at $TEMPLATE_PATH" >&2
             exit 1
           fi
 
-          AFTER_LATEST=$(awk '/^export const changelog/,0' aira-site/src/content/release.ts)
-          sed \
-            -e "s|__VERSION__|${VERSION}|g" \
-            -e "s|__TAG__|${TAG}|g" \
-            -e "s|__RELEASE_DATE__|${RELEASE_DATE}|g" \
-            -e "s|__DMG_URL__|${DMG_URL}|g" \
-            -e "s|__RELEASE_NOTES_URL__|${RELEASE_NOTES_URL}|g" \
-            "$TEMPLATE_PATH" > aira-site/src/content/release.ts
-          printf "\n%s\n" "${AFTER_LATEST}" >> aira-site/src/content/release.ts
+          if [[ ! -f "$RELEASE_NOTES_PATH" ]]; then
+            echo "error: release notes not found at $RELEASE_NOTES_PATH" >&2
+            exit 1
+          fi
+
+          node "$GITHUB_WORKSPACE/aira-source/scripts/release/render_site_release_metadata.mjs" \
+            --template "$TEMPLATE_PATH" \
+            --notes "$RELEASE_NOTES_PATH" \
+            --existing aira-site/src/content/release.ts \
+            --output aira-site/src/content/release.ts \
+            --tag "$TAG" \
+            --release-date "$RELEASE_DATE" \
+            --dmg-url "$DMG_URL" \
+            --release-notes-url "$RELEASE_NOTES_URL"
 
       - name: Commit and push site metadata
         working-directory: aira-site
         env:
           TAG: ${{ needs.package-and-notarize.outputs.tag }}
         run: |
-          if git diff --quiet -- src/content/release.ts; then
+          TARGET_BRANCH="$(git branch --show-current)"
+          git add src/content/release.ts
+
+          if git diff --cached --quiet -- src/content/release.ts; then
             exit 0
           fi
 
           git config user.name "aira-release-bot[bot]"
           git config user.email "aira-release-bot[bot]@users.noreply.github.com"
-          git add src/content/release.ts
           git commit -m "Update release metadata for $TAG"
-          git push origin HEAD:main
+          git push origin "HEAD:$TARGET_BRANCH"
 
   post-publish-summary:
     name: Post-Publish Summary

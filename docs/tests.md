@@ -32,6 +32,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-007 | `importFromURL(_:)` creates a new Script whose body matches the file contents | `[x]` |
 | UT-008 | `importFromURL(_:)` throws `ImportError.fileTooLarge` for a file over 10 MB | `[x]` |
 | UT-009 | Script Codable round-trip: encode then decode produces identical struct | `[x]` |
+| UT-009a | Production `ScriptStore` path resolution falls back to a non-crashing local directory when Application Support lookup is unavailable | `[x]` |
 
 ### CollectionStore (Task T-002)
 
@@ -44,6 +45,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-014 | `addScript(_:toCollection:)` adds the scriptId and does not duplicate it on repeated calls | `[x]` |
 | UT-015 | `removeScript(_:fromCollection:)` removes the scriptId from the collection | `[x]` |
 | UT-016 | AiraCollection Codable round-trip | `[x]` |
+| UT-016a | Production `CollectionStore` path resolution falls back to a non-crashing local directory when Application Support lookup is unavailable | `[x]` |
 
 ### SettingsStore (Task T-003)
 
