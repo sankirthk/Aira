@@ -243,35 +243,50 @@ jobs:
           DMG_URL: ${{ needs.publish-public-release.outputs.dmg_url }}
           RELEASE_NOTES_URL: ${{ needs.publish-public-release.outputs.release_notes_url }}
         run: |
-          cat > aira-site/src/content/release.ts <<EOF
-          export type ReleaseMetadata = {
-            version?: string;
-            tag?: string;
-            releaseDate?: string;
-            betaLabel: string;
-            notarized: boolean;
-            dmgUrl: string;
-            releaseNotesUrl: string;
-            distributionRepo: string;
-            summary: string[];
-          };
+          # Preserve everything after the latestRelease export (changelog array etc.)
+          AFTER_LATEST=$(awk '/^export const changelog/,0' aira-site/src/content/release.ts)
 
-          export const latestRelease: ReleaseMetadata = {
-            version: "${VERSION}",
-            tag: "${TAG}",
-            releaseDate: "${RELEASE_DATE}",
-            betaLabel: "Public Beta",
-            notarized: true,
-            dmgUrl: "${DMG_URL}",
-            releaseNotesUrl: "${RELEASE_NOTES_URL}",
-            distributionRepo: "sankirthk/aira-releases",
-            summary: [
-              "Voice-Sync follows your script with on-device speech recognition.",
-              "Notch and pill overlays stay hidden from screen sharing.",
-              "Built-in script editing and local-first storage are included in the beta.",
-            ],
-          };
-          EOF
+          cat > aira-site/src/content/release.ts <<EOF
+export type ReleaseMetadata = {
+  version?: string;
+  tag?: string;
+  releaseDate?: string;
+  betaLabel: string;
+  notarized: boolean;
+  dmgUrl: string;
+  releaseNotesUrl: string;
+  distributionRepo: string;
+  summary: string[];
+};
+
+export type ChangelogEntry = {
+  version: string;
+  date: string;
+  tag: "beta" | "release" | "hotfix";
+  changes: {
+    type: "added" | "changed" | "fixed" | "removed";
+    description: string;
+  }[];
+};
+
+export const latestRelease: ReleaseMetadata = {
+  version: "${VERSION}",
+  tag: "${TAG}",
+  releaseDate: "${RELEASE_DATE}",
+  betaLabel: "Public Beta",
+  notarized: true,
+  dmgUrl: "${DMG_URL}",
+  releaseNotesUrl: "${RELEASE_NOTES_URL}",
+  distributionRepo: "sankirthk/aira-releases",
+  summary: [
+    "Voice activated scrolling follows your script with on-device speech recognition.",
+    "Notch and pill overlays stay hidden from screen sharing.",
+    "Built-in script editing and local-first storage are included in the beta.",
+  ],
+};
+
+${AFTER_LATEST}
+EOF
 
       - name: Commit and push site metadata
         working-directory: aira-site
