@@ -14,12 +14,12 @@ The developer is new to Swift. Technical decisions are explained clearly, includ
 
 These constraints apply to every decision in this document. They are non-negotiable.
 
-- **Binary size.** Zero third-party Swift packages. All functionality must be achievable with Apple's native frameworks. Target app bundle under 10 MB after Archive build.
+- **Binary size.** Keep dependencies minimal. Sparkle is the only approved third-party package in the current direct-distribution build; all other functionality must use Apple's native frameworks. Target app bundle under 10 MB after Archive build.
 - **Memory.** Overlay windows hold only the active script segment in memory during a session, not the full document.
 - **Battery.** The microphone tap (`AVAudioEngine`) runs **only during an active presenter session**. It is fully stopped and released when the session ends or the overlays are closed. Zero audio capture at idle.
 - **CPU.** No polling loops. Use Combine publishers or `async/await` for all reactive state. Scroll animation is driven by a single frame-synced session playhead clock (`CADisplayLink` / AppKit display link host) rather than `Timer` loops or per-view sleep loops.
 - **Startup.** Cold launch must not block the main thread. Scripts are loaded lazily from disk — the library view loads metadata only; full script body is read on demand when the editor opens.
-- **No telemetry, no background network activity.** Zero ambient CPU or network usage when the app is idle. Charles Proxy should show no outbound traffic during a full idle session.
+- **No telemetry, no unrelated background network activity.** Zero ambient analytics or service traffic is permitted. The only allowed outbound network path in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). Charles Proxy / Network Instruments should show no other outbound traffic during a full idle session.
 
 ---
 
@@ -33,6 +33,7 @@ These constraints apply to every decision in this document. They are non-negotia
 | Voice Activity Detection (VAD) | Hybrid of `AudioLevelMonitor` activity and `SFSpeechRecognizer` result cadence | Live voice motion stays active while either recent audio activity or recent recognition results indicate speech. Recognition pauses still halt anchored speech progress, and matcher output continues to correct playhead position. |
 | Stealth (screen capture exclusion) | `NSWindow.sharingType = .none` | A single macOS API flag that excludes a window from all screen capture streams, including Zoom and Teams. Must be set at window creation time. |
 | Global keyboard shortcut | `CGEvent` tap via `CGEventTap` | Captures keyboard events globally, regardless of which window has focus. Used for the Voice-Sync toggle shortcut. |
+| Updater | Sparkle | Direct-distribution updater for signed ZIP-based in-place updates. Supports appcast verification, EdDSA update signing, and sandbox-compatible installer launch services. |
 | Script import | `NSOpenPanel` + `FileManager` | Standard macOS file picker for `.txt` import. Drag-and-drop handled via `NSPasteboard` UTType. No third-party dependency. |
 | Local storage — scripts | `FileManager` + `JSON` (`Codable`) | Plain JSON files in `~/Library/Application Support/Aira/Scripts/`. No database, no ORM. Scripts are plain text with metadata — no relational structure is needed. Zero added binary weight. |
 | Local storage — collections | `FileManager` + `JSON` (`Codable`) | Single `collections.json` file in `~/Library/Application Support/Aira/`. Contains collection definitions and script membership lists. |
@@ -50,7 +51,12 @@ These constraints apply to every decision in this document. They are non-negotia
 Aira/
 ├── App/
 │   ├── AiraApp.swift            — @main entry point, AppDelegate, menu bar setup
-│   └── AppState.swift           — global ObservableObject (active script, session state, settings, open pills)
+│   ├── AppState.swift           — global ObservableObject (active script, session state, settings, open pills)
+│   ├── AppUpdaterConfiguration.swift — resolves Sparkle feed/public-key bundle configuration and fail-closed state
+│   ├── AppUpdaterController.swift — owns Sparkle updater startup and Check for Updates availability
+│   ├── AiraSparkleUserDriver.swift — custom Sparkle user driver that replaces stock update prompts
+│   ├── AppUpdatePromptContent.swift — copy model for Aira-branded updater prompts
+│   └── AppUpdatePromptWindowController.swift — branded floating update prompt window controller
 │
 ├── ManagerWindow/
 │   ├── ManagerWindowView.swift  — main NSWindow host; sidebar + content area layout
@@ -435,7 +441,47 @@ User ends session (Escape key or ⌘W or closes overlay)
 
 ---
 
-### 3.10 Per-Window Overlay Appearance — REQ-038
+### 3.10 Direct Distribution Updater — REQ-030
+
+Aira uses Sparkle for direct-distribution updates outside the Mac App Store.
+
+**Bundle configuration:**
+
+- `SUFeedURL` points to the hosted `appcast.xml`
+- `SUPublicEDKey` embeds the Sparkle public signing key shipped with the app
+- `SUEnableInstallerLauncherService = true` enables Sparkle's sandbox-compatible installer launcher
+
+The current build settings embed:
+
+- `SPARKLE_FEED_URL = https://raw.githubusercontent.com/sankirthk/aira-releases/main/appcast.xml`
+- `SPARKLE_PUBLIC_ED_KEY = <public EdDSA key>`
+
+**App-side flow:**
+
+1. `AppUpdaterController` reads `SUFeedURL` and `SUPublicEDKey` from the bundle via `AppUpdaterConfiguration`
+2. If either value is missing or invalid, the updater fails closed and `Check for Updates…` remains disabled
+3. If configured, `SPUUpdater` starts using `AiraSparkleUserDriver`
+4. `AiraSparkleUserDriver` replaces Sparkle's stock `update found` and `ready to install` alerts with Aira-branded popup windows
+5. Download progress, extraction progress, and updater errors continue through Sparkle's standard user-driver surfaces for now
+
+**Release artifacts:**
+
+The release workflow produces:
+
+- a notarized DMG for humans
+- a signed ZIP for Sparkle
+- `appcast.xml` hosted at the stable feed URL
+
+The appcast and ZIP may live in a separate public distribution repository from the private source repository.
+
+**Release triggering:**
+
+- Releases are cut from immutable version tags such as `v1.0.0-beta.1`
+- The GitHub Actions release workflow validates the tagged commit, builds/signs/notarizes the app, generates Sparkle artifacts, and publishes them to `sankirthk/aira-releases`
+
+---
+
+### 3.11 Per-Window Overlay Appearance — REQ-038
 
 Each overlay window has an `OverlayAppearance` that can be overridden independently from the global defaults.
 
@@ -467,7 +513,7 @@ struct OverlayAppearance: Codable, Equatable {
 
 ---
 
-### 3.11 Pill Content Mode — REQ-034
+### 3.12 Pill Content Mode — REQ-034
 
 Each `PillWindowController` holds a `contentMode: PillContentMode` enum:
 
@@ -488,7 +534,7 @@ enum PillContentMode {
 
 ---
 
-### 3.12 Script Import — REQ-035
+### 3.13 Script Import — REQ-035
 
 **Drag-and-drop:** The Document Library's `NSView` layer implements `NSDraggingDestination`. On drag enter, it highlights the import drop zone. On drag perform, it reads the dragged URL from `NSPasteboard` and calls `ScriptStore.importFromURL(_:)`.
 
@@ -520,7 +566,7 @@ After import, `AppState.scripts` is refreshed and the app navigates to the edito
 
 ---
 
-### 3.13 Collections — REQ-037
+### 3.14 Collections — REQ-037
 
 Collections are stored in a single JSON file at `~/Library/Application Support/Aira/collections.json`:
 
@@ -551,7 +597,7 @@ Collections are stored in a single JSON file at `~/Library/Application Support/A
 
 ---
 
-### 3.14 Keyboard Voice-Sync Toggle — REQ-039
+### 3.15 Keyboard Voice-Sync Toggle — REQ-039
 
 The Voice-Sync pause/resume shortcut must fire regardless of which window has keyboard focus. Standard `NSEvent` local monitors only fire when the app is in the foreground and a specific window is key. A global `CGEvent` tap is required.
 
@@ -596,7 +642,7 @@ class VoiceSyncKeyboardMonitor {
 
 **Toggle behavior:** Each invocation of the handler calls `VoiceSyncEngine.togglePause()`. The engine's published state changes from `.running` to `.paused` (or vice versa), and all subscribed `PrompterContentView` instances react immediately.
 
-### 3.15 Manual Scroll Controls — REQ-003
+### 3.16 Manual Scroll Controls — REQ-003
 
 Manual scroll needs one consistent source of truth for session-level scroll behavior. The same session can be driven by three inputs:
 
@@ -773,13 +819,28 @@ All views that need global state receive it via `@EnvironmentObject`. Nested vie
 
 **On-device enforcement:** `SFSpeechRecognizer` is configured with `requiresOnDeviceRecognition = true`. This ensures all speech processing happens locally. If on-device recognition is unavailable (e.g., the language model is not downloaded), Aira will prompt the user to download it via System Settings > Accessibility > Spoken Content, and disable Voice-Sync until it is available.
 
-**Entitlements (Hardened Runtime):**
+**Sandbox and entitlements:**
 ```xml
-<key>com.apple.security.device.microphone</key>
+<key>com.apple.security.app-sandbox</key>
 <true/>
+
+<key>com.apple.security.device.audio-input</key>
+<true/>
+
+<key>com.apple.security.network.client</key>
+<true/>
+
+<key>com.apple.security.files.user-selected.read-only</key>
+<true/>
+
+<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+<array>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spks</string>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)-spki</string>
+</array>
 ```
 
-Hardened Runtime must be enabled in Xcode build settings. This is a requirement for notarization and for the microphone entitlement to be honored.
+Hardened Runtime and App Sandbox must both be enabled in Xcode build settings. The audio-input entitlement gates microphone access. `network.client` exists solely so Sparkle can fetch the appcast and signed update archive over HTTPS. The temporary mach-lookup exceptions are required for Sparkle's installer launcher service in a sandboxed app.
 
 **Note on `CGEvent` tap:** A global event tap requires the app to have been granted Accessibility permission by the user via System Settings > Privacy & Security > Accessibility. The app must prompt for this permission on first use of the Voice-Sync keyboard toggle. If denied, the keyboard toggle is unavailable but the rest of the app functions normally. The permission is not required for core functionality (Voice-Sync still works via hover-to-pause).
 
@@ -788,6 +849,17 @@ Hardened Runtime must be enabled in Xcode build settings. This is a requirement 
 ## 7. Testing Requirements
 
 Tests are co-authored alongside implementation. A feature is not considered complete until its tests exist and pass.
+
+**Repository CI quality gate:**
+
+The main app repository should have a single CI workflow that runs on pull requests and on pushes to `main`. That workflow should:
+
+1. check Swift formatting against the committed source tree
+2. run Swift lint-style checks
+3. run `xcodebuild build` for the `Aira` scheme on macOS
+4. run `xcodebuild test` for the `Aira` scheme on macOS
+
+The release workflow may reuse the same `xcodebuild test` command for tag validation, but release publishing must remain separate from day-to-day CI.
 
 ### Unit Tests
 
@@ -845,15 +917,16 @@ The following must be verified before any release build is signed and distribute
 | Check | Requirement |
 |---|---|
 | No plaintext secrets on disk | API key UI is deferred; no secrets written in v1. Verify via `grep -r "apiKey\|secret\|token" ~/Library/Application\ Support/Aira/` after a full session |
-| No outbound network calls | Charles Proxy / Network Instruments trace must show zero outbound requests during launch → cast → session → quit |
+| No outbound telemetry or unrelated traffic | Charles Proxy / Network Instruments trace must show no outbound requests except Sparkle appcast/update traffic over HTTPS |
 | Microphone access scoped correctly | `AVAudioEngine` tap installed only inside `VoiceSyncEngine.start()` and torn down in `stop()`. Verify in Activity Monitor: microphone indicator appears only during active session |
-| No telemetry SDK | Binary must not link any analytics framework. Verify: `otool -L Aira.app/Contents/MacOS/Aira` — no Crashlytics, Mixpanel, Amplitude, Firebase, or similar |
+| No telemetry SDK | Binary must not link any analytics framework. Verify: `otool -L Aira.app/Contents/MacOS/Aira` — Sparkle is the only approved non-Apple framework; no Crashlytics, Mixpanel, Amplitude, Firebase, or similar |
 | Script files readable only by user | Files in Application Support use default POSIX permissions. Verify: `ls -la ~/Library/Application\ Support/Aira/Scripts/` |
 | Imported files not cached or duplicated | After import, only the new script JSON exists. Original `.txt` path is not retained or re-read after import completes. |
 | No world-readable tmp files | No sensitive content written to `/tmp` or shared directories |
 | CGEvent tap removed at session end | `VoiceSyncKeyboardMonitor.stop()` called in session teardown. Verify no event tap persists after session ends. |
 | Gatekeeper passes | Notarized `.dmg` passes `spctl --assess --verbose Aira.dmg` without warnings |
-| Hardened Runtime enabled | Xcode build settings: Hardened Runtime = Yes. `com.apple.security.device.microphone` entitlement set |
+| Sparkle sandbox wiring present | `SUEnableInstallerLauncherService = true`, app sandbox entitlement enabled, Sparkle mach-lookup exceptions present, and feed/public key values resolve in the built app |
+| Hardened Runtime enabled | Xcode build settings: Hardened Runtime = Yes. Sandbox entitlements present and signing succeeds |
 | On-device recognition enforced | `requiresOnDeviceRecognition = true` set on `SFSpeechRecognizer`. No speech data leaves the device |
 
 ---
@@ -863,7 +936,7 @@ The following must be verified before any release build is signed and distribute
 - UI layout code, visual design decisions, or color values (belong in `design.md`)
 - AI/LLM integration, prompt engineering, or API provider selection (deferred to a future release)
 - Notarization CI/CD pipeline automation details
-- App Store submission (Aira distributes via GitHub Releases and Homebrew Cask, not the Mac App Store)
+- App Store submission (Aira distributes via GitHub Releases and Sparkle, not the Mac App Store)
 - Import support for formats other than `.txt` (PDF, DOCX, RTF are out of scope for v1)
 
 ---
@@ -881,7 +954,7 @@ The following must be verified before any release build is signed and distribute
 | REQ-007 Stealth Failure Notification | §3.1 sharingType check → AppState.stealthWarning |
 | REQ-008 Notch Window | §3.2 NotchWindowController + notch positioning |
 | REQ-009 Pill Windows | §3.2 PillWindowController, multi-instance NSPanel; max 2 pills, opt-in via AppSettings.pillsEnabled |
-| REQ-044 Pill Window Settings | §3.10 AppSettings.pillsEnabled + maxPillCount; Settings > Overlays tab pill section |
+| REQ-044 Pill Window Settings | AppSettings.pillsEnabled + maxPillCount; Settings > Overlays tab pill section |
 | REQ-010 Hover-To-Pause | §3.5 NSTrackingArea mouseEntered |
 | REQ-011 Resume After Hover | §3.5 NSTrackingArea mouseExited, currentOffset preserved |
 | REQ-012 Pre-Session Countdown | §3.8 CountdownView async timer |
@@ -897,23 +970,23 @@ The following must be verified before any release build is signed and distribute
 | REQ-022 Text Size Adjustment | OverlayAppearance.fontSize → PrompterContentView |
 | REQ-023 Custom Text Colors | OverlayAppearance.textColor → PrompterContentView |
 | REQ-024 Mood Presets | MoodPreset model applies full OverlayAppearance bundle |
-| REQ-025 Local-First Architecture | §3.6, §3.13 storage; §1 no cloud frameworks in stack |
+| REQ-025 Local-First Architecture | §3.6, §3.14 storage; §1 no cloud frameworks in stack |
 | REQ-026 No Telemetry | §8 security checklist; §0 zero ambient network activity |
 | REQ-027 No Account Required | No auth framework, no Keychain in v1 |
 | REQ-028 Free Distribution | No paywall framework |
 | REQ-029 Signed And Notarized | §1 Xcode Archive + notarytool; §6 Hardened Runtime |
-| REQ-030 Distribution Channels | §1 distribution entry; GitHub Releases + Homebrew Cask |
+| REQ-030 Distribution Channels | §3.10 direct-distribution updater, Sparkle appcast/ZIP pipeline, and GitHub Releases DMG path |
 | REQ-031 Closed-Source | Repository policy — no architecture impact |
 | REQ-032 Live Answer Mode | Future release; experimental toggle in AppSettings |
 | REQ-033 Experimental Transparency | Disclosure presented before first activation; stored in AppSettings |
-| REQ-034 Pill Content Mode | §3.11 PillContentMode enum; PillWindowController; VoiceSyncEngine subscription model |
-| REQ-035 Script Import | §3.12 NSDraggingDestination + NSOpenPanel + ScriptStore.importFromURL |
+| REQ-034 Pill Content Mode | §3.12 PillContentMode enum; PillWindowController; VoiceSyncEngine subscription model |
+| REQ-035 Script Import | §3.13 NSDraggingDestination + NSOpenPanel + ScriptStore.importFromURL |
 | REQ-036 Script Duplication | §3.6 ScriptStore.duplicate; §4 data flow |
 | REQ-045 Bulk Selection and Deletion | `DocumentLibraryView` local `@State var selectedScriptIDs: Set<UUID>`; Select All checkbox (3-state); per-card checkbox visible on hover or when set non-empty; ⌘+click / Shift+click; bulk delete via AppState.deleteScript loop; selection/delete affordances hidden while `AppState.sessionActive`; scripts in `AppState.activeSessionScriptIDs` cannot be opened for editing |
-| REQ-037 Collections | §3.13 CollectionStore; Collection model; collections.json; §5 AppState.collections |
-| REQ-038 Per-Window Overlay Appearance | §3.10 OverlayAppearance model; per-controller currentAppearance; OverlayAppearancePopover |
-| REQ-039 Keyboard Voice-Sync Toggle | §3.14 VoiceSyncKeyboardMonitor; CGEvent tap; VoiceSyncEngine.togglePause() |
-| REQ-003 Manual Scroll Override | §3.15 Manual Scroll Controls; AppSettings.autoScrollWPM slider; session scroll coordinator; ScrollWheel interceptor |
+| REQ-037 Collections | §3.14 CollectionStore; Collection model; collections.json; §5 AppState.collections |
+| REQ-038 Per-Window Overlay Appearance | §3.11 OverlayAppearance model; per-controller currentAppearance; OverlayAppearancePopover |
+| REQ-039 Keyboard Voice-Sync Toggle | §3.15 VoiceSyncKeyboardMonitor; CGEvent tap; VoiceSyncEngine.togglePause() |
+| REQ-003 Manual Scroll Override | §3.16 Manual Scroll Controls; AppSettings.autoScrollWPM slider; session scroll coordinator; ScrollWheel interceptor |
 | REQ-040 Scroll Progress Indicator | Deferred — no v1 architecture |
 | REQ-041 Session Elapsed Timer | Deferred — no v1 architecture |
 | REQ-042 Jump-To-Top | Deferred — no v1 architecture |

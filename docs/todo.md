@@ -20,6 +20,8 @@ Work one task at a time. Read the REQ, read the relevant design/architecture sec
 - [x] Add NSMicrophoneUsageDescription and NSSpeechRecognitionUsageDescription to Info.plist
 - [x] Bundle custom fonts: Manrope-Bold, Inter-Regular, CrimsonText-Regular, IndieFlower-Regular — register all in Info.plist under `Fonts provided by application`
 - [x] Add color assets to Assets.xcassets (colorPrimary, colorSecondary, colorBackground, colorSurface, colorText, colorMuted, colorWarm — light + dark variants)
+- [ ] **T-000a** Main repository CI: add a single GitHub Actions workflow for pull requests and `main` pushes that checks Swift formatting, runs lint-style checks, runs `xcodebuild build`, and runs `xcodebuild test` for the `Aira` scheme. Keep this separate from the tag-driven release workflow.
+- [ ] **T-000b** Local pre-commit guard: add a tracked Git hook and installer that run the same core validation path as CI before commits, so obvious format/lint/build/test failures are blocked locally unless explicitly bypassed.
 
 ---
 
@@ -152,12 +154,16 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 ## Phase 8 — Distribution
 
 - [ ] **T-040** Verify app bundle < 10 MB after Archive build
-- [ ] **T-041** Confirm zero outbound network calls via Charles Proxy or Network Instruments — REQ-025, REQ-026
+- [ ] **T-041** Confirm no outbound telemetry or unrelated network calls via Charles Proxy or Network Instruments; only Sparkle appcast/update HTTPS traffic is permitted in direct-distribution builds — REQ-025, REQ-026, REQ-030
 - [ ] **T-042** Confirm microphone released after session end (Activity Monitor check)
-- [ ] **T-043** Notarize build: xcodebuild archive → notarytool submit → staple — REQ-029
-- [ ] **T-044** Create signed .dmg — REQ-029
-- [ ] **T-045** GitHub Releases: publish notarized .dmg — REQ-030
-- [ ] **T-046** Homebrew Cask formula — REQ-030
+- [ ] **T-043** Notarized release pipeline: `xcodebuild archive` → sign → `notarytool submit` → staple → signed DMG output — REQ-029. Release script/workflow exists but still needs a full successful dry run and verification.
+- [ ] **T-043a** Sparkle sandbox wiring: App Sandbox entitlements, installer launcher service, feed URL, and public EdDSA key must be present in the built app bundle — REQ-030. App-side wiring and focused tests exist; release verification is still pending.
+- [ ] **T-043b** In-app updater bootstrap: `AppUpdaterController` must fail closed when feed/public-key config is missing and expose `Check for Updates…` only when Sparkle is configured — REQ-030. Implementation landed; end-to-end verification is pending.
+- [ ] **T-043c** Custom update prompt: replace Sparkle's stock update-found / ready-to-install prompt surfaces with the compact Aira-branded popup while preserving Sparkle's download/install flow — REQ-030. Prompt implementation and content tests exist; build validation is still pending.
+- [ ] **T-044** Sparkle artifacts: create signed `Aira-<version>.zip`, generate/update `appcast.xml`, and host both at the stable public feed URL — REQ-030
+- [ ] **T-045** Public release publishing: publish the notarized DMG and Sparkle ZIP to `sankirthk/aira-releases` from the tag-driven release workflow — REQ-030
+- [ ] **T-045a** Website metadata sync: update `aira-site/src/content/release.ts` from the release workflow after the public artifacts are live — REQ-030
+- [ ] **T-046** First tagged beta dry run: push a release tag, watch the workflow succeed, verify GitHub release assets, confirm `appcast.xml` is updated, and confirm an installed build sees the update — REQ-029, REQ-030
 
 ---
 
@@ -168,6 +174,7 @@ These tasks are documented for future reference. Do not implement in v1.
 - [ ] AI Report-to-Natural Converter — REQ-017, REQ-018, REQ-019, REQ-020
 - [ ] BYOK API key storage (Keychain) — REQ-019, REQ-020
 - [ ] Live Answer Mode — REQ-032, REQ-033
+- [ ] Homebrew Cask formula — REQ-030 (deferred until the direct-distribution + Sparkle pipeline is stable)
 - [ ] Scroll Progress Indicator — REQ-040
 - [ ] Session Elapsed Timer — REQ-041
 - [ ] Jump-to-Top shortcut — REQ-042

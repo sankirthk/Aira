@@ -46,6 +46,23 @@
 
     ---
 
+    ## Bug & Security Review Flow
+
+    After each phase is implemented (or on request), run a bug and security review:
+    1. Read `review.md` first — check which issues are already open to avoid duplicating entries.
+    2. Use the Explore agent to deep-read all Swift files in the phase area and look for:
+       - Logic errors, off-by-one, wrong conditions, unhandled edge cases
+       - Force unwraps that can crash at runtime
+       - Concurrency issues (non-`@MainActor` writes to `@Published`, retain cycles)
+       - Security: path traversal via user-controlled filenames, forbidden network calls,
+         stealth violations, hardcoded secrets
+    3. For each finding, add a row to `review.md` with: date, area, P1/P2/P3 severity, file:line,
+       one-sentence summary, `open` status.
+    4. **Dismiss findings that cannot be reproduced** — mark `dismissed` with a reason.
+    5. Fix `open` issues in priority order (P1 first), updating `Status` to `resolved` when done.
+
+    ---
+
     ## Definition of Done
 
     A task is **only complete** when ALL of the following are true:
@@ -56,7 +73,8 @@
     `architecture.md` Section 6.
     3. **Security review items cleared** — any security checklist item in `architecture.md` Section 7 that is relevant to the task
     has been verified.
-    4. **`todo.md` updated** — the task is marked `[x]` in `todo.md` with a brief note on what was done.
+    4. **`review.md` checked** — any `open` finding touching the modified files has been resolved or dismissed.
+    5. **`todo.md` updated** — the task is marked `[x]` in `todo.md` with a brief note on what was done.
 
     Do not mark a task done if tests are skipped, stubbed, or failing. Do not mark a task done if the security review item for that
     area has not been checked.

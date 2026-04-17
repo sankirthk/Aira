@@ -456,6 +456,53 @@ Changes apply live as the user adjusts controls — no confirm step required.
 
 ---
 
+### Screen 9: Update Prompt
+
+A compact Aira-branded update popup shown when Sparkle finds a newer version or finishes downloading one.
+
+**Purpose:**
+- Replaces Sparkle's stock "update found" and "ready to install" prompts
+- Keeps update decisions inside Aira's visual language
+- Uses the same calm, low-friction presentation as the rest of the app
+
+**Window behavior:**
+- Small floating panel centered over the key app window when possible
+- Borderless panel with shadow
+- Remains key and focusable while visible
+- Dismissing the panel maps to Sparkle's cancel / dismiss action
+
+**Layout:**
+1. Version badge at top-left in a sage green capsule
+2. Title in Indie Flower
+3. Body copy in Crimson Text
+4. Secondary `Cancel` button
+5. Primary terracotta action button
+
+**States:**
+- **Update found**
+  - Title: `Update ready`
+  - Primary action: `Update Now`
+  - Secondary action: `Cancel`
+- **Ready to install**
+  - Title: `Ready to install`
+  - Primary action: `Install & Relaunch`
+  - Secondary action: `Cancel`
+
+**Visual styling:**
+- Background: `colorBackground`
+- Border: 1.5pt sage green at low opacity
+- Corner radius: 22pt
+- Width: ~360pt
+- Height: ~220pt
+- Primary button uses the same terracotta CTA treatment as other Aira actions
+- Secondary button uses the app's subdued secondary style
+
+**Scope:**
+- Only the decision prompts are custom in v1
+- Download progress, extraction progress, and updater errors may continue using Sparkle's standard UI until a later polish pass
+
+---
+
 ## 4. Design Philosophy — Native with Character
 
 Aira follows a "warm native" principle: the structural chrome of the app is clean macOS-native, and the personality lives in icons, typography, and color.
@@ -492,6 +539,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | `CueAnnotation` | Small pill-shaped inline label in terracotta, rendered within script text flow. Distinct from plain text. | REQ-016, REQ-018 |
 | `PillSetupSheet` | Compact sheet for configuring a new Pill Window: content mode selector + script picker (Manual mode). | REQ-034 |
 | `OverlayAppearancePopover` | Per-window appearance override panel accessed via right-click. Live preview strip + controls for text color, background color, opacity, font, font size. | REQ-038 |
+| `UpdatePrompt` | Compact Aira-branded Sparkle update decision panel with version badge, calm copy, and `Update Now` / `Cancel` actions. | REQ-030 |
 | `EmptyState` | Illustration + Indie Flower headline + Crimson Text sub-copy + terracotta CTA. Used in Document Library when no scripts exist. | — |
 | `ShortcutRow` | Label + editable keyboard shortcut recorder. Used in Settings > System tab. | REQ-039 |
 | `FontSelector` | Segmented control or dropdown offering Crimson Text / Manrope / Inter. Used in Settings > Overlays and OverlayAppearancePopover. | REQ-038 |
@@ -516,6 +564,8 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | Script Duplicate action | Copy created immediately | Library refreshes; new card appears with "Copy of [title]" |
 | Right-click on overlay window | Context menu for per-window controls | Native macOS context menu |
 | Overlay Appearance Popover open | Per-window appearance controls visible | Live preview strip updates in real-time as controls change |
+| Sparkle update found | Small branded update prompt appears instead of the stock Sparkle alert | Version badge visible; `Update Now` / `Cancel` actions use Aira button styling |
+| Sparkle update ready to install | Same branded prompt style reused for install step | Primary action changes to `Install & Relaunch` |
 | Pill content mode switch (Sync ↔ Manual) | Pill immediately switches source | ContentModeIndicator badge changes icon |
 | Assign Script to Manual Pill | Script picker popover | Dropdown list of scripts, search field |
 | Sidebar collapsed | Navigation icons only | Tooltip on hover reveals label |
@@ -572,7 +622,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-027 No Account Required | No sign-in screen, no profile UI |
 | REQ-028 Free Distribution | No paywall UI, no subscription prompts |
 | REQ-029 Signed And Notarized | No UI impact — build/distribution concern |
-| REQ-030 Distribution Channels | No UI impact — distribution concern |
+| REQ-030 Distribution Channels | Screen 9 Update Prompt plus GitHub Releases / Sparkle distribution surfaces |
 | REQ-031 Closed-Source Policy | No UI impact — repository concern |
 | REQ-032 Live Answer Mode | Experimental — opt-in toggle in Settings (labeled "Experimental"), disabled by default |
 | REQ-033 Experimental Transparency | Plain-language disclosure modal shown before first activation of Live Answer Mode |

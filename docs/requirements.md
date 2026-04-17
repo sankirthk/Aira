@@ -113,7 +113,7 @@ These rules apply across all of Aira's behavior.
 - Aira requires no user account, login, or registration at any point.
 - All scripts, settings, appearance preferences, and API keys remain on the user's device at all times.
 - Aira collects no analytics, telemetry, usage data, or crash reports that leave the device.
-- No network connection is required to use any core feature. The only permitted optional network activity is a user-initiated AI conversion call using the user's own API key.
+- No network connection is required to use any core authoring or presenter feature. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
 - Stealth Mode must never fail silently; if the prompter cannot be excluded from screen-share output, the user must be informed before a presenter session begins.
 - Voice-Sync and manual scroll are always independently available; one must never depend on the other being active.
 - The Notch Window and Pill Windows are independent surfaces; the failure or closure of one must not affect the other.
@@ -515,12 +515,13 @@ Acceptance criteria:
 
 #### REQ-030: Distribution Channels
 
-The app shall be available through GitHub Releases and Homebrew Cask.
+The app shall support direct distribution through GitHub Releases for first-time installs and Sparkle for in-app updates of installed copies.
 
 Acceptance criteria:
-- A user can download the app from the GitHub Releases page.
-- A user can install the app using the `brew install --cask` command.
-- Both channels distribute the same notarized build.
+- A user can download the signed and notarized `.dmg` from the public GitHub Releases page.
+- An installed copy can check a hosted Sparkle `appcast.xml` over HTTPS and install a newer signed update archive in place.
+- The manual-download DMG and the Sparkle update archive represent the same released app version/build.
+- When an update is found, Aira presents an in-app update prompt before Sparkle proceeds with download or install.
 
 #### REQ-031: Closed-Source Repository Policy
 

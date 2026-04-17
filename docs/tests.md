@@ -11,6 +11,8 @@ Test status:
 
 Tests live in the `AiraTests` target in Xcode (XCTest).
 
+Repository automation is tracked here when it materially gates shipping quality. CI checks are not a substitute for the app's unit/integration/manual coverage, but they do enforce formatting, linting, and test execution on shared branches.
+
 ---
 
 ## Unit Tests
@@ -53,6 +55,14 @@ Tests live in the `AiraTests` target in Xcode (XCTest).
 | UT-019a | `textColor` mutation via `SettingsStore` persists across store re-initialization — REQ-023 | `[x]` |
 | UT-019b | `pillsEnabled` and `maxPillCount` mutations persist across store re-initialization — REQ-044 | `[x]` |
 | UT-019c | `AppSettings.maxPillCount` is normalized to the supported `1...2` range during init and decode — REQ-044 | `[x]` |
+
+### App Updater (Tasks T-043a, T-043b, T-043c)
+
+| ID | Test | Status |
+|---|---|---|
+| UT-019d | `AppUpdaterConfiguration` reports configured only when both a valid `SUFeedURL` and a non-empty `SUPublicEDKey` are present | `[w]` |
+| UT-019e | Sparkle sandbox wiring is present: app sandbox entitlement, network/audio entitlements, Sparkle mach-lookup exceptions, and `SUEnableInstallerLauncherService` in `Info.plist` | `[w]` |
+| UT-019f | `AppUpdatePromptContent.updateFound(version:)` and `.readyToInstall(version:)` produce the branded copy and action labels expected by the custom updater popup | `[w]` |
 
 ### VoiceSyncEngine (Tasks T-034, T-035, T-036, T-037)
 
@@ -131,6 +141,9 @@ Tests live in the `AiraTests` target in Xcode (XCTest).
 | IT-018 | System-tab manual scroll speed control persists a changed WPM value through `AppState` and `SettingsStore` | `[x]` |
 | IT-019 | Mouse wheel / trackpad scrolling on an active overlay updates the rendered script position without disabling Voice-Sync state | `[ ]` |
 | IT-020 | Voice-Sync partial transcription updates advance the cursor in capped forward steps instead of jumping directly to the end of a long spoken window | `[ ]` |
+| IT-029 | When `SUFeedURL` or `SUPublicEDKey` is missing, `AppUpdaterController` fails closed and `Check for Updates…` remains disabled | `[ ]` |
+| IT-030 | When Sparkle reports an available update, Aira shows the custom update popup instead of Sparkle's stock update-found alert | `[ ]` |
+| IT-031 | When Sparkle finishes downloading an update, Aira shows the custom `Install & Relaunch` popup instead of the stock ready-to-install alert | `[ ]` |
 
 ### Hover Pause (Task T-028)
 
@@ -209,7 +222,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-047 | Overlay audio beam uses the shared primary color token and no overlay-local `Color(hex:)` helper remains in the Phase 6 window stack | `[ ]` |
 | MT-005 | Pill window is freely movable to a second display | `[ ]` |
 | MT-006 | App bundle size is under 10 MB after Archive build | `[ ]` |
-| MT-007 | No outbound network requests during launch → cast → session → quit (Charles Proxy trace) | `[ ]` |
+| MT-007 | No outbound telemetry or unrelated network requests during launch → cast → session → quit; only Sparkle appcast/update HTTPS traffic is permitted in direct-distribution builds | `[ ]` |
 | MT-008 | Notarized .dmg passes `spctl --assess --verbose` without warnings | `[ ]` |
 | MT-009 | Voice-Sync scroll tracks spoken words in real time with < 1 second lag | `[ ]` |
 | MT-010 | Script scroll pauses immediately when user stops speaking | `[ ]` |
@@ -245,6 +258,11 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-040 | Script Editor cue panel uses shared theme tokens for its sage background and cream foreground so it stays visually consistent across theme audits | `[ ]` |
 | MT-041 | Collections sidebar warning uses the shared warm token instead of an inline hex color, and collections navigation still behaves correctly after the manager window accessor main-actor cleanup | `[ ]` |
 | MT-042 | Settings chunk-1 audit: tabs read `Appearance`, `The Notch`, and `System`; Light Paper/Dark Studio swatches use shared theme tokens; and Pill Windows still behaves correctly after `maxPillCount` normalization | `[ ]` |
+| MT-048 | `Check for Updates…` is enabled only when the built app bundle resolves a valid Sparkle feed URL and public key | `[ ]` |
+| MT-049 | The branded update prompt appears for both `update found` and `ready to install` states, and `Cancel` cleanly dismisses without starting installation | `[ ]` |
+| MT-050 | A tagged release publishes DMG, ZIP, and `appcast.xml`, and an installed build successfully discovers the update from `https://raw.githubusercontent.com/sankirthk/aira-releases/main/appcast.xml` | `[ ]` |
+| MT-051 | Main-repo CI runs Swift formatting checks, lint-style checks, `xcodebuild build`, and `xcodebuild test` on pull requests and pushes to `main` | `[ ]` |
+| MT-052 | Installed pre-commit hook blocks a commit when formatting, linting, build, or tests fail, and allows the commit when the full local validation path passes | `[ ]` |
 
 ### Planned Refactor Coverage (Tasks T-025z ... T-025ag)
 
