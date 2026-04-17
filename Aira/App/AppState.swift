@@ -66,6 +66,7 @@ class AppState: ObservableObject {
         } catch {
             self.settings = AppSettings()
             self.persistenceErrorMessage = error.localizedDescription
+            AiraLogger.shared.error(error, category: "storage", context: "Failed to load settings")
         }
 
         do {
@@ -73,6 +74,7 @@ class AppState: ObservableObject {
             try refreshCollections()
         } catch {
             self.persistenceErrorMessage = error.localizedDescription
+            AiraLogger.shared.error(error, category: "storage", context: "Failed to load persisted library state")
         }
         bindSettingsPersistence()
     }
@@ -171,11 +173,49 @@ class AppState: ObservableObject {
     }
 
     @discardableResult
-    func importScript(from url: URL) throws -> Script {
-        let script = try scriptStore.importFromURL(url)
+    func importScript(from url: URL, inCollection collectionID: UUID? = nil) throws -> Script {
+        var script = try scriptStore.importFromURL(url)
+        if let collectionID {
+            try updateScriptCollections(id: script.id, collectionIDs: [collectionID])
+            script = try scriptStore.load(id: script.id)
+        }
         activeScript = script
         try refreshScripts()
+        try refreshCollections()
         return script
+    }
+
+    func updateScriptCollections(id: UUID, collectionIDs: [UUID]) throws {
+        let originalScript = try scriptStore.load(id: id)
+        let originalCollections = try collectionStore.loadAll()
+        var updatedScript = originalScript
+        let previousCollections = Set(originalScript.collectionIds)
+        let nextCollections = Set(collectionIDs)
+
+        updatedScript.collectionIds = collectionIDs
+
+        do {
+            for collectionID in previousCollections.subtracting(nextCollections) {
+                try collectionStore.removeScript(id, fromCollection: collectionID)
+            }
+
+            for collectionID in nextCollections.subtracting(previousCollections) {
+                try collectionStore.addScript(id, toCollection: collectionID)
+            }
+
+            try scriptStore.save(updatedScript)
+        } catch {
+            try? collectionStore.replaceAll(originalCollections)
+            try? scriptStore.save(originalScript)
+            throw error
+        }
+
+        if activeScript?.id == id {
+            activeScript = updatedScript
+        }
+
+        try refreshScripts()
+        try refreshCollections()
     }
 
     @discardableResult
@@ -191,8 +231,18 @@ class AppState: ObservableObject {
     }
 
     func deleteCollection(id: UUID) throws {
-        try collectionStore.delete(id: id)
-        try removeCollectionMembershipFromScripts(collectionID: id)
+        let originalCollections = try collectionStore.loadAll()
+        let affectedScripts = try scriptsContainingCollection(id)
+
+        do {
+            try removeCollectionMembershipFromScripts(collectionID: id)
+            try collectionStore.delete(id: id)
+        } catch {
+            try? restoreScripts(affectedScripts)
+            try? collectionStore.replaceAll(originalCollections)
+            throw error
+        }
+
         try refreshCollections()
     }
 
@@ -214,17 +264,29 @@ class AppState: ObservableObject {
     }
 
     private func removeCollectionMembershipFromScripts(collectionID: UUID) throws {
-        let affectedScriptIDs = scripts
-            .compactMap { meta -> UUID? in
-                guard let script = try? scriptStore.load(id: meta.id) else {
-                    return nil
-                }
-                return script.collectionIds.contains(collectionID) ? meta.id : nil
-            }
+        let affectedScripts = try scriptsContainingCollection(collectionID)
 
-        for scriptID in affectedScriptIDs {
-            var script = try scriptStore.load(id: scriptID)
+        for var script in affectedScripts {
             script.collectionIds.removeAll { $0 == collectionID }
+            try scriptStore.save(script)
+
+            if activeScript?.id == script.id {
+                activeScript = script
+            }
+        }
+
+        try refreshScripts()
+    }
+
+    private func scriptsContainingCollection(_ collectionID: UUID) throws -> [Script] {
+        try scripts.compactMap { meta in
+            let script = try scriptStore.load(id: meta.id)
+            return script.collectionIds.contains(collectionID) ? script : nil
+        }
+    }
+
+    private func restoreScripts(_ scripts: [Script]) throws {
+        for script in scripts {
             try scriptStore.save(script)
 
             if activeScript?.id == script.id {
@@ -242,7 +304,13 @@ class AppState: ObservableObject {
                 do {
                     try settingsStore.save(settings)
                 } catch {
-                    self?.persistenceErrorMessage = error.localizedDescription
+                    // Write to @MainActor-isolated property explicitly so Swift 6
+                    // strict concurrency checking can verify the actor context.
+                    let message = error.localizedDescription
+                    AiraLogger.shared.error(error, category: "storage", context: "Failed to persist settings")
+                    Task { @MainActor [weak self] in
+                        self?.persistenceErrorMessage = message
+                    }
                 }
             }
             .store(in: &cancellables)

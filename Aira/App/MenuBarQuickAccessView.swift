@@ -3,7 +3,14 @@ import AppKit
 
 struct MenuBarQuickAccessView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
     let overlayController: OverlayWindowController
+    @ObservedObject private var voiceSync: VoiceSyncEngine
+
+    init(overlayController: OverlayWindowController) {
+        self.overlayController = overlayController
+        self._voiceSync = ObservedObject(wrappedValue: overlayController.voiceSync)
+    }
 
     private var recentScripts: [ScriptMeta] {
         Array(appState.scripts.prefix(12))
@@ -61,7 +68,7 @@ struct MenuBarQuickAccessView: View {
 
                 HStack(spacing: 10) {
                     quickActionButton(
-                        title: "Open Manager",
+                        title: "Open Editor",
                         systemImage: "macwindow",
                         background: Color("colorPrimary"),
                         foreground: Color("colorBackground"),
@@ -70,8 +77,8 @@ struct MenuBarQuickAccessView: View {
                     )
 
                     quickActionButton(
-                        title: overlayController.voiceSync.isPausedByUser ? "Resume Voice" : "Pause Voice",
-                        systemImage: overlayController.voiceSync.isPausedByUser ? "mic.fill" : "pause.fill",
+                        title: MenuBarVoiceControlPresentation.title(isPausedByUser: voiceSync.isPausedByUser),
+                        systemImage: MenuBarVoiceControlPresentation.symbolName(isPausedByUser: voiceSync.isPausedByUser),
                         background: Color("colorSurface"),
                         foreground: Color("colorText"),
                         showsBorder: true,
@@ -224,8 +231,11 @@ struct MenuBarQuickAccessView: View {
     private func castScriptToNotch(id: UUID, includePills: Bool = false) {
         do {
             overlayController.appState = appState
-            let menuWindow = currentMenuBarWindow
+            dismissMenuBarWindows()
             let script = try appState.loadScript(id: id)
+            // Hide manager window and become accessory BEFORE presenting overlays —
+            // switching policy after panels appear can cause macOS to hide them.
+            hideManagerWindowIfNeeded()
             overlayController.presentSession(
                 script: script,
                 appearance: appState.settings.defaultOverlayAppearance,
@@ -235,23 +245,19 @@ struct MenuBarQuickAccessView: View {
                 voiceSyncMode: appState.settings.voiceSyncMode,
                 pillModes: includePills ? quickCastPillModes : enabledPillModes
             )
-            hideManagerWindowIfNeeded()
-            closeMenuBarWindow(menuWindow)
+            dismissMenuBarWindows()
         } catch {
             NSSound.beep()
         }
     }
 
     private func openManagerWindow() {
-        let menuWindow = currentMenuBarWindow
-        // Unhide in case the app was hidden via NSApp.hide() (e.g. from ManagerWindowView)
-        NSApp.unhide(nil)
-        let candidateWindow = NSApp.windows.first(where: { !($0 is NSPanel) })
-        candidateWindow?.deminiaturize(nil)
-        candidateWindow?.makeKeyAndOrderFront(nil)
-        candidateWindow?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
-        closeMenuBarWindow(menuWindow)
+        closeMenuBarWindowsNow()
+
+        Task { @MainActor in
+            closeMenuBarWindowsNow()
+            AppWindowCoordinator.restoreManagerWindow()
+        }
     }
 
     private func toggleVoicePause() {
@@ -261,11 +267,16 @@ struct MenuBarQuickAccessView: View {
 
     private func endSession() {
         overlayController.endSession()
-        openManagerWindow()
+        dismissMenuBarWindows()
+    }
+
+    private func quitApplication() {
+        dismissMenuBarWindows()
+        NSApp.terminate(nil)
     }
 
     private var voiceControlIsEnabled: Bool {
-        appState.sessionActive && appState.settings.voiceSyncEnabled
+        MenuBarVoiceControlPresentation.isEnabled(hasActiveSession: appState.sessionActive)
     }
 
     private var enabledPillModes: [PillContentMode] {
@@ -277,37 +288,40 @@ struct MenuBarQuickAccessView: View {
     }
 
     private func hideManagerWindowIfNeeded() {
-        // Same pattern as ManagerWindowView.miniaturizeManagerWindow().
-        // The overlay panels survive NSApp.hide() because of their
-        // .screenSaver level + .canJoinAllSpaces + .stationary behavior.
-        NSApp.hide(nil)
+        AppWindowCoordinator.hideManagerWindowForSession()
     }
 
     private var currentMenuBarWindow: NSWindow? {
-        guard let keyWindow = NSApp.keyWindow else {
-            return nil
-        }
-
-        // The manager window is the regular app window; the menu-bar extra
-        // is presented in its own transient window and should be dismissed
-        // explicitly after a quick cast.
-        if keyWindow is NSPanel {
-            return keyWindow
-        }
-
-        if keyWindow.title.isEmpty {
-            return keyWindow
-        }
-
-        return nil
+        AppWindowCoordinator.currentTransientMenuBarWindow()
     }
 
-    private func closeMenuBarWindow(_ window: NSWindow?) {
-        guard let window else {
-            return
-        }
+    private func dismissMenuBarWindows() {
+        closeMenuBarWindowsNow()
 
-        window.orderOut(nil)
-        window.close()
+        Task { @MainActor in
+            closeMenuBarWindowsNow()
+        }
+    }
+
+    private func closeMenuBarWindowsNow() {
+        dismiss()
+
+        let currentWindow = currentMenuBarWindow
+        AppWindowCoordinator.closeTransientMenuBarWindow(currentWindow)
+        AppWindowCoordinator.closeAllTransientMenuBarWindows()
+    }
+}
+
+enum MenuBarVoiceControlPresentation {
+    static func isEnabled(hasActiveSession: Bool) -> Bool {
+        hasActiveSession
+    }
+
+    static func title(isPausedByUser: Bool) -> String {
+        isPausedByUser ? "Resume Voice" : "Pause Voice"
+    }
+
+    static func symbolName(isPausedByUser: Bool) -> String {
+        isPausedByUser ? "play.fill" : "pause.fill"
     }
 }

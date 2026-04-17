@@ -4,16 +4,14 @@ import SwiftUI
 @MainActor
 final class MenuBarStatusItemController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let popover = NSPopover()
+    private var popover = NSPopover()
     private var appState: AppState?
     private var overlayController: OverlayWindowController?
     private var preferredColorSchemeProvider: (() -> ColorScheme?)?
 
     override init() {
         super.init()
-
-        popover.behavior = .transient
-        popover.animates = true
+        popover = Self.makePopover()
 
         if let button = statusItem.button {
             button.image = NSImage(systemSymbolName: "rectangle.topthird.inset.filled", accessibilityDescription: "Aira")
@@ -63,13 +61,15 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func togglePopover(from button: NSStatusBarButton) {
+        resetPopoverIfNeeded()
         updatePopoverContent()
 
         if popover.isShown {
             popover.performClose(nil)
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            NSApp.activate(ignoringOtherApps: true)
+            markPopoverWindowAsTransient()
+            activateAppForPopover()
         }
     }
 
@@ -93,13 +93,71 @@ final class MenuBarStatusItemController: NSObject {
         statusItem.menu = nil
     }
 
+    private func resetPopoverIfNeeded() {
+        let hasAttachedWindow = popover.contentViewController?.view.window != nil
+        guard Self.shouldRebuildPopover(isShown: popover.isShown, hasAttachedWindow: hasAttachedWindow) else {
+            return
+        }
+
+        popover.performClose(nil)
+        popover.contentViewController = nil
+        popover = Self.makePopover()
+    }
+
     @objc private func openAiraFromMenu() {
-        AppWindowCoordinator.restoreManagerWindow()
         AppWindowCoordinator.closeAllTransientMenuBarWindows()
+        AppWindowCoordinator.restoreManagerWindow()
     }
 
     @objc private func quitFromMenu() {
         AppWindowCoordinator.closeAllTransientMenuBarWindows()
         NSApp.terminate(nil)
+    }
+
+    private func markPopoverWindowAsTransient() {
+        let resolveWindow: @MainActor () -> NSWindow? = { [weak self] in
+            self?.popover.contentViewController?.view.window
+        }
+
+        configurePopoverHostWindow(resolveWindow())
+
+        Task { @MainActor in
+            configurePopoverHostWindow(resolveWindow())
+        }
+    }
+
+    static func shouldRebuildPopover(isShown: Bool, hasAttachedWindow: Bool) -> Bool {
+        isShown && !hasAttachedWindow
+    }
+
+    static func promotedPopoverWindowLevel(from level: NSWindow.Level) -> NSWindow.Level {
+        NSWindow.Level(rawValue: max(level.rawValue, NSWindow.Level.floating.rawValue))
+    }
+
+    private static func makePopover() -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        return popover
+    }
+
+    private func activateAppForPopover() {
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSRunningApplication.current.activate(options: .activateIgnoringOtherApps)
+        }
+    }
+
+    private func configurePopoverHostWindow(_ window: NSWindow?) {
+        guard let window else {
+            return
+        }
+
+        AppWindowCoordinator.markTransientMenuBarWindow(window)
+        window.level = Self.promotedPopoverWindowLevel(from: window.level)
+        window.collectionBehavior.insert(.moveToActiveSpace)
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
     }
 }

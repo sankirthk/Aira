@@ -257,6 +257,50 @@ struct AppStateTests {
         #expect(appState.scripts.contains(where: { $0.id == imported.id }))
     }
 
+    @Test func importScriptInCollectionPersistsMembershipAndRefreshesCollections() throws {
+        let (scriptStore, scriptDir) = try makeStore()
+        let (collectionStore, collectionDir) = try makeCollectionStore()
+        defer {
+            cleanup(scriptDir)
+            cleanup(collectionDir)
+        }
+
+        let collection = try collectionStore.create(name: "Imported")
+        let textFile = scriptDir.appending(path: "collection-import.txt")
+        try "Imported into collection".write(to: textFile, atomically: true, encoding: .utf8)
+
+        let appState = AppState(scriptStore: scriptStore, collectionStore: collectionStore)
+        let imported = try appState.importScript(from: textFile, inCollection: collection.id)
+
+        #expect(imported.collectionIds == [collection.id])
+        #expect(try scriptStore.load(id: imported.id).collectionIds == [collection.id])
+        #expect(try collectionStore.loadAll().first?.scriptIds == [imported.id])
+        #expect(appState.collections.first?.scriptIds == [imported.id])
+    }
+
+    @Test func importScriptUsingDocumentLibraryCollectionContextPersistsMembership() throws {
+        let (scriptStore, scriptDir) = try makeStore()
+        let (collectionStore, collectionDir) = try makeCollectionStore()
+        defer {
+            cleanup(scriptDir)
+            cleanup(collectionDir)
+        }
+
+        let collection = try collectionStore.create(name: "Dropped")
+        let textFile = scriptDir.appending(path: "dropped-import.txt")
+        try "Dropped into collection".write(to: textFile, atomically: true, encoding: .utf8)
+
+        let appState = AppState(scriptStore: scriptStore, collectionStore: collectionStore)
+        let imported = try appState.importScript(
+            from: textFile,
+            inCollection: DocumentLibraryImportLogic.selectedCollectionID(for: .collection(collection.id))
+        )
+
+        #expect(imported.collectionIds == [collection.id])
+        #expect(try scriptStore.load(id: imported.id).collectionIds == [collection.id])
+        #expect(try collectionStore.loadAll().first?.scriptIds == [imported.id])
+    }
+
     @Test func initLoadsCollections() throws {
         let (scriptStore, scriptDir) = try makeStore()
         let (collectionStore, collectionDir) = try makeCollectionStore()
@@ -366,6 +410,132 @@ struct AppStateTests {
         #expect(try scriptStore.load(id: draft.id).collectionIds == [collection.id])
         #expect(try collectionStore.loadAll().first?.scriptIds == [draft.id])
         #expect(appState.collections.first?.scriptIds == [draft.id])
+    }
+
+    @Test func updateScriptCollectionsMovesScriptFromNoCollectionIntoCollection() throws {
+        let (scriptStore, scriptDir) = try makeStore()
+        let (collectionStore, collectionDir) = try makeCollectionStore()
+        defer {
+            cleanup(scriptDir)
+            cleanup(collectionDir)
+        }
+
+        let collection = try collectionStore.create(name: "Assigned")
+        let script = makeScript(title: "Loose Script")
+        try scriptStore.save(script)
+
+        let appState = AppState(scriptStore: scriptStore, collectionStore: collectionStore)
+        try appState.updateScriptCollections(id: script.id, collectionIDs: [collection.id])
+
+        #expect(try scriptStore.load(id: script.id).collectionIds == [collection.id])
+        #expect(try collectionStore.loadAll().first?.scriptIds == [script.id])
+        #expect(appState.collections.first?.scriptIds == [script.id])
+    }
+
+    @Test func updateScriptCollectionsMovesScriptBetweenCollections() throws {
+        let (scriptStore, scriptDir) = try makeStore()
+        let (collectionStore, collectionDir) = try makeCollectionStore()
+        defer {
+            cleanup(scriptDir)
+            cleanup(collectionDir)
+        }
+
+        let source = try collectionStore.create(name: "Source")
+        let destination = try collectionStore.create(name: "Destination")
+        let script = Script(
+            id: UUID(),
+            title: "Movable",
+            body: "Body",
+            cues: [],
+            collectionIds: [source.id],
+            createdAt: Date(),
+            lastEdited: Date()
+        )
+        try scriptStore.save(script)
+        try collectionStore.addScript(script.id, toCollection: source.id)
+
+        let appState = AppState(scriptStore: scriptStore, collectionStore: collectionStore)
+        try appState.updateScriptCollections(id: script.id, collectionIDs: [destination.id])
+
+        let persisted = try scriptStore.load(id: script.id)
+        let refreshedCollections = try collectionStore.loadAll()
+        let persistedSource = try #require(refreshedCollections.first(where: { $0.id == source.id }))
+        let persistedDestination = try #require(refreshedCollections.first(where: { $0.id == destination.id }))
+
+        #expect(persisted.collectionIds == [destination.id])
+        #expect(!persistedSource.scriptIds.contains(script.id))
+        #expect(persistedDestination.scriptIds.contains(script.id))
+    }
+
+    @Test func updateScriptCollectionsPreservesExistingMembershipsWhenAddingAnotherCollection() throws {
+        let (scriptStore, scriptDir) = try makeStore()
+        let (collectionStore, collectionDir) = try makeCollectionStore()
+        defer {
+            cleanup(scriptDir)
+            cleanup(collectionDir)
+        }
+
+        let first = try collectionStore.create(name: "First")
+        let second = try collectionStore.create(name: "Second")
+        let script = Script(
+            id: UUID(),
+            title: "Shared",
+            body: "Body",
+            cues: [],
+            collectionIds: [first.id],
+            createdAt: Date(),
+            lastEdited: Date()
+        )
+        try scriptStore.save(script)
+        try collectionStore.addScript(script.id, toCollection: first.id)
+
+        let appState = AppState(scriptStore: scriptStore, collectionStore: collectionStore)
+        try appState.updateScriptCollections(id: script.id, collectionIDs: [first.id, second.id])
+
+        let persisted = try scriptStore.load(id: script.id)
+        let refreshedCollections = try collectionStore.loadAll()
+        let persistedFirst = try #require(refreshedCollections.first(where: { $0.id == first.id }))
+        let persistedSecond = try #require(refreshedCollections.first(where: { $0.id == second.id }))
+
+        #expect(Set(persisted.collectionIds) == Set([first.id, second.id]))
+        #expect(persistedFirst.scriptIds.contains(script.id))
+        #expect(persistedSecond.scriptIds.contains(script.id))
+    }
+
+    @Test func updateScriptCollectionsRemovesOnlyDeselectedMemberships() throws {
+        let (scriptStore, scriptDir) = try makeStore()
+        let (collectionStore, collectionDir) = try makeCollectionStore()
+        defer {
+            cleanup(scriptDir)
+            cleanup(collectionDir)
+        }
+
+        let first = try collectionStore.create(name: "First")
+        let second = try collectionStore.create(name: "Second")
+        let script = Script(
+            id: UUID(),
+            title: "Shared",
+            body: "Body",
+            cues: [],
+            collectionIds: [first.id, second.id],
+            createdAt: Date(),
+            lastEdited: Date()
+        )
+        try scriptStore.save(script)
+        try collectionStore.addScript(script.id, toCollection: first.id)
+        try collectionStore.addScript(script.id, toCollection: second.id)
+
+        let appState = AppState(scriptStore: scriptStore, collectionStore: collectionStore)
+        try appState.updateScriptCollections(id: script.id, collectionIDs: [second.id])
+
+        let persisted = try scriptStore.load(id: script.id)
+        let refreshedCollections = try collectionStore.loadAll()
+        let persistedFirst = try #require(refreshedCollections.first(where: { $0.id == first.id }))
+        let persistedSecond = try #require(refreshedCollections.first(where: { $0.id == second.id }))
+
+        #expect(persisted.collectionIds == [second.id])
+        #expect(!persistedFirst.scriptIds.contains(script.id))
+        #expect(persistedSecond.scriptIds.contains(script.id))
     }
 
     @Test func renameCollectionPersistsAndRefreshesState() throws {
