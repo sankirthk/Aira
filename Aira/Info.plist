@@ -8,5 +8,13 @@
 	<string>Aira uses the microphone for on-device Voice-Sync scrolling during live teleprompter sessions.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Aira uses on-device speech recognition to follow your script and keep the overlay in sync with your words.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>$(SPARKLE_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
 </dict>
 </plist>
