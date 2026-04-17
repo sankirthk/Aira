@@ -1,0 +1,327 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-beta.*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish, for example v1.0.0-beta.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Verify tagged commit is on main
+        run: |
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main
+
+      - name: Run unit and integration tests
+        run: |
+          xcodebuild test \
+            -project Aira.xcodeproj \
+            -scheme Aira \
+            -destination "platform=macOS" \
+            -resultBundlePath build/TestResults/Aira.xcresult
+
+  package-and-notarize:
+    name: Package And Notarize
+    runs-on: macos-latest
+    timeout-minutes: 60
+    needs: validate
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      build: ${{ steps.package.outputs.build }}
+      tag: ${{ steps.package.outputs.tag }}
+      release_date: ${{ steps.package.outputs.release_date }}
+      dmg_name: ${{ steps.package.outputs.dmg_name }}
+      zip_name: ${{ steps.package.outputs.zip_name }}
+      appcast_name: ${{ steps.package.outputs.appcast_name }}
+      appcast_url: ${{ steps.package.outputs.appcast_url }}
+      release_notes_url: ${{ steps.package.outputs.release_notes_url }}
+      is_prerelease: ${{ steps.package.outputs.is_prerelease }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
+
+      - name: Build, sign, notarize, and package release artifacts
+        id: package
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          RELEASE_REPOSITORY: sankirthk/aira-releases
+          APPLE_SIGNING_CERT_BASE64: ${{ secrets.APPLE_SIGNING_CERT_BASE64 }}
+          APPLE_SIGNING_CERT_PASSWORD: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_FEED_URL: ${{ secrets.SPARKLE_FEED_URL }}
+        run: bash scripts/release/build_release_dmg.sh
+
+      - name: Upload packaged release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ steps.package.outputs.tag }}
+          path: |
+            ${{ steps.package.outputs.dmg_path }}
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.appcast_path }}
+          if-no-files-found: error
+
+  mint-github-app-tokens:
+    name: Mint GitHub App Tokens
+    runs-on: ubuntu-latest
+    needs: package-and-notarize
+    outputs:
+      releases_repo_token: ${{ steps.releases-token.outputs.token }}
+      site_repo_token: ${{ steps.site-token.outputs.token }}
+    steps:
+      - name: Mint token for aira-releases
+        id: releases-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
+          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
+          owner: sankirthk
+          repositories: aira-releases
+
+      - name: Mint token for aira-site
+        id: site-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
+          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
+          owner: sankirthk
+          repositories: aira-site
+
+  publish-public-release:
+    name: Publish Public Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - package-and-notarize
+      - mint-github-app-tokens
+    outputs:
+      release_url: ${{ steps.publish.outputs.release_url }}
+      dmg_url: ${{ steps.publish.outputs.dmg_url }}
+      zip_url: ${{ steps.publish.outputs.zip_url }}
+      release_notes_url: ${{ steps.publish.outputs.release_notes_url }}
+    steps:
+      - name: Download packaged release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-${{ needs.package-and-notarize.outputs.tag }}
+          path: build/public-release
+
+      - name: Create or update public release
+        id: publish
+        env:
+          GH_TOKEN: ${{ needs.mint-github-app-tokens.outputs.releases_repo_token }}
+          RELEASE_REPO: sankirthk/aira-releases
+          TAG: ${{ needs.package-and-notarize.outputs.tag }}
+          VERSION: ${{ needs.package-and-notarize.outputs.version }}
+          IS_PRERELEASE: ${{ needs.package-and-notarize.outputs.is_prerelease }}
+          DMG_NAME: ${{ needs.package-and-notarize.outputs.dmg_name }}
+          ZIP_NAME: ${{ needs.package-and-notarize.outputs.zip_name }}
+        run: |
+          DMG_PATH="build/public-release/$DMG_NAME"
+          ZIP_PATH="build/public-release/$ZIP_NAME"
+          RELEASE_ARGS=()
+
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --repo "$RELEASE_REPO" \
+              --title "Aira $VERSION" \
+              "${RELEASE_ARGS[@]}"
+          else
+            gh release create "$TAG" \
+              --repo "$RELEASE_REPO" \
+              --target main \
+              --title "Aira $VERSION" \
+              --generate-notes \
+              "${RELEASE_ARGS[@]}"
+          fi
+
+          gh release upload "$TAG" "$DMG_PATH" "$ZIP_PATH" \
+            --repo "$RELEASE_REPO" \
+            --clobber
+
+          RELEASE_URL="$(gh api "repos/$RELEASE_REPO/releases/tags/$TAG" --jq '.html_url')"
+          DMG_URL="$(gh api "repos/$RELEASE_REPO/releases/tags/$TAG" --jq ".assets[] | select(.name == \"$DMG_NAME\") | .browser_download_url")"
+          ZIP_URL="$(gh api "repos/$RELEASE_REPO/releases/tags/$TAG" --jq ".assets[] | select(.name == \"$ZIP_NAME\") | .browser_download_url")"
+
+          {
+            echo "release_url=$RELEASE_URL"
+            echo "dmg_url=$DMG_URL"
+            echo "zip_url=$ZIP_URL"
+            echo "release_notes_url=$RELEASE_URL"
+          } >> "$GITHUB_OUTPUT"
+
+  publish-sparkle-appcast:
+    name: Publish Sparkle Appcast
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - package-and-notarize
+      - mint-github-app-tokens
+      - publish-public-release
+    steps:
+      - name: Download packaged release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts-${{ needs.package-and-notarize.outputs.tag }}
+          path: build/public-release
+
+      - name: Check out aira-releases
+        uses: actions/checkout@v4
+        with:
+          repository: sankirthk/aira-releases
+          token: ${{ needs.mint-github-app-tokens.outputs.releases_repo_token }}
+          path: aira-releases
+
+      - name: Commit and push appcast
+        working-directory: aira-releases
+        env:
+          APPCAST_NAME: ${{ needs.package-and-notarize.outputs.appcast_name }}
+          TAG: ${{ needs.package-and-notarize.outputs.tag }}
+        run: |
+          cp "../build/public-release/$APPCAST_NAME" "./$APPCAST_NAME"
+
+          if git diff --quiet -- "$APPCAST_NAME"; then
+            exit 0
+          fi
+
+          git config user.name "aira-release-bot[bot]"
+          git config user.email "aira-release-bot[bot]@users.noreply.github.com"
+          git add "$APPCAST_NAME"
+          git commit -m "Update Sparkle appcast for $TAG"
+          git push origin HEAD:main
+
+  update-website-metadata:
+    name: Update Website Metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - package-and-notarize
+      - mint-github-app-tokens
+      - publish-public-release
+      - publish-sparkle-appcast
+    steps:
+      - name: Check out aira-site
+        uses: actions/checkout@v4
+        with:
+          repository: sankirthk/aira-site
+          token: ${{ needs.mint-github-app-tokens.outputs.site_repo_token }}
+          path: aira-site
+
+      - name: Rewrite release metadata
+        env:
+          VERSION: ${{ needs.package-and-notarize.outputs.version }}
+          TAG: ${{ needs.package-and-notarize.outputs.tag }}
+          RELEASE_DATE: ${{ needs.package-and-notarize.outputs.release_date }}
+          DMG_URL: ${{ needs.publish-public-release.outputs.dmg_url }}
+          RELEASE_NOTES_URL: ${{ needs.publish-public-release.outputs.release_notes_url }}
+        run: |
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+
+          target = Path("aira-site/src/content/release.ts")
+          target.write_text(
+              f"""export type ReleaseMetadata = {{
+  version?: string;
+  tag?: string;
+  releaseDate?: string;
+  betaLabel: string;
+  notarized: boolean;
+  dmgUrl: string;
+  releaseNotesUrl: string;
+  distributionRepo: string;
+  summary: string[];
+}};
+
+export const latestRelease: ReleaseMetadata = {{
+  version: "{os.environ['VERSION']}",
+  tag: "{os.environ['TAG']}",
+  releaseDate: "{os.environ['RELEASE_DATE']}",
+  betaLabel: "Public Beta",
+  notarized: true,
+  dmgUrl: "{os.environ['DMG_URL']}",
+  releaseNotesUrl: "{os.environ['RELEASE_NOTES_URL']}",
+  distributionRepo: "sankirthk/aira-releases",
+  summary: [
+    "Voice-Sync follows your script with on-device speech recognition.",
+    "Notch and pill overlays stay hidden from screen sharing.",
+    "Built-in script editing and local-first storage are included in the beta.",
+  ],
+}};
+""",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Commit and push site metadata
+        working-directory: aira-site
+        env:
+          TAG: ${{ needs.package-and-notarize.outputs.tag }}
+        run: |
+          if git diff --quiet -- src/content/release.ts; then
+            exit 0
+          fi
+
+          git config user.name "aira-release-bot[bot]"
+          git config user.email "aira-release-bot[bot]@users.noreply.github.com"
+          git add src/content/release.ts
+          git commit -m "Update release metadata for $TAG"
+          git push origin HEAD:main
+
+  post-publish-summary:
+    name: Post-Publish Summary
+    runs-on: ubuntu-latest
+    needs:
+      - package-and-notarize
+      - publish-public-release
+      - publish-sparkle-appcast
+      - update-website-metadata
+    steps:
+      - name: Print release summary
+        run: |
+          echo "Public release: ${{ needs.publish-public-release.outputs.release_url }}"
+          echo "DMG asset:       ${{ needs.publish-public-release.outputs.dmg_url }}"
+          echo "ZIP asset:       ${{ needs.publish-public-release.outputs.zip_url }}"
+          echo "Appcast URL:     ${{ needs.package-and-notarize.outputs.appcast_url }}"
+          echo "Site URL:        https://sankirthk.github.io/aira-site/"
+          echo "Manual checks:"
+          echo "  - Install the DMG on a clean Mac."
+          echo "  - Confirm the microphone permission prompt path."
+          echo "  - Confirm Voice-Sync launches correctly."
+          echo "  - Confirm an installed build discovers the new Sparkle feed entry."
+          echo "  - Confirm the site version and download button match the public release."

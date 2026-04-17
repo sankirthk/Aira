@@ -22,16 +22,16 @@ The release flow assumes:
 
 - The main app source lives in the `Aira` repository
 - Public release artifacts are published to a separate release repository
-- The CI pipeline on the main branch already builds a new DMG and pushes it to the release repo
+- Releases are cut from immutable git tags created from commits already merged into `main`
 
-That existing DMG automation covers the human download path. Sparkle still needs the ZIP/appcast/signing path described below.
+The release workflow is triggered by pushing a version tag such as `v1.0.0-beta.1`. It does not run on feature branches or on every push to `main`.
 
 ## Release Artifacts
 
 Each released app version should produce:
 
-1. A notarized `Aira.dmg`
-2. A signed Sparkle update archive, typically `Aira.zip`
+1. A notarized `Aira-<version>.dmg`
+2. A signed Sparkle update archive, typically `Aira-<version>.zip`
 3. An updated `appcast.xml`
 4. Optional release notes URL for Sparkle
 
@@ -128,6 +128,12 @@ Rules:
 - keep the private key only in CI secrets or a secure local release environment
 - the public key is safe to ship in the app
 
+Recommended release secrets:
+
+- `SPARKLE_PRIVATE_ED_KEY`
+- `SPARKLE_PUBLIC_ED_KEY`
+- `SPARKLE_FEED_URL`
+
 ## Versioning
 
 Each release must update:
@@ -156,32 +162,35 @@ Delta updates are deferred until the release pipeline is stable.
 
 The intended end-to-end release flow is:
 
-1. Commit lands on `main`
-2. CI builds Aira
-3. CI archives, signs, and notarizes the app
-4. CI creates the human-facing DMG
-5. CI creates the Sparkle ZIP from the signed app
-6. CI signs the ZIP with the Sparkle private key
-7. CI publishes both DMG and ZIP to the release repo
-8. CI updates or regenerates `appcast.xml`
-9. Installed Aira copies detect the new appcast entry and offer the update
+1. Feature work lands on `main`
+2. The release version/build is bumped in the app project
+3. A release tag such as `v1.0.0-beta.1` is created from a `main` commit and pushed
+4. CI checks out that exact tagged commit and verifies it is reachable from `main`
+5. CI archives, signs, and notarizes the app
+6. CI creates the human-facing DMG
+7. CI creates the Sparkle ZIP from the signed app
+8. CI signs the ZIP and generates or updates `appcast.xml`
+9. CI publishes both DMG and ZIP to the release repo
+10. CI commits the latest `appcast.xml` to the release repo's default branch for the stable feed URL
+11. Installed Aira copies detect the new appcast entry and offer the update
 
 ## Current State
 
 Already in place:
 
-- CI creates a new DMG whenever code is pushed to the GitHub `main` branch
-- that DMG is pushed to the release repo
+- the app bundle is wired to read `SUFeedURL` and `SUPublicEDKey`
+- the app-side updater fails closed when those values are absent
+- the release workflow can already build and notarize the DMG path
 
 Still needed for complete Sparkle releases:
 
 - build a ZIP artifact for Sparkle
-- sign the ZIP with the Sparkle private key
+- sign the ZIP and feed with the Sparkle private key
 - publish the ZIP to the release repo
 - generate/update `appcast.xml`
 - provide a stable public URL for the appcast
-- set `SPARKLE_FEED_URL` in the app build settings
-- set `SPARKLE_PUBLIC_ED_KEY` in the app build settings
+- inject `SPARKLE_FEED_URL` in the release build settings
+- inject `SPARKLE_PUBLIC_ED_KEY` in the release build settings
 
 ## CI Responsibilities
 
