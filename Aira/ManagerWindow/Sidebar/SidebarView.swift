@@ -4,6 +4,8 @@ struct SidebarView: View {
   @EnvironmentObject var appState: AppState
   @Environment(\.managerFontScale) private var managerFontScale
   @Binding var selectedNav: SidebarNav
+  @Binding var pendingDeleteCollection: AiraCollection?
+  @Binding var collectionErrorMessage: String?
   var onOpenSettings: () -> Void
   var onNewScript: () -> Void
   var onOpenScript: (UUID) -> Void
@@ -15,8 +17,6 @@ struct SidebarView: View {
   @State private var newCollectionName: String = ""
   @State private var editingCollectionID: UUID? = nil
   @State private var editingCollectionName: String = ""
-  @State private var pendingDeleteCollection: AiraCollection? = nil
-  @State private var collectionErrorMessage: String? = nil
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
@@ -108,16 +108,6 @@ struct SidebarView: View {
       .buttonStyle(.plain)
     }
     .background(Color("colorPrimary"))
-    .alert("Collection Action Failed", isPresented: collectionErrorBinding) {
-      Button("OK", role: .cancel) {}
-    } message: {
-      Text(collectionErrorMessage ?? "Please try again.")
-    }
-    .overlay {
-      if let pendingDeleteCollection {
-        deleteCollectionOverlay(collection: pendingDeleteCollection)
-      }
-    }
   }
 
   // MARK: - Collections Section
@@ -172,24 +162,40 @@ struct SidebarView: View {
               onCancel: cancelRenamingCollection
             )
           } else {
-            Button {
-              selectedNav = .collection(collection.id)
-            } label: {
-              HStack {
+            HStack(spacing: 8) {
+              Button {
+                selectedNav = .collection(collection.id)
+              } label: {
                 Text(collection.name)
                   .font(.custom("CrimsonText-Regular", size: scaled(15)))
                   .foregroundStyle(isActive ? .white : .white.opacity(0.75))
-                Spacer()
-                if scriptCount > 0 {
-                  Text("\(scriptCount)")
-                    .font(.custom("CrimsonText-Regular", size: scaled(12)))
-                    .foregroundStyle(Color("colorBackground"))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(Color("colorSecondary"))
-                    .clipShape(Capsule())
-                }
+                  .lineLimit(1)
+                  .frame(maxWidth: .infinity, alignment: .leading)
               }
+              .buttonStyle(.plain)
+
+              if scriptCount > 0 {
+                Text("\(scriptCount)")
+                  .font(.custom("CrimsonText-Regular", size: scaled(12)))
+                  .foregroundStyle(Color("colorBackground"))
+                  .padding(.horizontal, 8)
+                  .padding(.vertical, 2)
+                  .background(Color("colorSecondary"))
+                  .clipShape(Capsule())
+              }
+
+              Button {
+                pendingDeleteCollection = collection
+              } label: {
+                Image(systemName: "xmark")
+                  .font(.system(size: 8, weight: .bold))
+                  .foregroundStyle(.white.opacity(0.7))
+                  .frame(width: 16, height: 16)
+                  .background(Color.white.opacity(0.08))
+                  .clipShape(Circle())
+              }
+              .buttonStyle(.plain)
+              .help("Delete Collection")
             }
             .padding(.leading, 52)
             .padding(.trailing, 16)
@@ -197,7 +203,6 @@ struct SidebarView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(isActive ? Color.white.opacity(0.15) : Color.clear)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-            .buttonStyle(.plain)
             .contextMenu {
               Button("Rename") {
                 editingCollectionID = collection.id
@@ -374,62 +379,6 @@ struct SidebarView: View {
     .frame(maxHeight: maxHeight)
   }
 
-  private var collectionErrorBinding: Binding<Bool> {
-    Binding(
-      get: { collectionErrorMessage != nil },
-      set: { isPresented in
-        if !isPresented {
-          collectionErrorMessage = nil
-        }
-      }
-    )
-  }
-
-  @ViewBuilder
-  private func deleteCollectionOverlay(collection: AiraCollection) -> some View {
-    ZStack {
-      Color.black.opacity(0.18)
-        .ignoresSafeArea()
-        .onTapGesture {
-          pendingDeleteCollection = nil
-        }
-
-      VStack(alignment: .leading, spacing: 12) {
-        Text("Delete Collection?")
-          .font(.custom("IndieFlower", size: scaled(24)))
-          .foregroundStyle(Color("colorText"))
-
-        Text("Deleting \"\(collection.name)\" will not delete any scripts.")
-          .font(.custom("CrimsonText-Regular", size: scaled(15)))
-          .foregroundStyle(Color("colorText").opacity(0.72))
-          .fixedSize(horizontal: false, vertical: true)
-
-        HStack(spacing: 10) {
-          Button("Cancel") {
-            pendingDeleteCollection = nil
-          }
-          .buttonStyle(AiraSecondaryButtonStyle())
-
-          Button("Delete") {
-            confirmDeleteCollection()
-          }
-          .buttonStyle(AiraPrimaryButtonStyle())
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-      }
-      .padding(20)
-      .frame(width: 280)
-      .background(Color("colorSurface"))
-      .clipShape(RoundedRectangle(cornerRadius: 20))
-      .overlay(
-        RoundedRectangle(cornerRadius: 20)
-          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-      )
-      .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
-      .padding(16)
-    }
-  }
-
   private func collectionEditorRow(
     placeholder: String,
     text: Binding<String>,
@@ -508,23 +457,6 @@ struct SidebarView: View {
   private func toggleStarred(_ scriptID: UUID) {
     do {
       try appState.toggleStarred(id: scriptID)
-    } catch {
-      collectionErrorMessage = error.localizedDescription
-    }
-  }
-
-  private func confirmDeleteCollection() {
-    guard let collection = pendingDeleteCollection else {
-      return
-    }
-
-    do {
-      try appState.deleteCollection(id: collection.id)
-      selectedNav = CollectionSidebarLogic.selectedNavAfterDeletingCollection(
-        collection.id,
-        selectedNav: selectedNav
-      )
-      pendingDeleteCollection = nil
     } catch {
       collectionErrorMessage = error.localizedDescription
     }
