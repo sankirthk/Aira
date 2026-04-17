@@ -225,6 +225,12 @@ jobs:
           owner: sankirthk
           repositories: aira-site
 
+      - name: Check out Aira source (for release template)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: aira-source
+
       - name: Check out aira-site
         uses: actions/checkout@v4
         with:
@@ -240,7 +246,7 @@ jobs:
           DMG_URL: ${{ needs.publish-public-release.outputs.dmg_url }}
           RELEASE_NOTES_URL: ${{ needs.publish-public-release.outputs.release_notes_url }}
         run: |
-          TEMPLATE_PATH="$GITHUB_WORKSPACE/scripts/release/release_metadata.ts.template"
+          TEMPLATE_PATH="$GITHUB_WORKSPACE/aira-source/scripts/release/release_metadata.ts.template"
           if [[ ! -f "$TEMPLATE_PATH" ]]; then
             echo "error: release metadata template not found at $TEMPLATE_PATH" >&2
             exit 1
