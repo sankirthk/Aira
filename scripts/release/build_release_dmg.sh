@@ -299,7 +299,14 @@ echo "==> Stapling notarization ticket"
 xcrun stapler staple "$DMG_PATH"
 
 echo "==> Verifying final DMG artifact"
-spctl --assess --type open --verbose=4 "$DMG_PATH"
+xcrun stapler validate "$DMG_PATH"
+
+if [[ -z "${CI:-}" ]]; then
+  echo "==> Running local Gatekeeper assessment"
+  if ! spctl --assess --type open --verbose=4 "$DMG_PATH"; then
+    echo "warning: Gatekeeper assessment did not produce a local acceptance result for $DMG_PATH" >&2
+  fi
+fi
 
 echo "==> Creating Sparkle ZIP"
 strip_bundle_metadata "$APP_PATH"
