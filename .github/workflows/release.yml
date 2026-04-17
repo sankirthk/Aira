@@ -84,39 +84,12 @@ jobs:
             ${{ steps.package.outputs.appcast_path }}
           if-no-files-found: error
 
-  mint-github-app-tokens:
-    name: Mint GitHub App Tokens
-    runs-on: ubuntu-latest
-    needs: package-and-notarize
-    outputs:
-      releases_repo_token: ${{ steps.releases-token.outputs.token }}
-      site_repo_token: ${{ steps.site-token.outputs.token }}
-    steps:
-      - name: Mint token for aira-releases
-        id: releases-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
-          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
-          owner: sankirthk
-          repositories: aira-releases
-
-      - name: Mint token for aira-site
-        id: site-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
-          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
-          owner: sankirthk
-          repositories: aira-site
-
   publish-public-release:
     name: Publish Public Release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs:
       - package-and-notarize
-      - mint-github-app-tokens
     outputs:
       release_url: ${{ steps.publish.outputs.release_url }}
       dmg_url: ${{ steps.publish.outputs.dmg_url }}
@@ -129,10 +102,19 @@ jobs:
           name: release-artifacts-${{ needs.package-and-notarize.outputs.tag }}
           path: build/public-release
 
+      - name: Mint token for aira-releases
+        id: releases-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
+          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
+          owner: sankirthk
+          repositories: aira-releases
+
       - name: Create or update public release
         id: publish
         env:
-          GH_TOKEN: ${{ needs.mint-github-app-tokens.outputs.releases_repo_token }}
+          GH_TOKEN: ${{ steps.releases-token.outputs.token }}
           RELEASE_REPO: sankirthk/aira-releases
           TAG: ${{ needs.package-and-notarize.outputs.tag }}
           VERSION: ${{ needs.package-and-notarize.outputs.version }}
@@ -183,7 +165,6 @@ jobs:
     timeout-minutes: 20
     needs:
       - package-and-notarize
-      - mint-github-app-tokens
       - publish-public-release
     steps:
       - name: Download packaged release artifacts
@@ -192,11 +173,20 @@ jobs:
           name: release-artifacts-${{ needs.package-and-notarize.outputs.tag }}
           path: build/public-release
 
+      - name: Mint token for aira-releases
+        id: releases-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
+          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
+          owner: sankirthk
+          repositories: aira-releases
+
       - name: Check out aira-releases
         uses: actions/checkout@v4
         with:
           repository: sankirthk/aira-releases
-          token: ${{ needs.mint-github-app-tokens.outputs.releases_repo_token }}
+          token: ${{ steps.releases-token.outputs.token }}
           path: aira-releases
 
       - name: Commit and push appcast
@@ -223,15 +213,23 @@ jobs:
     timeout-minutes: 20
     needs:
       - package-and-notarize
-      - mint-github-app-tokens
       - publish-public-release
       - publish-sparkle-appcast
     steps:
+      - name: Mint token for aira-site
+        id: site-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.AIRA_RELEASE_APP_ID }}
+          private-key: ${{ secrets.AIRA_RELEASE_APP_PRIVATE_KEY }}
+          owner: sankirthk
+          repositories: aira-site
+
       - name: Check out aira-site
         uses: actions/checkout@v4
         with:
           repository: sankirthk/aira-site
-          token: ${{ needs.mint-github-app-tokens.outputs.site_repo_token }}
+          token: ${{ steps.site-token.outputs.token }}
           path: aira-site
 
       - name: Rewrite release metadata
