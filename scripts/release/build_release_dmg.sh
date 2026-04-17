@@ -106,6 +106,7 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
 fi
 
 echo "==> Using signing identity: $SIGNING_IDENTITY"
+echo "==> (Identity used for DMG signing only; xcodebuild uses automatic signing)"
 
 rm -rf "$ARCHIVE_PATH" "$DERIVED_DATA_PATH" "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR"
 mkdir -p "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR"
@@ -118,9 +119,7 @@ xcodebuild archive \
   -archivePath "$ARCHIVE_PATH" \
   -derivedDataPath "$DERIVED_DATA_PATH" \
   -destination "generic/platform=macOS" \
-  CODE_SIGN_STYLE=Automatic \
   DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-  CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
   OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
   SPARKLE_FEED_URL="$SPARKLE_FEED_URL"
 
