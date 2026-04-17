@@ -18,10 +18,12 @@ class NotchWindowController {
   private var voiceSync: VoiceSyncEngine?
   private var audioMonitor: AudioLevelMonitor?
   private var onEndSession: (() -> Void)?
+  @MainActor
   var isStealthEnabled: Bool {
     panel?.sharingType == NSWindow.SharingType.none
   }
 
+  @MainActor
   func present(
     script: Script, appearance: OverlayAppearance, notchWindowWidth: Double,
     notchWindowHeight: Double,
@@ -87,6 +89,7 @@ class NotchWindowController {
     // Verification is handled by OverlayWindowController so the manager can show a warning banner.
   }
 
+  @MainActor
   func close() {
     panel?.close()
     panel = nil
@@ -97,6 +100,7 @@ class NotchWindowController {
     defaultAppearance = .default
   }
 
+  @MainActor
   func updateScript(_ script: Script) {
     currentScript = script
     scriptID = script.id
@@ -108,6 +112,7 @@ class NotchWindowController {
 
   /// Returns the built-in display. Never uses `NSScreen.main`, which tracks the
   /// key window and may be an external monitor.
+  @MainActor
   private var builtInScreen: NSScreen {
     Self.preferredBuiltInScreen()
   }
@@ -169,6 +174,7 @@ class NotchWindowController {
     )
   }
 
+  @MainActor
   private func positionUnderNotch(
     panel: NSPanel, screen: NSScreen,
     notchHeight: CGFloat, appearance: OverlayAppearance,
@@ -255,6 +261,7 @@ class NotchWindowController {
 
   private var resizeStartFrame: CGRect?
 
+  @MainActor
   private func makeContentView(for script: Script, notchSize: CGSize) -> NotchContentView {
     NotchContentView(
       script: script,
@@ -288,6 +295,7 @@ class NotchWindowController {
     )
   }
 
+  @MainActor
   private func updateAppearance(_ appearance: OverlayAppearance) {
     currentAppearance = appearance
     guard let panel, let screen = panel.screen ?? NSScreen.screens.first else {
@@ -308,6 +316,7 @@ class NotchWindowController {
     )
   }
 
+  @MainActor
   private func resetToDefaultSize() {
     guard let panel else { return }
     resizeStartFrame = nil
@@ -322,6 +331,7 @@ class NotchWindowController {
     )
   }
 
+  @MainActor
   private func resize(edge: NotchResizeEdge, translation: CGSize) {
     guard let panel else { return }
     let screen = panel.screen ?? builtInScreen
@@ -340,6 +350,7 @@ class NotchWindowController {
     panel.setFrame(newFrame, display: true)
   }
 
+  @MainActor
   private func endResize() {
     resizeStartFrame = nil
   }
