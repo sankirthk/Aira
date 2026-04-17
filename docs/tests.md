@@ -124,6 +124,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-044 | Filtering by a missing collection returns an empty library list | `[x]` |
 | UT-044a | `duplicateScript(id:)` syncs preserved collection memberships back into CollectionStore so collection-filtered views keep showing the copy | `[x]` |
 | UT-044b | `deleteCollection(id:)` removes the deleted collection ID from persisted scripts so script files cannot retain orphaned memberships | `[x]` |
+| UT-044c | `NotchOverlayGeometry.sideOverscan(for:)` remains `0` for physical notch widths, and the runtime cutout stays flush to the measured left/right notch walls | `[x]` |
 
 ---
 
@@ -216,7 +217,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-003 | Notch window is correctly positioned on MacBook Pro 14" notch | `[ ]` |
 | MT-004 | Notch window is correctly positioned on MacBook Pro 16" notch | `[ ]` |
 | MT-043 | Runtime notch overlay sits flush against the physical notch with no visible hairline gap at the two lower inner curves | `[ ]` |
-| MT-044 | Runtime notch overlay also sits flush against the vertical inner notch edges with no visible side seams | `[ ]` |
+| MT-044 | Runtime notch overlay also sits flush against the vertical inner notch edges with no visible side seams, with live side overscan still clamped to `0.0` | `[ ]` |
 | MT-045 | Appearance tab preview chips keep Light Paper light and Dark Studio dark in both app themes | `[ ]` |
 | MT-046 | System tab manual-scroll copy refers to Manual mode / Voice-Sync-off behavior, and the Speech Sensitivity field label matches the surrounding Crimson Text control styling | `[ ]` |
 | MT-047 | Overlay audio beam uses the shared primary color token and no overlay-local `Color(hex:)` helper remains in the Phase 6 window stack | `[ ]` |

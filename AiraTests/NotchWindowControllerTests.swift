@@ -155,24 +155,18 @@ struct NotchWindowControllerTests {
     let topOpeningSampleY: CGFloat = 1
     let centerX = rect.midX
 
-    #expect(sideOverscan > 1)
+    #expect(NotchOverlayGeometry.minimumSideOverscan == 0)
+    #expect(NotchOverlayGeometry.maximumSideOverscan == 0)
+    #expect(sideOverscan == 0)
     #expect(
-      path.contains(
-        CGPoint(x: physicalLeftWall - (sideOverscan * 0.5), y: topOpeningSampleY), eoFill: false)
-        == false)
+      path.contains(CGPoint(x: physicalLeftWall - 1, y: topOpeningSampleY), eoFill: false) == false)
     #expect(
-      path.contains(
-        CGPoint(x: physicalRightWall + (sideOverscan * 0.5), y: topOpeningSampleY), eoFill: false)
-        == false)
-    #expect(path.contains(CGPoint(x: centerX, y: topOpeningSampleY), eoFill: false) == false)
-    #expect(
-      path.contains(
-        CGPoint(x: physicalLeftWall - (sideOverscan * 0.5), y: roundedCornerSampleY), eoFill: false)
+      path.contains(CGPoint(x: physicalRightWall + 1, y: topOpeningSampleY), eoFill: false) == false
     )
+    #expect(path.contains(CGPoint(x: centerX, y: topOpeningSampleY), eoFill: false) == false)
+    #expect(path.contains(CGPoint(x: physicalLeftWall + 1, y: roundedCornerSampleY), eoFill: false))
     #expect(
-      path.contains(
-        CGPoint(x: physicalRightWall + (sideOverscan * 0.5), y: roundedCornerSampleY), eoFill: false
-      ))
+      path.contains(CGPoint(x: physicalRightWall - 1, y: roundedCornerSampleY), eoFill: false))
     #expect(path.contains(CGPoint(x: centerX, y: cutoutDepth + 1), eoFill: false))
   }
 }

@@ -203,6 +203,7 @@ Acceptance criteria:
 - The Notch Window is positioned at the top of the **built-in laptop display**, beneath the camera, regardless of how many external monitors are connected or which screen is currently "main".
 - The Notch Window cannot be freely repositioned; its anchor is fixed to the notch region of the built-in display.
 - The Notch Window is available regardless of whether a Pill Window exists.
+- The runtime notch cutout must align to the physical notch width with **no horizontal side overscan**; both cutout side-overscan clamps remain `0.0` so the overlay edge sits flush against the notch walls.
 - The readable script area begins below the notch cutout so active text does not disappear behind the notch while being read.
 - Script motion in the Notch Window follows a teleprompter-style lower reading zone, with lines entering from lower in the overlay and progressing upward.
 

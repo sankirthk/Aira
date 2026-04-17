@@ -14,6 +14,8 @@ struct ManagerWindowView: View {
   @State private var dismissErrorMessage: String? = nil
   @State private var overlayErrorMessage: String? = nil
   @State private var sessionRestrictionMessage: String? = nil
+  @State private var collectionErrorMessage: String? = nil
+  @State private var pendingDeleteCollection: AiraCollection? = nil
   @State private var managerWindow: NSWindow?
   var canGoBack: Bool { activeScript != nil }
 
@@ -37,9 +39,16 @@ struct ManagerWindowView: View {
           overlayErrorBinding: overlayErrorBinding,
           overlayErrorMessage: overlayErrorMessage,
           sessionRestrictionBinding: sessionRestrictionBinding,
-          sessionRestrictionMessage: sessionRestrictionMessage
+          sessionRestrictionMessage: sessionRestrictionMessage,
+          collectionErrorBinding: collectionErrorBinding,
+          collectionErrorMessage: collectionErrorMessage
         )
       )
+      .overlay {
+        if let pendingDeleteCollection {
+          deleteCollectionOverlay(collection: pendingDeleteCollection)
+        }
+      }
       .onAppear {
         overlayController.appState = appState
         refreshShortcutMonitors()
@@ -136,6 +145,8 @@ struct ManagerWindowView: View {
       if sidebarVisible {
         SidebarView(
           selectedNav: sidebarSelectionBinding,
+          pendingDeleteCollection: $pendingDeleteCollection,
+          collectionErrorMessage: $collectionErrorMessage,
           onOpenSettings: {
             presentSettings()
           },
@@ -201,6 +212,17 @@ struct ManagerWindowView: View {
     )
   }
 
+  private var collectionErrorBinding: Binding<Bool> {
+    Binding(
+      get: { collectionErrorMessage != nil },
+      set: { isPresented in
+        if !isPresented {
+          collectionErrorMessage = nil
+        }
+      }
+    )
+  }
+
   private var sidebarSelectionBinding: Binding<SidebarNav> {
     Binding(
       get: { selectedNav },
@@ -226,6 +248,68 @@ struct ManagerWindowView: View {
 
     appState.activeScript = nil
     activeScript = appState.makeDraftScript(inCollection: collectionID)
+  }
+
+  @ViewBuilder
+  private func deleteCollectionOverlay(collection: AiraCollection) -> some View {
+    ZStack {
+      Color.black.opacity(0.18)
+        .ignoresSafeArea()
+        .onTapGesture {
+          pendingDeleteCollection = nil
+        }
+
+      VStack(alignment: .leading, spacing: 12) {
+        Text("Delete Collection?")
+          .font(.custom("IndieFlower", size: 24))
+          .foregroundStyle(Color("colorText"))
+
+        Text("Deleting \"\(collection.name)\" will not delete any scripts.")
+          .font(.custom("CrimsonText-Regular", size: 15))
+          .foregroundStyle(Color("colorText").opacity(0.72))
+          .fixedSize(horizontal: false, vertical: true)
+
+        HStack(spacing: 10) {
+          Button("Cancel") {
+            pendingDeleteCollection = nil
+          }
+          .buttonStyle(AiraSecondaryButtonStyle())
+
+          Button("Delete") {
+            confirmDeleteCollection()
+          }
+          .buttonStyle(AiraPrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+      }
+      .padding(20)
+      .frame(width: 320)
+      .background(Color("colorBackground"))
+      .clipShape(RoundedRectangle(cornerRadius: 20))
+      .overlay(
+        RoundedRectangle(cornerRadius: 20)
+          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+      )
+      .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
+      .padding(16)
+    }
+  }
+
+  private func confirmDeleteCollection() {
+    guard let collection = pendingDeleteCollection else {
+      return
+    }
+
+    do {
+      try appState.deleteCollection(id: collection.id)
+      selectedNav = CollectionSidebarLogic.selectedNavAfterDeletingCollection(
+        collection.id,
+        selectedNav: selectedNav
+      )
+      pendingDeleteCollection = nil
+    } catch {
+      collectionErrorMessage = error.localizedDescription
+    }
   }
 
   private var importErrorBinding: Binding<Bool> {
@@ -584,6 +668,8 @@ private struct ManagerWindowAlerts: ViewModifier {
   let overlayErrorMessage: String?
   let sessionRestrictionBinding: Binding<Bool>
   let sessionRestrictionMessage: String?
+  let collectionErrorBinding: Binding<Bool>
+  let collectionErrorMessage: String?
 
   func body(content: Content) -> some View {
     content
@@ -611,6 +697,11 @@ private struct ManagerWindowAlerts: ViewModifier {
         Button("OK", role: .cancel) {}
       } message: {
         Text(sessionRestrictionMessage ?? "End the active session and try again.")
+      }
+      .alert("Collection Action Failed", isPresented: collectionErrorBinding) {
+        Button("OK", role: .cancel) {}
+      } message: {
+        Text(collectionErrorMessage ?? "Please try again.")
       }
   }
 }
