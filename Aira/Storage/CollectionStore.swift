@@ -23,7 +23,11 @@ class CollectionStore {
 
     private func saveAll(_ collections: [AiraCollection]) throws {
         let data = try JSONEncoder().encode(collections)
-        try data.write(to: collectionsURL)
+        try data.write(to: collectionsURL, options: .atomic)
+    }
+
+    func replaceAll(_ collections: [AiraCollection]) throws {
+        try saveAll(collections)
     }
 
     func create(name: String) throws -> AiraCollection {

@@ -21,6 +21,21 @@ struct SettingsView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
     @State private var activeTab: SettingsTab = .appearance
+    var availableSize: CGSize? = nil
+    var onClose: (() -> Void)? = nil
+
+    private static let idealSize = CGSize(width: 860, height: 760)
+    private let sidebarWidth: CGFloat = 214
+    private let contentMaxWidth: CGFloat = 780
+
+    private var resolvedSize: CGSize {
+        let availableWidth = availableSize?.width ?? Self.idealSize.width
+        let availableHeight = availableSize?.height ?? Self.idealSize.height
+        return CGSize(
+            width: min(Self.idealSize.width, availableWidth),
+            height: min(Self.idealSize.height, availableHeight)
+        )
+    }
 
     private var topChromeColor: Color {
         appState.settings.appearanceMode == .dark
@@ -29,78 +44,62 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        rootContent
+            .frame(
+                maxWidth: availableSize == nil ? .infinity : nil,
+                maxHeight: availableSize == nil ? .infinity : nil
+            )
+            .frame(
+                width: availableSize == nil ? nil : resolvedSize.width,
+                height: availableSize == nil ? nil : resolvedSize.height
+            )
+            .modifier(SettingsChromeModifier(isStandaloneWindow: availableSize == nil))
+    }
+
+    private var rootContent: some View {
         VStack(spacing: 0) {
-            topBar
+            windowHeader
             contentArea
         }
-        .frame(width: 860, height: 760)
-        .clipShape(RoundedRectangle(cornerRadius: 28))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28)
-                .stroke(Color("colorText").opacity(0.15), lineWidth: 3)
-        )
     }
 
-    // MARK: Top Bar (sage green)
+    // MARK: Header / Sidebar
 
-    private var topBar: some View {
-        VStack(alignment: .leading, spacing: 0) {
-
-            // Title row
-            HStack(alignment: .center, spacing: 12) {
-                Text("Preferences")
-                    .font(.custom("IndieFlower", size: 30))
-                    .foregroundStyle(Color("colorText"))
-                Spacer(minLength: 12)
-                Button { dismiss() } label: {
-                    Canvas { ctx, size in
-                        let s = size.width / 24.0
-                        var p = Path()
-                        p.move(to: CGPoint(x: 6*s, y: 6*s));  p.addLine(to: CGPoint(x: 18*s, y: 18*s))
-                        p.move(to: CGPoint(x: 18*s, y: 6*s)); p.addLine(to: CGPoint(x: 6*s, y: 18*s))
-                        ctx.stroke(p, with: .color(Color("colorText")),
-                                   style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    }
-                    .frame(width: 18, height: 18)
-                }
-                .buttonStyle(.plain)
-                .frame(width: 38, height: 38)
-                .background(topChromeColor)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color("colorText").opacity(0.16), lineWidth: 2))
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 20)
-
-            // Tab button row — fills full width
-            HStack(spacing: 8) {
-                ForEach(SettingsTab.allCases, id: \.self) { tab in
-                    tabButton(tab)
-                }
-            }
-            .padding(8)
-            .background(topChromeColor)
-            .clipShape(RoundedRectangle(cornerRadius: 20))
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
+    private var windowHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text("Preferences")
+                .font(.custom("IndieFlower", size: 30))
+                .foregroundStyle(Color("colorText"))
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 18)
         .background(topChromeColor)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color("colorText").opacity(0.12))
+                .frame(height: 1)
+        }
     }
 
-    private func tabButton(_ tab: SettingsTab) -> some View {
+    private func sidebarTabButton(_ tab: SettingsTab) -> some View {
         let isActive = activeTab == tab
         return Button {
             withAnimation(.easeInOut(duration: 0.15)) { activeTab = tab }
         } label: {
-            Text(tab.label)
-                .font(.custom("IndieFlower", size: 22))
-                .foregroundStyle(
-                    appState.settings.appearanceMode == .dark
-                        ? Color.white
-                        : (isActive ? Color.white : Color("colorText").opacity(0.82))
-                )
-                .frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Text(tab.label)
+                    .font(.custom("IndieFlower", size: 23))
+                    .foregroundStyle(
+                        appState.settings.appearanceMode == .dark
+                            ? Color.white
+                            : (isActive ? Color.white : Color("colorText").opacity(0.82))
+                    )
+                Spacer(minLength: 0)
+            }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 14)
                 .background(isActive ? Color("colorPrimary") : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -112,21 +111,80 @@ struct SettingsView: View {
     // MARK: Content Area (cream)
 
     private var contentArea: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                Group {
-                    switch activeTab {
-                    case .appearance: AppearanceTabContent()
-                    case .notch:      NotchTabContent()
-                    case .system:     SystemTabContent()
+        HStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(SettingsTab.allCases, id: \.self) { tab in
+                    sidebarTabButton(tab)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(16)
+            .frame(width: sidebarWidth)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .background(topChromeColor)
+
+            Rectangle()
+                .fill(Color("colorText").opacity(0.12))
+                .frame(width: 1)
+
+            Group {
+                switch activeTab {
+                case .appearance:
+                    settingsScrollContainer {
+                        AppearanceTabContent()
+                    }
+                case .notch:
+                    settingsStaticContainer {
+                        NotchTabContent()
+                    }
+                case .system:
+                    settingsScrollContainer {
+                        SystemTabContent()
                     }
                 }
-                .padding(28)
             }
-            .scrollIndicators(.never)
             .background(Color("colorBackground"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func settingsScrollContainer<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        ScrollView {
+            content()
+                .frame(maxWidth: contentMaxWidth, alignment: .leading)
+                .padding(28)
+                .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .scrollIndicators(.never)
+    }
+
+    private func settingsStaticContainer<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(maxWidth: contentMaxWidth, alignment: .leading)
+            .padding(28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+private struct SettingsChromeModifier: ViewModifier {
+    let isStandaloneWindow: Bool
+
+    func body(content: Content) -> some View {
+        if isStandaloneWindow {
+            content
+                .background(Color("colorBackground"))
+        } else {
+            content
+                .clipShape(RoundedRectangle(cornerRadius: 28))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28)
+                        .stroke(Color("colorText").opacity(0.15), lineWidth: 3)
+                )
+        }
     }
 }
 
@@ -293,30 +351,16 @@ private struct KeyCapView: View {
 
 private struct SystemFontPicker: View {
     @Binding var selectedFont: String
+    @State private var isExpanded = false
 
-    private var families: [String] {
-        NSFontManager.shared.availableFontFamilies.sorted {
+    private static let families: [String] = NSFontManager.shared.availableFontFamilies.sorted {
             $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
         }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Menu {
-                ForEach(families, id: \.self) { family in
-                    Button {
-                        selectedFont = family
-                    } label: {
-                        HStack {
-                            Text(family)
-                                .font(.custom(family, size: 15))
-                            if selectedFont == family {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
+            Button {
+                isExpanded.toggle()
             } label: {
                 HStack(spacing: 10) {
                     Text(selectedFont)
@@ -324,12 +368,14 @@ private struct SystemFontPicker: View {
                         .foregroundStyle(Color("colorText"))
                         .lineLimit(1)
                     Spacer()
-                    Image(systemName: "chevron.down")
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color("colorText").opacity(0.55))
                 }
             }
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(Color("colorBackground"))
@@ -338,6 +384,58 @@ private struct SystemFontPicker: View {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
             )
+
+            if isExpanded {
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(Self.families, id: \.self) { family in
+                            Button {
+                                selectedFont = family
+                                isExpanded = false
+                            } label: {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(family)
+                                            .font(.custom(family, size: 15))
+                                            .foregroundStyle(Color("colorText"))
+                                            .lineLimit(1)
+                                        Text("The quick brown fox")
+                                            .font(.custom(family, size: 12))
+                                            .foregroundStyle(Color("colorText").opacity(0.55))
+                                            .lineLimit(1)
+                                    }
+                                    Spacer()
+                                    if selectedFont == family {
+                                        Image(systemName: "checkmark")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundStyle(Color("colorPrimary"))
+                                    }
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color("colorBackground").opacity(0.92))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            selectedFont == family ? Color("colorPrimary") : Color("colorText").opacity(0.08),
+                                            lineWidth: selectedFont == family ? 2 : 1
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(8)
+                }
+                .frame(maxHeight: 220)
+                .background(Color("colorSurface").opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
+                )
+            }
 
             HStack {
                 Text("Preview")
@@ -390,7 +488,9 @@ private struct AppearanceTabContent: View {
 
                     // Size buttons
                     VStack(alignment: .leading, spacing: 8) {
-                        FieldLabel(text: "Base Size")
+                        Text("Base Size")
+                            .font(.custom("CrimsonText-Regular", size: 14))
+                            .foregroundStyle(Color("colorText").opacity(0.66))
                         HStack(spacing: 8) {
                             ForEach(sizes, id: \.0) { label, size in
                                 let isActive = appState.settings.managerTypography == size
@@ -460,6 +560,9 @@ private struct AppearanceTabContent: View {
 
 private struct NotchTabContent: View {
     @EnvironmentObject var appState: AppState
+    @State private var expandedManualPillSlot: Int? = nil
+    private let swatchRowMaxWidth: CGFloat = 700
+    private let swatchSpacing: CGFloat = 10
 
     private let colorPresets: [(String, String)] = [
         ("Sage",     "#849688"),
@@ -475,6 +578,8 @@ private struct NotchTabContent: View {
         ("Warm Tan", "#D4A574"),
     ]
     private let moodPresets = MoodPreset.all
+    private var previewHasPhysicalNotch: Bool { NotchWindowController.builtInDisplayHasPhysicalNotch }
+    private var previewTextTopPadding: CGFloat { previewHasPhysicalNotch ? 40 : 18 }
 
     // Binding that bridges Color ↔ hex string in appState
     private var overlayColorBinding: Binding<Color> {
@@ -507,163 +612,140 @@ private struct NotchTabContent: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            notchPreviewPanel
 
-            // ── Live Preview ─────────────────────────────────────────
-            SettingsPanel {
-                SectionTitle(text: "Live Preview")
+            ScrollView {
+                VStack(spacing: 16) {
+                    // ── Overlay Color ────────────────────────────────────────
+                    SettingsPanel {
+                        SectionTitle(text: "Overlay Color")
 
-                ZStack {
-                    // Screen background
-                    Color(hex: "#434343")
+                        // Background color row
+                        FieldLabel(text: "Background Color")
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.flexible(), spacing: swatchSpacing), count: 6),
+                            spacing: swatchSpacing
+                        ) {
+                            ForEach(colorPresets, id: \.0) { name, hex in
+                                let isActive = appState.settings.defaultOverlayAppearance.backgroundColor == hex
+                                Button {
+                                    appState.settings.defaultOverlayAppearance.backgroundColor = hex
+                                } label: {
+                                    swatchTile(
+                                        name: name,
+                                        isActive: isActive
+                                    ) {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(Color(hex: hex))
+                                            .aspectRatio(1, contentMode: .fit)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
 
-                    // Overlay wrapping around the notch — clipped to notch-wrap shape
-                    ZStack(alignment: .top) {
-                        Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor)
-                            .opacity(appState.settings.defaultOverlayAppearance.opacity)
-                        Text("Your teleprompter text appears here")
-                            .font(
-                                .custom(
-                                    appState.settings.defaultOverlayAppearance.fontName,
-                                    size: min(max(appState.settings.defaultOverlayAppearance.fontSize * 0.72, 12), 24)
-                                )
+                            swatchTile(name: "Custom", isActive: false) {
+                                customColorSwatch(selection: overlayColorBinding)
+                            }
+                        }
+                        .padding(.top, 8)
+                        .frame(maxWidth: swatchRowMaxWidth)
+                        .frame(maxWidth: .infinity)
+
+                        Divider().padding(.vertical, 8)
+
+                        // Text color row
+                        FieldLabel(text: "Text Color")
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.flexible(), spacing: swatchSpacing), count: 5),
+                            spacing: swatchSpacing
+                        ) {
+                            ForEach(textColorPresets, id: \.0) { name, hex in
+                                let isActive = appState.settings.defaultOverlayAppearance.textColor == hex
+                                Button {
+                                    appState.settings.defaultOverlayAppearance.textColor = hex
+                                } label: {
+                                    swatchTile(
+                                        name: name,
+                                        isActive: isActive
+                                    ) {
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill(Color(hex: hex))
+                                            .aspectRatio(1, contentMode: .fit)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .stroke(Color("colorText").opacity(0.15), lineWidth: 1)
+                                            )
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            swatchTile(name: "Custom", isActive: false) {
+                                customColorSwatch(selection: overlayTextColorBinding)
+                            }
+                        }
+                        .padding(.top, 8)
+                        .frame(maxWidth: swatchRowMaxWidth)
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    controlsContent
+                }
+                .padding(.bottom, 4)
+            }
+            .scrollIndicators(.never)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var notchPreviewPanel: some View {
+        SettingsPanel {
+            SectionTitle(text: "Preview")
+
+            ZStack {
+                Color(hex: "#434343")
+
+                ZStack(alignment: .top) {
+                    Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor)
+                        .opacity(appState.settings.defaultOverlayAppearance.opacity)
+                    Text("Your teleprompter text appears here")
+                        .font(
+                            .custom(
+                                appState.settings.defaultOverlayAppearance.fontName,
+                                size: min(max(appState.settings.defaultOverlayAppearance.fontSize * 0.72, 12), 24)
                             )
-                            .fontWeight(.semibold)
-                            .foregroundStyle(Color(hex: appState.settings.defaultOverlayAppearance.textColor))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 44)   // push text below the notch cutout
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    }
-                    .frame(width: 280, height: 124)
-                    .clipShape(NotchWrapShape())
-                    .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+                        )
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color(hex: appState.settings.defaultOverlayAppearance.textColor))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.top, previewTextTopPadding)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 24))
-                .padding(.top, 12)
-
-                Text("The overlay wraps around the camera notch — invisible to your audience, always in view for you.")
-                    .font(.custom("CrimsonText-Regular", size: 14))
-                    .foregroundStyle(Color("colorText").opacity(0.6))
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
+                .frame(width: previewNotchWidth, height: previewNotchHeight)
+                .clipShape(NotchWrapShape(hasNotch: previewHasPhysicalNotch))
+                .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
             }
+            .frame(maxWidth: .infinity)
+            .frame(height: 156)
+            .clipShape(RoundedRectangle(cornerRadius: 24))
+            .padding(.top, 8)
+        }
+    }
 
-            // ── Overlay Color ────────────────────────────────────────
-            SettingsPanel {
-                SectionTitle(text: "Overlay Color")
-
-                // Background color row
-                FieldLabel(text: "Background Color")
-                // 6 items (5 presets + Custom) share the full row equally
-                HStack(spacing: 10) {
-                    ForEach(colorPresets, id: \.0) { name, hex in
-                        let isActive = appState.settings.defaultOverlayAppearance.backgroundColor == hex
-                        Button {
-                            appState.settings.defaultOverlayAppearance.backgroundColor = hex
-                        } label: {
-                            VStack(spacing: 6) {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color(hex: hex))
-                                    .aspectRatio(1, contentMode: .fit)
-                                Text(name)
-                                    .font(.custom("IndieFlower", size: 12))
-                                    .foregroundStyle(Color("colorText"))
-                                    .lineLimit(1)
-                            }
-                            .padding(8)
-                            .frame(maxWidth: .infinity)
-                            .background(isActive
-                                ? Color("colorPrimary").opacity(0.12)
-                                : Color("colorBackground").opacity(0.7))
-                            .clipShape(RoundedRectangle(cornerRadius: 13))
-                            .overlay(RoundedRectangle(cornerRadius: 13)
-                                .stroke(isActive ? Color("colorPrimary") : Color("colorText").opacity(0.1),
-                                        lineWidth: isActive ? 2.5 : 1.5))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Custom color picker — same flex width
-                    VStack(spacing: 6) {
-                        ColorPicker("", selection: overlayColorBinding, supportsOpacity: false)
-                            .labelsHidden()
-                            .aspectRatio(1, contentMode: .fit)
-                        Text("Custom")
-                            .font(.custom("IndieFlower", size: 12))
-                            .foregroundStyle(Color("colorText"))
-                            .lineLimit(1)
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity)
-                    .background(Color("colorBackground").opacity(0.7))
-                    .clipShape(RoundedRectangle(cornerRadius: 13))
-                    .overlay(RoundedRectangle(cornerRadius: 13)
-                        .stroke(Color("colorText").opacity(0.1), lineWidth: 1.5))
-                }
-                .padding(.top, 8)
-
-                Divider().padding(.vertical, 8)
-
-                // Text color row
-                FieldLabel(text: "Text Color")
-                // 5 items (4 presets + Custom) share the full row equally
-                HStack(spacing: 10) {
-                    ForEach(textColorPresets, id: \.0) { name, hex in
-                        let isActive = appState.settings.defaultOverlayAppearance.textColor == hex
-                        Button {
-                            appState.settings.defaultOverlayAppearance.textColor = hex
-                        } label: {
-                            VStack(spacing: 6) {
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color(hex: hex))
-                                    .aspectRatio(1, contentMode: .fit)
-                                    .overlay(RoundedRectangle(cornerRadius: 10)
-                                        .stroke(Color("colorText").opacity(0.15), lineWidth: 1))
-                                Text(name)
-                                    .font(.custom("IndieFlower", size: 12))
-                                    .foregroundStyle(Color("colorText"))
-                                    .lineLimit(1)
-                            }
-                            .padding(8)
-                            .frame(maxWidth: .infinity)
-                            .background(isActive
-                                ? Color("colorPrimary").opacity(0.12)
-                                : Color("colorBackground").opacity(0.7))
-                            .clipShape(RoundedRectangle(cornerRadius: 13))
-                            .overlay(RoundedRectangle(cornerRadius: 13)
-                                .stroke(isActive ? Color("colorPrimary") : Color("colorText").opacity(0.1),
-                                        lineWidth: isActive ? 2.5 : 1.5))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Custom text color picker — same flex width
-                    VStack(spacing: 6) {
-                        ColorPicker("", selection: overlayTextColorBinding, supportsOpacity: false)
-                            .labelsHidden()
-                            .aspectRatio(1, contentMode: .fit)
-                        Text("Custom")
-                            .font(.custom("IndieFlower", size: 12))
-                            .foregroundStyle(Color("colorText"))
-                            .lineLimit(1)
-                    }
-                    .padding(8)
-                    .frame(maxWidth: .infinity)
-                    .background(Color("colorBackground").opacity(0.7))
-                    .clipShape(RoundedRectangle(cornerRadius: 13))
-                    .overlay(RoundedRectangle(cornerRadius: 13)
-                        .stroke(Color("colorText").opacity(0.1), lineWidth: 1.5))
-                }
-                .padding(.top, 8)
-            }
-
-            // ── Overlay Feel ─────────────────────────────────────────
+    private var controlsContent: some View {
+        VStack(spacing: 16) {
             SettingsPanel {
                 SectionTitle(text: "Overlay Feel")
                 VStack(spacing: 16) {
+                    sliderRow("Width",
+                              "\(Int(appState.settings.notchWindowWidth))pt",
+                              $appState.settings.notchWindowWidth,
+                              NotchWidthConfiguration.minimumWidth...NotchWidthConfiguration.maximumWidth)
+                    sliderRow("Height",
+                              "\(Int(appState.settings.notchWindowHeight))pt",
+                              $appState.settings.notchWindowHeight,
+                              NotchHeightConfiguration.minimumHeight...NotchHeightConfiguration.maximumHeight)
                     sliderRow("Opacity",
                               "\(Int(appState.settings.defaultOverlayAppearance.opacity * 100))%",
                               $appState.settings.defaultOverlayAppearance.opacity,
@@ -672,6 +754,20 @@ private struct NotchTabContent: View {
                               "\(Int(appState.settings.defaultOverlayAppearance.fontSize))pt",
                               $appState.settings.defaultOverlayAppearance.fontSize,
                               14...32)
+
+                    HStack {
+                        Spacer()
+                        Button("Reset to Defaults") {
+                            resetOverlayFeelToDefaults()
+                        }
+                        .font(.custom("CrimsonText-Regular", size: 16))
+                        .foregroundStyle(Color("colorBackground"))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color("colorPrimary"))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.top, 14)
             }
@@ -730,7 +826,6 @@ private struct NotchTabContent: View {
                 .padding(.top, 14)
             }
 
-            // ── Overlay Font ─────────────────────────────────────────
             SettingsPanel {
                 SectionTitle(text: "Overlay Font")
                 Text("Pick the typeface after you land on the mood you want in the preview.")
@@ -768,58 +863,12 @@ private struct NotchTabContent: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         FieldLabel(text: "Maximum Pill Windows")
-                        Menu {
-                            Button {
-                                appState.settings.maxPillCount = 1
-                            } label: {
-                                HStack {
-                                    Text("1 window")
-                                    if appState.settings.maxPillCount == 1 {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-
-                            Button {
-                                appState.settings.maxPillCount = 2
-                            } label: {
-                                HStack {
-                                    Text("2 windows")
-                                    if appState.settings.maxPillCount == 2 {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 10) {
-                                Text(appState.settings.maxPillCount == 1 ? "1 window" : "2 windows")
-                                    .font(.custom("CrimsonText-Regular", size: 16))
-                                    .foregroundStyle(
-                                        appState.settings.pillsEnabled
-                                            ? Color("colorText")
-                                            : Color("colorText").opacity(0.38)
-                                    )
-                                Spacer()
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(
-                                        appState.settings.pillsEnabled
-                                            ? Color("colorText").opacity(0.55)
-                                            : Color("colorText").opacity(0.28)
-                                    )
-                            }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(Color("colorBackground"))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14)
-                                    .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-                            )
+                        HStack(spacing: 8) {
+                            pillCountButton(count: 1)
+                            pillCountButton(count: 2)
                         }
                         .disabled(!appState.settings.pillsEnabled)
+                        .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
 
                         Text(appState.settings.pillsEnabled
                              ? "Allow one or two floating pill windows during a live session."
@@ -845,6 +894,20 @@ private struct NotchTabContent: View {
         }
     }
 
+    private var previewNotchWidth: CGFloat {
+        let normalized = (appState.settings.notchWindowWidth - NotchWidthConfiguration.minimumWidth)
+            / (NotchWidthConfiguration.maximumWidth - NotchWidthConfiguration.minimumWidth)
+        let clamped = min(max(normalized, 0), 1)
+        return 240 + (160 * clamped)
+    }
+
+    private var previewNotchHeight: CGFloat {
+        let normalized = (appState.settings.notchWindowHeight - NotchHeightConfiguration.minimumHeight)
+            / (NotchHeightConfiguration.maximumHeight - NotchHeightConfiguration.minimumHeight)
+        let clamped = min(max(normalized, 0), 1)
+        return 108 + (48 * clamped)
+    }
+
     private func sliderRow(_ label: String, _ valueText: String,
                             _ value: Binding<Double>, _ range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -867,6 +930,77 @@ private struct NotchTabContent: View {
             }
             Slider(value: value, in: range).tint(Color("colorPrimary"))
         }
+    }
+
+    private func swatchTile<Swatch: View>(
+        name: String,
+        isActive: Bool,
+        @ViewBuilder swatch: () -> Swatch
+    ) -> some View {
+        VStack(spacing: 6) {
+            swatch()
+            Text(name)
+                .font(.custom("IndieFlower", size: 12))
+                .foregroundStyle(Color("colorText"))
+                .lineLimit(1)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(
+            isActive
+                ? Color("colorPrimary").opacity(0.12)
+                : Color("colorBackground").opacity(0.7)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 13))
+        .overlay(
+            RoundedRectangle(cornerRadius: 13)
+                .stroke(
+                    isActive ? Color("colorPrimary") : Color("colorText").opacity(0.1),
+                    lineWidth: isActive ? 2.5 : 1.5
+                )
+        )
+    }
+
+    private func customColorSwatch(selection: Binding<Color>) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(hex: "#D98C7B"),
+                    Color(hex: "#D8B36A"),
+                    Color(hex: "#A8C28A"),
+                    Color(hex: "#7FAEB5"),
+                    Color(hex: "#A890C8")
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .saturation(0.72)
+            .brightness(0.03)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.white.opacity(0.18))
+                    .blur(radius: 10)
+                    .padding(8)
+            )
+
+            ColorPicker("", selection: selection, supportsOpacity: false)
+                .labelsHidden()
+                .opacity(0.015)
+                .contentShape(Rectangle())
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color("colorText").opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func resetOverlayFeelToDefaults() {
+        appState.settings.notchWindowWidth = NotchWidthConfiguration.defaultWidth
+        appState.settings.notchWindowHeight = NotchHeightConfiguration.defaultHeight
+        appState.settings.defaultOverlayAppearance.opacity = OverlayAppearance.default.opacity
+        appState.settings.defaultOverlayAppearance.fontSize = OverlayAppearance.default.fontSize
     }
 
     @ViewBuilder
@@ -908,27 +1042,15 @@ private struct NotchTabContent: View {
             }
 
             if case .manual(let selectedId) = mode {
-                Menu {
-                    ForEach(appState.scripts) { meta in
-                        Button {
-                            appState.settings.setPillContentMode(.manual(scriptId: meta.id), forSlot: slot)
-                        } label: {
-                            HStack {
-                                Text(meta.title)
-                                if meta.id == selectedId {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
+                Button {
+                    expandedManualPillSlot = expandedManualPillSlot == slot ? nil : slot
                 } label: {
                     HStack(spacing: 10) {
                         Text(appState.scripts.first(where: { $0.id == selectedId })?.title ?? "Select a script")
                             .font(.custom("CrimsonText-Regular", size: 16))
                             .foregroundStyle(Color("colorText"))
                         Spacer()
-                        Image(systemName: "chevron.down")
+                        Image(systemName: expandedManualPillSlot == slot ? "chevron.up" : "chevron.down")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color("colorText").opacity(0.55))
                     }
@@ -941,7 +1063,51 @@ private struct NotchTabContent: View {
                             .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
                     )
                 }
+                .buttonStyle(.plain)
                 .disabled(!appState.settings.pillsEnabled || appState.scripts.isEmpty)
+
+                if expandedManualPillSlot == slot {
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(appState.scripts) { meta in
+                                Button {
+                                    appState.settings.setPillContentMode(.manual(scriptId: meta.id), forSlot: slot)
+                                    expandedManualPillSlot = nil
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        Text(meta.title)
+                                            .font(.custom("CrimsonText-Regular", size: 16))
+                                            .foregroundStyle(Color("colorText"))
+                                            .lineLimit(1)
+                                        Spacer()
+                                        if meta.id == selectedId {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 12, weight: .semibold))
+                                                .foregroundStyle(Color("colorPrimary"))
+                                        }
+                                    }
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(Color("colorBackground").opacity(0.9))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 220)
+                    .padding(8)
+                    .background(Color("colorSurface").opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
+                    )
+                }
             }
 
             Text(mode == .voiceSync
@@ -959,6 +1125,29 @@ private struct NotchTabContent: View {
 
         guard let firstScript = appState.scripts.first else { return }
         appState.settings.setPillContentMode(.manual(scriptId: firstScript.id), forSlot: slot)
+        expandedManualPillSlot = slot
+    }
+
+    @ViewBuilder
+    private func pillCountButton(count: Int) -> some View {
+        let isActive = appState.settings.maxPillCount == count
+
+        Button {
+            appState.settings.maxPillCount = count
+        } label: {
+            Text("\(count)")
+                .font(.custom("CrimsonText-Regular", size: 16))
+                .foregroundStyle(isActive ? Color("colorBackground") : Color("colorText").opacity(0.7))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(isActive ? Color("colorPrimary") : Color("colorBackground"))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color("colorText").opacity(0.12), lineWidth: isActive ? 2 : 1.5)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -969,7 +1158,13 @@ private struct NotchTabContent: View {
 /// Notch cutout: x 65→185 (120 wide), y 0→30 (30 deep), centred at x=125
 /// Outer corners: 5pt radius top, 10pt radius bottom
 private struct NotchWrapShape: Shape {
+    let hasNotch: Bool
+
     func path(in rect: CGRect) -> Path {
+        guard hasNotch else {
+            return NotchOverlayGeometry.fallbackPath(in: rect)
+        }
+
         let sx = rect.width  / 250.0
         let sy = rect.height / 110.0
         func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }

@@ -1,5 +1,7 @@
 import Testing
 import Foundation
+import AppKit
+import CoreText
 @testable import Aira
 
 // MARK: - Helpers
@@ -25,6 +27,46 @@ func makeScript(title: String = "Test Script", body: String = "Hello world") -> 
         createdAt: Date(),
         lastEdited: Date()
     )
+}
+
+func writeTestPDF(text: String, to url: URL) throws {
+    var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+    guard let consumer = CGDataConsumer(url: url as CFURL),
+          let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+        throw NSError(domain: "AiraTests.PDF", code: 1, userInfo: nil)
+    }
+
+    context.beginPDFPage(nil)
+    context.textMatrix = .identity
+
+    let attributed = NSAttributedString(
+        string: text,
+        attributes: [
+            .font: NSFont.systemFont(ofSize: 18),
+            .foregroundColor: NSColor.black
+        ]
+    )
+    let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+    let path = CGPath(rect: CGRect(x: 48, y: 48, width: 516, height: 696), transform: nil)
+    let frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, attributed.length), path, nil)
+
+    context.saveGState()
+    context.translateBy(x: 0, y: mediaBox.height)
+    context.scaleBy(x: 1, y: -1)
+    CTFrameDraw(frame, context)
+    context.restoreGState()
+
+    context.endPDFPage()
+    context.closePDF()
+}
+
+func writeTestDOCX(text: String, to url: URL) throws {
+    let attributed = NSAttributedString(string: text)
+    let data = try attributed.data(
+        from: NSRange(location: 0, length: attributed.length),
+        documentAttributes: [.documentType: NSAttributedString.DocumentType.officeOpenXML]
+    )
+    try data.write(to: url)
 }
 
 // MARK: - Tests
@@ -178,6 +220,30 @@ struct ScriptStoreTests {
         let script = try store.importFromURL(txtFile)
         #expect(script.body == content)
         #expect(script.title == "sample")
+    }
+
+    @Test func importFromURLExtractsPDFText() throws {
+        let (store, dir) = try makeStore()
+        defer { cleanup(dir) }
+
+        let pdfFile = dir.appending(path: "sample.pdf")
+        try writeTestPDF(text: "PDF import speech", to: pdfFile)
+
+        let script = try store.importFromURL(pdfFile)
+        #expect(script.title == "sample")
+        #expect(script.body.contains("PDF import speech"))
+    }
+
+    @Test func importFromURLExtractsDOCXText() throws {
+        let (store, dir) = try makeStore()
+        defer { cleanup(dir) }
+
+        let docxFile = dir.appending(path: "sample.docx")
+        try writeTestDOCX(text: "DOCX import speech", to: docxFile)
+
+        let script = try store.importFromURL(docxFile)
+        #expect(script.title == "sample")
+        #expect(script.body.contains("DOCX import speech"))
     }
 
     @Test func importFromURLDoesNotModifySourceFile() throws {

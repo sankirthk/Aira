@@ -4,7 +4,7 @@ struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.managerFontScale) private var managerFontScale
     @Binding var selectedNav: SidebarNav
-    @Binding var showSettings: Bool
+    var onOpenSettings: () -> Void
     var onNewScript: () -> Void
     var onOpenScript: (UUID) -> Void
 
@@ -27,6 +27,17 @@ struct SidebarView: View {
 
             // MARK: — Section 1: Action buttons
             VStack(spacing: 8) {
+                Button {
+                    onNewScript()
+                } label: {
+                    HStack(spacing: 8) {
+                        AiraIcon(type: .new, size: 20, color: .white)
+                        Text("New Script")
+                            .font(.custom("CrimsonText-Regular", size: scaled(16)))
+                    }
+                }
+                .buttonStyle(AiraSidebarActionButtonStyle())
+
                 if appState.stealthWarning {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -43,21 +54,16 @@ struct SidebarView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
 
-                Button {
-                    onNewScript()
-                } label: {
-                    HStack(spacing: 8) {
-                        AiraIcon(type: .new, size: 20, color: .white)
-                        Text("New Script")
-                            .font(.custom("CrimsonText-Regular", size: scaled(16)))
-                    }
-                }
-                .buttonStyle(AiraSidebarActionButtonStyle())
-
             }
-            .padding(12)
+            .padding(18)
 
-            WavySeparator(color: .white, opacity: 0.3, lineHeight: 3, amplitudeScale: 0.16)
+            WavySeparator(
+                color: .white,
+                opacity: 0.3,
+                lineHeight: 3,
+                amplitudeScale: 0.16,
+                verticalPadding: 0
+            )
 
             // MARK: — Section 2: Library
             Text("LIBRARY")
@@ -66,7 +72,7 @@ struct SidebarView: View {
                 .foregroundStyle(.white.opacity(0.5))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
-                .padding(.top, 12)
+                .padding(.top, 18)
                 .padding(.bottom, 6)
 
             ScrollView {
@@ -85,7 +91,7 @@ struct SidebarView: View {
 
             // MARK: — Section 3: Preferences
             Button {
-                showSettings = true
+                onOpenSettings()
             } label: {
                 HStack(spacing: 8) {
                     AiraIcon(type: .settings, size: 20, color: .white.opacity(0.85))
@@ -100,20 +106,15 @@ struct SidebarView: View {
             .buttonStyle(.plain)
         }
         .background(Color("colorPrimary"))
-        .alert("Delete Collection?", isPresented: pendingDeleteBinding) {
-            Button("Delete", role: .destructive) {
-                confirmDeleteCollection()
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDeleteCollection = nil
-            }
-        } message: {
-            Text("Deleting \"\(pendingDeleteCollection?.name ?? "this collection")\" will not delete any scripts.")
-        }
         .alert("Collection Action Failed", isPresented: collectionErrorBinding) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(collectionErrorMessage ?? "Please try again.")
+        }
+        .overlay {
+            if let pendingDeleteCollection {
+                deleteCollectionOverlay(collection: pendingDeleteCollection)
+            }
         }
     }
 
@@ -323,17 +324,6 @@ struct SidebarView: View {
         }
     }
 
-    private var pendingDeleteBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteCollection != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeleteCollection = nil
-                }
-            }
-        )
-    }
-
     private func sectionHeader<TrailingAccessory: View>(
         title: String,
         iconType: AiraIconType,
@@ -391,6 +381,51 @@ struct SidebarView: View {
                 }
             }
         )
+    }
+
+    @ViewBuilder
+    private func deleteCollectionOverlay(collection: AiraCollection) -> some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    pendingDeleteCollection = nil
+                }
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Delete Collection?")
+                    .font(.custom("IndieFlower", size: scaled(24)))
+                    .foregroundStyle(Color("colorText"))
+
+                Text("Deleting \"\(collection.name)\" will not delete any scripts.")
+                    .font(.custom("CrimsonText-Regular", size: scaled(15)))
+                    .foregroundStyle(Color("colorText").opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Button("Cancel") {
+                        pendingDeleteCollection = nil
+                    }
+                    .buttonStyle(AiraSecondaryButtonStyle())
+
+                    Button("Delete") {
+                        confirmDeleteCollection()
+                    }
+                    .buttonStyle(AiraPrimaryButtonStyle())
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(20)
+            .frame(width: 280)
+            .background(Color("colorSurface"))
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+            )
+            .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
+            .padding(16)
+        }
     }
 
     private func collectionEditorRow(

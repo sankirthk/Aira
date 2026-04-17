@@ -75,4 +75,33 @@ struct ScriptEditorTextInsertionTests {
         #expect(ScriptEditorMetrics.wordCount(for: "hello\nworld\tfrom   aira") == 4)
         #expect(ScriptEditorMetrics.wordCount(for: " one   two \n three\t") == 3)
     }
+
+    @Test func markdownPasteNormalizesHeadingsListsLinksAndEmphasis() {
+        let markdown = """
+        # Welcome
+
+        This is **bold** and *calm*.
+
+        - First point
+        - [Second point](https://example.com)
+        1. Third point
+        """
+
+        let normalized = ScriptEditorMarkdownPaste.normalizedTextIfMarkdown(markdown)
+
+        #expect(normalized == """
+        Welcome
+
+        This is bold and calm.
+
+        • First point
+        • Second point
+        1. Third point
+        """)
+    }
+
+    @Test func markdownPasteLeavesPlainTextUntouched() {
+        let plainText = "Hello world.\nThis is already script text."
+        #expect(ScriptEditorMarkdownPaste.normalizedTextIfMarkdown(plainText) == nil)
+    }
 }

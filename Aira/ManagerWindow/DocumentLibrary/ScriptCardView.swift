@@ -13,6 +13,8 @@ struct ScriptCardView: View {
     var onCast: () -> Void
     var onDelete: () -> Void
     var onDuplicate: () -> Void
+    var isInCollection: (UUID) -> Bool
+    var onSetCollectionMemberships: ([UUID]) -> Void
     var onToggleStarred: () -> Void
     var onToggleSelection: () -> Void
     var onCardTap: () -> Void
@@ -33,7 +35,19 @@ struct ScriptCardView: View {
             .month(.abbreviated).day().year())
     }
 
+    private var cardMinHeight: CGFloat {
+        max(240, scaled(240))
+    }
+
     var body: some View {
+        AppKitContextMenuHost {
+            cardBody
+        } menuItems: {
+            cardContextMenu
+        }
+    }
+
+    private var cardBody: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // MARK: Title row
@@ -46,6 +60,8 @@ struct ScriptCardView: View {
                     .font(.custom("IndieFlower", size: scaled(22)))
                     .foregroundStyle(Color("colorText"))
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 cardUtilityButtons
@@ -62,7 +78,7 @@ struct ScriptCardView: View {
                 .font(.custom("Inter-Regular", size: scaled(12)))
                 .foregroundStyle(Color("colorMuted"))
 
-            Spacer()
+            Spacer(minLength: 0)
 
             // MARK: Action buttons
             ViewThatFits(in: .horizontal) {
@@ -73,7 +89,7 @@ struct ScriptCardView: View {
             .allowsHitTesting(!showsSelectionControls)
         }
         .padding(20)
-        .frame(minHeight: 160)
+        .frame(minHeight: cardMinHeight, alignment: .top)
         .background(
             isSelected
                 ? Color("colorPrimary").opacity(0.12)
@@ -113,17 +129,49 @@ struct ScriptCardView: View {
         .onHover { isHovering in
             isHovered = isHovering
         }
-        .contextMenu {
-            if !showsSelectionControls {
-                Button("Edit") { onEdit() }
-                    .disabled(!editingIsAvailable)
-                Button(meta.starred ? "Unstar" : "Star") { onToggleStarred() }
-                Button("Duplicate") { onDuplicate() }
-                Button("Cast to Notch") { onCast() }
-                if deletionIsAvailable {
-                    Divider()
-                    Button("Delete", role: .destructive) { onDelete() }
+    }
+
+    @ViewBuilder
+    private var cardContextMenu: some View {
+        if !showsSelectionControls {
+            Button("Edit") { onEdit() }
+                .disabled(!editingIsAvailable)
+            Button(meta.starred ? "Unstar" : "Star") { onToggleStarred() }
+            Button("Duplicate") { onDuplicate() }
+            Menu("Add to Collection") {
+                ForEach(appState.collections) { collection in
+                    Button {
+                        var nextCollectionIDs = Set(
+                            appState.collections
+                                .filter { isInCollection($0.id) }
+                                .map(\.id)
+                        )
+
+                        if nextCollectionIDs.contains(collection.id) {
+                            nextCollectionIDs.remove(collection.id)
+                        } else {
+                            nextCollectionIDs.insert(collection.id)
+                        }
+
+                        onSetCollectionMemberships(nextCollectionIDs.sorted {
+                            $0.uuidString < $1.uuidString
+                        })
+                    } label: {
+                        HStack {
+                            Text(collection.name)
+                            Spacer()
+                            if isInCollection(collection.id) {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
                 }
+            }
+            .disabled(appState.collections.isEmpty)
+            Button("Cast to Notch") { onCast() }
+            if deletionIsAvailable {
+                Divider()
+                Button("Delete", role: .destructive) { onDelete() }
             }
         }
     }

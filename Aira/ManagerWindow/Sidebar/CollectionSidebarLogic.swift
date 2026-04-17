@@ -59,3 +59,13 @@ struct DocumentLibraryFilterLogic {
         }
     }
 }
+
+struct DocumentLibraryImportLogic {
+    static func selectedCollectionID(for filter: SidebarNav) -> UUID? {
+        if case let .collection(id) = filter {
+            return id
+        }
+
+        return nil
+    }
+}

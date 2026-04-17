@@ -69,6 +69,20 @@ struct CollectionSidebarLogicTests {
         #expect(filtered.isEmpty)
     }
 
+    @Test func importLogicReturnsSelectedCollectionIDForCollectionFilter() {
+        let collectionID = UUID()
+
+        #expect(
+            DocumentLibraryImportLogic.selectedCollectionID(for: .collection(collectionID)) == collectionID
+        )
+    }
+
+    @Test func importLogicReturnsNilOutsideCollectionFilter() {
+        #expect(DocumentLibraryImportLogic.selectedCollectionID(for: .allScripts) == nil)
+        #expect(DocumentLibraryImportLogic.selectedCollectionID(for: .starred) == nil)
+        #expect(DocumentLibraryImportLogic.selectedCollectionID(for: .recent) == nil)
+    }
+
     @Test func collectionScriptCountMatchesFilteredScripts() {
         let includedID = UUID()
         let collectionID = UUID()

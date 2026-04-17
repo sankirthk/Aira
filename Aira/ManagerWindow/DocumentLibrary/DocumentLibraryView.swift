@@ -3,6 +3,20 @@ import UniformTypeIdentifiers
 import AppKit
 
 struct DocumentLibraryView: View {
+    private enum DeleteConfirmation: Identifiable {
+        case single(ScriptMeta)
+        case bulk(count: Int)
+
+        var id: String {
+            switch self {
+            case .single(let meta):
+                return "single-\(meta.id.uuidString)"
+            case .bulk(let count):
+                return "bulk-\(count)"
+            }
+        }
+    }
+
     @EnvironmentObject var appState: AppState
     @Environment(\.managerFontScale) private var managerFontScale
     let filter: SidebarNav
@@ -12,8 +26,7 @@ struct DocumentLibraryView: View {
     var onImportScript: () -> Void
 
     @State private var isDragTargeted: Bool = false
-    @State private var pendingDelete: ScriptMeta? = nil
-    @State private var isBulkDeleteConfirmationPresented: Bool = false
+    @State private var deleteConfirmation: DeleteConfirmation? = nil
     @State private var libraryErrorMessage: String? = nil
     @State private var bulkSelection = DocumentLibraryBulkSelection()
     @State private var escapeKeyMonitor: Any?
@@ -133,15 +146,21 @@ struct DocumentLibraryView: View {
                                 onCast: {
                                     onCast(meta.id)
                                 },
-                                onDelete: {
-                                    if deletionIsAvailable {
-                                        pendingDelete = meta
-                                    } else {
-                                        libraryErrorMessage = "End the active session before deleting scripts."
-                                    }
+                                    onDelete: {
+                                        if deletionIsAvailable {
+                                            deleteConfirmation = .single(meta)
+                                        } else {
+                                            libraryErrorMessage = "End the active session before deleting scripts."
+                                        }
                                 },
                                 onDuplicate: {
                                     duplicateScript(meta.id)
+                                },
+                                isInCollection: { collectionID in
+                                    scriptIsInCollection(meta.id, collectionID: collectionID)
+                                },
+                                onSetCollectionMemberships: { collectionIDs in
+                                    setScriptCollections(meta.id, collectionIDs: collectionIDs)
                                 },
                                 onToggleStarred: {
                                     toggleStarred(meta.id)
@@ -172,34 +191,15 @@ struct DocumentLibraryView: View {
                     .allowsHitTesting(false)
             }
         }
-        .alert("Delete Script?", isPresented: pendingDeleteBinding) {
-            Button("Delete", role: .destructive) {
-                if let meta = pendingDelete {
-                    deleteScript(meta.id)
-                }
-                pendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDelete = nil
-            }
-        } message: {
-            Text("This will permanently delete \"\(pendingDelete?.title ?? "this script")\" from your library.")
-        }
-        .alert(
-            "Delete \(selectedScriptCount) \(selectedScriptCount == 1 ? "script" : "scripts")?",
-            isPresented: $isBulkDeleteConfirmationPresented
-        ) {
-            Button("Delete", role: .destructive) {
-                confirmBulkDelete()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This cannot be undone.")
-        }
         .alert("Library Action Failed", isPresented: libraryErrorBinding) {
             Button("OK", role: .cancel) { }
         } message: {
             Text(libraryErrorMessage ?? "Please try again.")
+        }
+        .overlay {
+            if let deleteConfirmation {
+                deleteConfirmationOverlay(deleteConfirmation)
+            }
         }
         .onChange(of: visibleScriptIDs) { _, newVisibleIDs in
             bulkSelection.selectedScriptIDs = bulkSelection.selectedScriptIDs.intersection(Set(newVisibleIDs))
@@ -210,8 +210,7 @@ struct DocumentLibraryView: View {
         .onChange(of: appState.sessionActive) { _, isActive in
             guard isActive else { return }
             bulkSelection = DocumentLibraryBulkSelection()
-            pendingDelete = nil
-            isBulkDeleteConfirmationPresented = false
+            deleteConfirmation = nil
         }
         .onAppear {
             installEscapeKeyMonitor()
@@ -247,7 +246,7 @@ struct DocumentLibraryView: View {
             Spacer()
 
             Button {
-                isBulkDeleteConfirmationPresented = true
+                deleteConfirmation = .bulk(count: selectedScriptCount)
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 15, weight: .semibold))
@@ -293,17 +292,6 @@ struct DocumentLibraryView: View {
         }
     }
 
-    private var pendingDeleteBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDelete != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDelete = nil
-                }
-            }
-        )
-    }
-
     private var libraryErrorBinding: Binding<Bool> {
         Binding(
             get: { libraryErrorMessage != nil },
@@ -313,6 +301,79 @@ struct DocumentLibraryView: View {
                 }
             }
         )
+    }
+
+    @ViewBuilder
+    private func deleteConfirmationOverlay(_ confirmation: DeleteConfirmation) -> some View {
+        ZStack {
+            Color.black.opacity(0.22)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    deleteConfirmation = nil
+                }
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text(deleteConfirmationTitle(for: confirmation))
+                    .font(.custom("IndieFlower", size: scaled(28)))
+                    .foregroundStyle(Color("colorText"))
+
+                Text(deleteConfirmationMessage(for: confirmation))
+                    .font(.custom("CrimsonText-Regular", size: scaled(16)))
+                    .foregroundStyle(Color("colorText").opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 10) {
+                    Button("Cancel") {
+                        deleteConfirmation = nil
+                    }
+                    .buttonStyle(AiraSecondaryButtonStyle())
+
+                    Button("Delete") {
+                        performDeleteConfirmation(confirmation)
+                    }
+                    .buttonStyle(AiraPrimaryButtonStyle())
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .padding(24)
+            .frame(width: 360)
+            .background(Color("colorSurface"))
+            .clipShape(RoundedRectangle(cornerRadius: 22))
+            .overlay(
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+            )
+            .shadow(color: Color.black.opacity(0.12), radius: 24, y: 12)
+            .padding(24)
+        }
+    }
+
+    private func deleteConfirmationTitle(for confirmation: DeleteConfirmation) -> String {
+        switch confirmation {
+        case .single:
+            return "Delete Script?"
+        case .bulk(let count):
+            return "Delete \(count) \(count == 1 ? "script" : "scripts")?"
+        }
+    }
+
+    private func deleteConfirmationMessage(for confirmation: DeleteConfirmation) -> String {
+        switch confirmation {
+        case .single(let meta):
+            return "This will permanently delete \"\(meta.title)\" from your library."
+        case .bulk:
+            return "This cannot be undone."
+        }
+    }
+
+    private func performDeleteConfirmation(_ confirmation: DeleteConfirmation) {
+        switch confirmation {
+        case .single(let meta):
+            deleteScript(meta.id)
+        case .bulk:
+            confirmBulkDelete()
+        }
+        deleteConfirmation = nil
     }
 
     private func editScript(_ id: UUID) {
@@ -352,6 +413,26 @@ struct DocumentLibraryView: View {
             onEdit(script)
         } catch {
             libraryErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func setScriptCollections(_ id: UUID, collectionIDs: [UUID]) {
+        do {
+            try appState.updateScriptCollections(id: id, collectionIDs: collectionIDs)
+        } catch {
+            libraryErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func scriptIsInCollection(_ scriptID: UUID, collectionID: UUID) -> Bool {
+        do {
+            let script = try appState.readScript(id: scriptID)
+            return script.collectionIds.contains(collectionID)
+        } catch {
+            return appState.collections
+                .first(where: { $0.id == collectionID })?
+                .scriptIds
+                .contains(scriptID) ?? false
         }
     }
 
@@ -404,13 +485,11 @@ struct DocumentLibraryView: View {
     }
 
     private func importScript(from url: URL) {
-        guard url.pathExtension.lowercased() == "txt" else {
-            libraryErrorMessage = "Only .txt files can be imported."
-            return
-        }
-
         do {
-            let script = try appState.importScript(from: url)
+            let script = try appState.importScript(
+                from: url,
+                inCollection: DocumentLibraryImportLogic.selectedCollectionID(for: filter)
+            )
             onEdit(script)
         } catch {
             libraryErrorMessage = error.localizedDescription

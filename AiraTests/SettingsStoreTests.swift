@@ -34,6 +34,8 @@ struct SettingsStoreTests {
                 fontName: "Manrope-Bold",
                 fontSize: 24
             ),
+            notchWindowWidth: 420,
+            notchWindowHeight: 210,
             countdownDuration: 5,
             voiceSyncEnabled: false,
             speechSensitivity: .high,
@@ -69,6 +71,8 @@ struct SettingsStoreTests {
                 fontName: "IndieFlower",
                 fontSize: 18
             ),
+            notchWindowWidth: 440,
+            notchWindowHeight: 220,
             countdownDuration: 0,
             voiceSyncEnabled: true,
             speechSensitivity: .low,
@@ -107,6 +111,8 @@ struct SettingsStoreTests {
                 "fontName": "Inter-Regular",
                 "fontSize": 20
               },
+              "notchWindowWidth": 400,
+              "notchWindowHeight": 164,
               "countdownDuration": 3,
               "voiceSyncEnabled": true,
               "voiceSyncMode": "\(legacyMode)",
@@ -199,6 +205,8 @@ struct SettingsStoreTests {
             "fontName": "Inter-Regular",
             "fontSize": 20
           },
+          "notchWindowWidth": 400,
+          "notchWindowHeight": 164,
           "countdownDuration": 3,
           "voiceSyncEnabled": true,
           "voiceSyncMode": "voice",
@@ -237,6 +245,8 @@ struct SettingsStoreTests {
             "fontName": "Inter-Regular",
             "fontSize": 20
           },
+          "notchWindowWidth": 400,
+          "notchWindowHeight": 164,
           "countdownDuration": 3,
           "voiceSyncEnabled": true,
           "voiceSyncMode": "voice",

@@ -9,7 +9,7 @@ struct CuePanelView: View {
     var body: some View {
         ScriptEditorPanel(backgroundColor: Color("colorPrimary")) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Insert Performance Cues")
+                Text("Insert Cues")
                     .font(.custom("IndieFlower", size: 28))
                     .foregroundStyle(Color("colorBackground"))
                     .padding(.bottom, 16)

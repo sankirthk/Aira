@@ -2,6 +2,14 @@ import Testing
 import AppKit
 @testable import Aira
 
+private final class ShortcutActionRecorder {
+    private(set) var triggeredShortcuts: [String] = []
+
+    func record(_ shortcut: String) {
+        triggeredShortcuts.append(shortcut)
+    }
+}
+
 struct KeyboardShortcutDisplayTests {
     @Test func formatsCommandShiftLetterShortcut() {
         let shortcut = KeyboardShortcutDisplay.string(
@@ -69,6 +77,41 @@ struct KeyboardShortcutDisplayTests {
                 shortcut: "↓"
             )
         )
+    }
+
+    @Test @MainActor func managerShortcutCoordinatorBindsConfiguredShortcutActions() {
+        let settings = AppSettings(
+            shortcutToggleNotch: "⌘⌥N",
+            shortcutTogglePill: "⌘⌥P"
+        )
+        let recorder = ShortcutActionRecorder()
+        let bindings = ManagerShortcutCoordinator.bindings(
+            for: settings,
+            onToggleNotch: { recorder.record("notch") },
+            onTogglePill: { recorder.record("pill") }
+        )
+
+        #expect(bindings.map { $0.shortcut } == ["⌘⌥N", "⌘⌥P"])
+
+        bindings.forEach { $0.action() }
+
+        #expect(recorder.triggeredShortcuts == ["notch", "pill"])
+    }
+
+    @Test @MainActor func voiceToggleRepeatSuppressionOnlyAppliesToBindingsThatOptIn() {
+        let toggleBinding = KeyboardShortcutMonitor.Binding(
+            shortcut: "⌘⇧Space",
+            suppressAutoRepeat: true,
+            action: {}
+        )
+        let scrollBinding = KeyboardShortcutMonitor.Binding(
+            shortcut: "⌘↑",
+            action: {}
+        )
+
+        #expect(!KeyboardShortcutMonitor.shouldTriggerBinding(toggleBinding, isAutoRepeat: true))
+        #expect(KeyboardShortcutMonitor.shouldTriggerBinding(toggleBinding, isAutoRepeat: false))
+        #expect(KeyboardShortcutMonitor.shouldTriggerBinding(scrollBinding, isAutoRepeat: true))
     }
 
     @Test func lineNudgeMathUsesSingleRenderedLine() {
@@ -239,5 +282,194 @@ struct SessionPlayheadCoordinatorTests {
         #expect(coordinator.progress == 0)
         #expect(coordinator.velocity == 0)
         #expect(coordinator.isPaused == false)
+    }
+}
+
+struct AppWindowCoordinatorTests {
+    @Test func transientMenuBarWindowDetectionIgnoresTaggedManagerWindow() {
+        #expect(
+            AppWindowCoordinator.isTransientMenuBarWindow(
+                identifier: AppWindowCoordinator.managerWindowIdentifier,
+                isPanel: false,
+                title: ""
+            ) == false
+        )
+    }
+
+    @Test func transientMenuBarWindowDetectionMatchesUntitledRegularWindow() {
+        #expect(
+            AppWindowCoordinator.isTransientMenuBarWindow(
+                identifier: nil,
+                isPanel: false,
+                title: ""
+            )
+        )
+    }
+
+    @Test func transientMenuBarWindowDetectionMatchesUntitledPanelHostWindow() {
+        #expect(
+            AppWindowCoordinator.isTransientMenuBarWindow(
+                identifier: nil,
+                isPanel: true,
+                title: "",
+                sharingType: .readOnly,
+                level: .normal
+            )
+        )
+    }
+
+    @Test func transientMenuBarWindowDetectionIgnoresStealthOverlayPanels() {
+        #expect(
+            AppWindowCoordinator.isTransientMenuBarWindow(
+                identifier: nil,
+                isPanel: true,
+                title: "",
+                sharingType: .none,
+                level: .screenSaver
+            ) == false
+        )
+    }
+
+    @Test func managerRestoreFallbackRejectsTransientMenuBarWindows() {
+        #expect(
+            AppWindowCoordinator.isManagerRestoreFallbackCandidate(
+                identifier: nil,
+                isPanel: false,
+                title: ""
+            ) == false
+        )
+    }
+
+    @Test func taggedTransientMenuBarWindowsAreRejectedEvenWithTitles() {
+        #expect(
+            AppWindowCoordinator.isTransientMenuBarWindow(
+                identifier: AppWindowCoordinator.transientMenuBarWindowIdentifier,
+                isPanel: false,
+                title: "Aira"
+            )
+        )
+        #expect(
+            AppWindowCoordinator.isManagerRestoreFallbackCandidate(
+                identifier: AppWindowCoordinator.transientMenuBarWindowIdentifier,
+                isPanel: false,
+                title: "Aira"
+            ) == false
+        )
+    }
+
+    @Test func managerRestoreFallbackAcceptsTaggedManagerWindow() {
+        #expect(
+            AppWindowCoordinator.isManagerRestoreFallbackCandidate(
+                identifier: AppWindowCoordinator.managerWindowIdentifier,
+                isPanel: false,
+                title: ""
+            )
+        )
+    }
+
+    @Test func managerWindowChromeRepairRestoresFullStandardTitlebarMask() {
+        let repaired = AppWindowCoordinator.repairedManagerWindowStyleMask([])
+
+        #expect(repaired.contains(.titled))
+        #expect(repaired.contains(.closable))
+        #expect(repaired.contains(.miniaturizable))
+        #expect(repaired.contains(.resizable))
+    }
+
+    @Test func managerWindowChromeRepairPreservesExistingNonStandardStyleBits() {
+        let repaired = AppWindowCoordinator.repairedManagerWindowStyleMask([.fullSizeContentView])
+
+        #expect(repaired.contains(.fullSizeContentView))
+        #expect(repaired.contains(.titled))
+        #expect(repaired.contains(.closable))
+    }
+
+    @Test func managerRestoreFallbackRejectsUntaggedTitledRegularWindows() {
+        #expect(
+            AppWindowCoordinator.isManagerRestoreFallbackCandidate(
+                identifier: nil,
+                isPanel: false,
+                title: "Aira"
+            ) == false
+        )
+    }
+
+    @Test func transientMenuBarWindowsAreStillRejectedBeforeChromeRepair() {
+        #expect(
+            AppWindowCoordinator.isManagerRestoreFallbackCandidate(
+                identifier: AppWindowCoordinator.transientMenuBarWindowIdentifier,
+                isPanel: false,
+                title: "Aira"
+            ) == false
+        )
+    }
+}
+
+struct MenuBarVoiceControlPresentationTests {
+    @Test func enablementDependsOnActiveSessionNotVoiceSyncMode() {
+        #expect(MenuBarVoiceControlPresentation.isEnabled(hasActiveSession: true))
+        #expect(!MenuBarVoiceControlPresentation.isEnabled(hasActiveSession: false))
+    }
+
+    @Test func pausedStateUsesResumeTitleAndPlayIcon() {
+        #expect(MenuBarVoiceControlPresentation.title(isPausedByUser: true) == "Resume Voice")
+        #expect(MenuBarVoiceControlPresentation.symbolName(isPausedByUser: true) == "play.fill")
+    }
+
+    @Test func runningStateUsesPauseTitleAndPauseIcon() {
+        #expect(MenuBarVoiceControlPresentation.title(isPausedByUser: false) == "Pause Voice")
+        #expect(MenuBarVoiceControlPresentation.symbolName(isPausedByUser: false) == "pause.fill")
+    }
+}
+
+struct MenuBarStatusItemControllerTests {
+    @Test func rebuildsPopoverWhenMarkedShownWithoutAttachedWindow() {
+        #expect(
+            MenuBarStatusItemController.shouldRebuildPopover(
+                isShown: true,
+                hasAttachedWindow: false
+            )
+        )
+    }
+
+    @Test func keepsPopoverWhenShownStateMatchesAttachedWindow() {
+        #expect(
+            MenuBarStatusItemController.shouldRebuildPopover(
+                isShown: true,
+                hasAttachedWindow: true
+            ) == false
+        )
+        #expect(
+            MenuBarStatusItemController.shouldRebuildPopover(
+                isShown: false,
+                hasAttachedWindow: false
+            ) == false
+        )
+    }
+
+    @Test func promotesPopoverWindowLevelToAtLeastFloating() {
+        #expect(
+            MenuBarStatusItemController.promotedPopoverWindowLevel(from: .normal) == .floating
+        )
+        #expect(
+            MenuBarStatusItemController.promotedPopoverWindowLevel(from: .statusBar) == .statusBar
+        )
+    }
+}
+
+struct NotchTextFadeGeometryTests {
+    @Test func fadeHeightClampsToReadableViewport() {
+        let regularHeight = NotchTextFadeGeometry.fadeHeight(
+            availableHeight: 146,
+            notchHeight: 34
+        )
+        #expect(regularHeight >= NotchTextFadeGeometry.minimumFadeHeight)
+        #expect(regularHeight <= NotchTextFadeGeometry.maximumFadeHeight)
+
+        let tinyHeight = NotchTextFadeGeometry.fadeHeight(
+            availableHeight: 12,
+            notchHeight: 34
+        )
+        #expect(tinyHeight == 12)
     }
 }

@@ -42,7 +42,7 @@ struct ScriptEditorView: View {
                     .font(.custom("Manrope-Bold", size: scaled(20)))
                     .textFieldStyle(.plain)
                     .foregroundStyle(Color("colorBackground"))
-                    .tint(Color("colorBackground"))
+                    .tint(Color("colorSecondary"))
                     .disabled(isReadOnly)
 
                 Spacer()
@@ -223,6 +223,10 @@ struct ScriptTextEditor: NSViewRepresentable {
         Coordinator(text: $text, selectedRange: $selectedRange)
     }
 
+    static func dismantleNSView(_ nsView: NSScrollView, coordinator: Coordinator) {
+        (nsView.documentView as? NSTextView)?.delegate = nil
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.drawsBackground = false
@@ -231,7 +235,7 @@ struct ScriptTextEditor: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.autohidesScrollers = true
 
-        let textView = NSTextView()
+        let textView = ScriptEditorNSTextView()
         textView.isRichText = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -307,21 +311,63 @@ struct ScriptTextEditor: NSViewRepresentable {
         }
 
         func applyCueStyling(to textView: NSTextView) {
-            let attributedString = NSMutableAttributedString(string: textView.string)
-            ScriptEditorCueStyling.applyCueAnnotationStyling(
-                to: attributedString,
-                baseFont: textView.font ?? .systemFont(ofSize: 18),
-                textColor: NSColor(Color("colorText")),
-                cueTextColor: NSColor(Color("colorBackground")),
-                cueBackgroundColor: NSColor(Color("colorSecondary"))
-            )
+            guard let textStorage = textView.textStorage else { return }
 
             let selectedRange = textView.selectedRange()
+            let baseFont = textView.font ?? .systemFont(ofSize: 18)
+            let textColor = NSColor(Color("colorText"))
+            let cueTextColor = NSColor(Color("colorBackground"))
+            let cueBackgroundColor = NSColor(Color("colorSecondary"))
+            let baseAttributes: [NSAttributedString.Key: Any] = [
+                .font: baseFont,
+                .foregroundColor: textColor
+            ]
+            let cueFont = NSFontManager.shared.convert(baseFont, toHaveTrait: .boldFontMask)
+
             isApplyingSelectionChange = true
-            textView.textStorage?.setAttributedString(attributedString)
+            textStorage.beginEditing()
+            textStorage.setAttributes(baseAttributes, range: NSRange(location: 0, length: textStorage.length))
+
+            for range in ScriptEditorCueStyling.cueRanges(in: textView.string) {
+                textStorage.addAttributes(
+                    [
+                        .font: cueFont,
+                        .foregroundColor: cueTextColor,
+                        .backgroundColor: cueBackgroundColor
+                    ],
+                    range: range
+                )
+            }
+
+            textStorage.endEditing()
             textView.setSelectedRange(selectedRange)
+            textView.typingAttributes = ScriptEditorCueStyling.typingAttributes(
+                forInsertionLocation: selectedRange.location,
+                in: textView.string,
+                baseAttributes: baseAttributes,
+                cueAttributes: [
+                    .font: cueFont,
+                    .foregroundColor: cueTextColor,
+                    .backgroundColor: cueBackgroundColor
+                ]
+            )
             isApplyingSelectionChange = false
         }
+    }
+}
+
+final class ScriptEditorNSTextView: NSTextView {
+    override func paste(_ sender: Any?) {
+        guard
+            isEditable,
+            let pastedString = NSPasteboard.general.string(forType: .string),
+            let transformed = ScriptEditorMarkdownPaste.normalizedTextIfMarkdown(pastedString)
+        else {
+            super.paste(sender)
+            return
+        }
+
+        insertText(transformed, replacementRange: selectedRange())
     }
 }
 
@@ -359,5 +405,20 @@ enum ScriptEditorCueStyling {
                 range: range
             )
         }
+    }
+
+    static func typingAttributes(
+        forInsertionLocation location: Int,
+        in text: String,
+        baseAttributes: [NSAttributedString.Key: Any],
+        cueAttributes: [NSAttributedString.Key: Any]
+    ) -> [NSAttributedString.Key: Any] {
+        for range in cueRanges(in: text) {
+            if location > range.location && location < NSMaxRange(range) {
+                return cueAttributes
+            }
+        }
+
+        return baseAttributes
     }
 }
