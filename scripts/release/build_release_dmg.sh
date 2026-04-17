@@ -240,9 +240,11 @@ resign_embedded_sparkle "$APP_PATH"
 VERSION="$(defaults read "$APP_PATH/Contents/Info" CFBundleShortVersionString)"
 BUILD="$(defaults read "$APP_PATH/Contents/Info" CFBundleVersion)"
 TAG="${RELEASE_TAG:-v$VERSION}"
+RELEASE_LABEL="${TAG#v}"
+TAG_BASE_VERSION="${RELEASE_LABEL%%-*}"
 RELEASE_DATE="$(date -u +%Y-%m-%d)"
-DMG_NAME="${APP_NAME}-${VERSION}.dmg"
-ZIP_NAME="${APP_NAME}-${VERSION}.zip"
+DMG_NAME="${APP_NAME}-${RELEASE_LABEL}.dmg"
+ZIP_NAME="${APP_NAME}-${RELEASE_LABEL}.zip"
 DMG_PATH="$OUTPUT_DIR/$DMG_NAME"
 ZIP_PATH="$OUTPUT_DIR/$ZIP_NAME"
 APPCAST_PATH="$OUTPUT_DIR/$APPCAST_FILENAME"
@@ -252,6 +254,37 @@ IS_PRERELEASE=false
 
 if [[ "$TAG" == *"-beta."* ]]; then
   IS_PRERELEASE=true
+fi
+
+normalize_version() {
+  local version="$1"
+  local parts=()
+  local part
+
+  IFS='.' read -r -a parts <<< "$version"
+
+  for part in "${parts[@]}"; do
+    if [[ ! "$part" =~ ^[0-9]+$ ]]; then
+      echo "error: version '$version' is not numeric dot-separated" >&2
+      exit 1
+    fi
+  done
+
+  while [[ "${#parts[@]}" -lt 3 ]]; do
+    parts+=("0")
+  done
+
+  printf '%s.%s.%s\n' "${parts[0]}" "${parts[1]}" "${parts[2]}"
+}
+
+NORMALIZED_APP_VERSION="$(normalize_version "$VERSION")"
+NORMALIZED_TAG_BASE_VERSION="$(normalize_version "$TAG_BASE_VERSION")"
+
+if [[ "$NORMALIZED_APP_VERSION" != "$NORMALIZED_TAG_BASE_VERSION" ]]; then
+  echo "error: release tag '$TAG' does not match app version '$VERSION'" >&2
+  echo "       normalized tag base version: $NORMALIZED_TAG_BASE_VERSION" >&2
+  echo "       normalized app version:      $NORMALIZED_APP_VERSION" >&2
+  exit 1
 fi
 
 rm -f "$DMG_PATH" "$ZIP_PATH" "$APPCAST_PATH"
@@ -266,7 +299,7 @@ ln -s /Applications "$STAGING_DIR/Applications"
 
 echo "==> Creating DMG"
 hdiutil create \
-  -volname "$APP_NAME $VERSION" \
+  -volname "$APP_NAME $RELEASE_LABEL" \
   -srcfolder "$STAGING_DIR" \
   -ov \
   -format UDZO \
@@ -338,6 +371,7 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "version=$VERSION"
     echo "build=$BUILD"
     echo "tag=$TAG"
+    echo "release_label=$RELEASE_LABEL"
     echo "release_date=$RELEASE_DATE"
     echo "dmg_path=$DMG_PATH"
     echo "dmg_name=$DMG_NAME"
@@ -356,6 +390,7 @@ echo "Done."
 echo "Version:         $VERSION"
 echo "Build:           $BUILD"
 echo "Tag:             $TAG"
+echo "Release label:   $RELEASE_LABEL"
 echo "Release date:    $RELEASE_DATE"
 echo "DMG:             $DMG_PATH"
 echo "Sparkle ZIP:     $ZIP_PATH"
