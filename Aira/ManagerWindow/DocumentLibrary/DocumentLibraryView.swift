@@ -1,576 +1,667 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
-import AppKit
 
 struct DocumentLibraryView: View {
-    @EnvironmentObject var appState: AppState
-    @Environment(\.managerFontScale) private var managerFontScale
-    let filter: SidebarNav
-    var onEdit: (Script) -> Void
-    var onNewScript: () -> Void
-    var onCast: (UUID) -> Void
-    var onImportScript: () -> Void
+  private enum DeleteConfirmation: Identifiable {
+    case single(ScriptMeta)
+    case bulk(count: Int)
 
-    @State private var isDragTargeted: Bool = false
-    @State private var pendingDelete: ScriptMeta? = nil
-    @State private var isBulkDeleteConfirmationPresented: Bool = false
-    @State private var libraryErrorMessage: String? = nil
-    @State private var bulkSelection = DocumentLibraryBulkSelection()
-    @State private var escapeKeyMonitor: Any?
-    @State private var isSelectAllHovered: Bool = false
+    var id: String {
+      switch self {
+      case .single(let meta):
+        return "single-\(meta.id.uuidString)"
+      case .bulk(let count):
+        return "bulk-\(count)"
+      }
+    }
+  }
 
-    var filteredScripts: [ScriptMeta] {
-        DocumentLibraryFilterLogic.filteredScripts(
-            scripts: appState.scripts,
-            filter: filter,
-            collections: appState.collections
+  @EnvironmentObject var appState: AppState
+  @Environment(\.managerFontScale) private var managerFontScale
+  let filter: SidebarNav
+  var onEdit: (Script) -> Void
+  var onNewScript: () -> Void
+  var onCast: (UUID) -> Void
+  var onImportScript: () -> Void
+
+  @State private var isDragTargeted: Bool = false
+  @State private var deleteConfirmation: DeleteConfirmation? = nil
+  @State private var libraryErrorMessage: String? = nil
+  @State private var bulkSelection = DocumentLibraryBulkSelection()
+  @State private var escapeKeyMonitor: Any?
+  @State private var isSelectAllHovered: Bool = false
+
+  var filteredScripts: [ScriptMeta] {
+    DocumentLibraryFilterLogic.filteredScripts(
+      scripts: appState.scripts,
+      filter: filter,
+      collections: appState.collections
+    )
+  }
+
+  var pageTitle: String {
+    switch filter {
+    case .allScripts: return "Scripts"
+    case .starred: return "Starred"
+    case .recent: return "Recent"
+    case .collection(let id):
+      return appState.collections.first(where: { $0.id == id })?.name ?? "Collection"
+    }
+  }
+
+  var pageSubtitle: String {
+    switch filter {
+    case .allScripts: return "Manage and organize your presentation scripts"
+    case .starred: return "Scripts you've starred"
+    case .recent: return "Recently edited scripts"
+    case .collection: return "Scripts in this collection"
+    }
+  }
+
+  let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+
+  private var visibleScriptIDs: [UUID] {
+    filteredScripts.map(\.id)
+  }
+
+  private var selectedScriptCount: Int {
+    bulkSelection.selectedScriptIDs.count
+  }
+
+  private var showsBulkSelectionControls: Bool {
+    DocumentLibrarySessionRules.showsBulkSelectionControls(
+      sessionActive: appState.sessionActive,
+      visibleScriptCount: visibleScriptIDs.count
+    )
+  }
+
+  private var deletionIsAvailable: Bool {
+    DocumentLibrarySessionRules.allowsDeletion(sessionActive: appState.sessionActive)
+  }
+
+  private func scaled(_ size: CGFloat) -> CGFloat {
+    size * managerFontScale
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+
+      // MARK: Header
+      HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text(pageTitle)
+            .font(.custom("IndieFlower", size: scaled(36)))
+            .foregroundStyle(Color("colorText"))
+          Text(pageSubtitle)
+            .font(.custom("Inter-Regular", size: scaled(14)))
+            .foregroundStyle(Color("colorMuted"))
+        }
+        Spacer()
+        Button {
+          onNewScript()
+        } label: {
+          Label("New Script", systemImage: "plus")
+        }
+        .buttonStyle(AiraPrimaryButtonStyle())
+
+        Button {
+          onImportScript()
+        } label: {
+          Label("Import Script", systemImage: "square.and.arrow.down")
+        }
+        .buttonStyle(AiraSecondaryButtonStyle())
+      }
+      .padding(.horizontal, 32)
+      .padding(.top, 32)
+      .padding(.bottom, 18)
+
+      selectionBar
+
+      // MARK: Content
+      if appState.scripts.isEmpty {
+        Spacer()
+        EmptyLibraryView(onNewScript: onNewScript)
+        Spacer()
+      } else if filteredScripts.isEmpty {
+        Spacer()
+        EmptyFilteredLibraryView(filter: filter, onNewScript: onNewScript)
+        Spacer()
+      } else {
+        ScrollView {
+          LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(filteredScripts) { meta in
+              ScriptCardView(
+                meta: meta,
+                isSelected: bulkSelection.selectedScriptIDs.contains(meta.id),
+                showsSelectionControls: !appState.sessionActive && bulkSelection.isSelectionMode,
+                selectionIsAvailable: !appState.sessionActive,
+                editingIsAvailable: DocumentLibrarySessionRules.allowsEditing(
+                  scriptID: meta.id,
+                  activeSessionScriptIDs: appState.activeSessionScriptIDs
+                ),
+                deletionIsAvailable: deletionIsAvailable,
+                onEdit: {
+                  editScript(meta.id)
+                },
+                onCast: {
+                  onCast(meta.id)
+                },
+                onDelete: {
+                  if deletionIsAvailable {
+                    deleteConfirmation = .single(meta)
+                  } else {
+                    libraryErrorMessage = "End the active session before deleting scripts."
+                  }
+                },
+                onDuplicate: {
+                  duplicateScript(meta.id)
+                },
+                isInCollection: { collectionID in
+                  scriptIsInCollection(meta.id, collectionID: collectionID)
+                },
+                onSetCollectionMemberships: { collectionIDs in
+                  setScriptCollections(meta.id, collectionIDs: collectionIDs)
+                },
+                onToggleStarred: {
+                  toggleStarred(meta.id)
+                },
+                onToggleSelection: {
+                  bulkSelection.toggleSingle(meta.id)
+                },
+                onCardTap: {
+                  handleCardTap(for: meta.id)
+                }
+              )
+            }
+          }
+          .padding(.horizontal, 32)
+          .padding(.bottom, 32)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .onDrop(of: [UTType.fileURL], isTargeted: $isDragTargeted) { providers in
+      handleDrop(providers: providers)
+    }
+    .overlay(alignment: .topLeading) {
+      if isDragTargeted {
+        RoundedRectangle(cornerRadius: 12)
+          .stroke(Color("colorPrimary"), lineWidth: 2)
+          .padding(8)
+          .allowsHitTesting(false)
+      }
+    }
+    .alert("Library Action Failed", isPresented: libraryErrorBinding) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(libraryErrorMessage ?? "Please try again.")
+    }
+    .overlay {
+      if let deleteConfirmation {
+        deleteConfirmationOverlay(deleteConfirmation)
+      }
+    }
+    .onChange(of: visibleScriptIDs) { _, newVisibleIDs in
+      bulkSelection.selectedScriptIDs = bulkSelection.selectedScriptIDs.intersection(
+        Set(newVisibleIDs))
+      if bulkSelection.selectedScriptIDs.isEmpty {
+        bulkSelection.lastSelectedScriptID = nil
+      }
+    }
+    .onChange(of: appState.sessionActive) { _, isActive in
+      guard isActive else { return }
+      bulkSelection = DocumentLibraryBulkSelection()
+      deleteConfirmation = nil
+    }
+    .onAppear {
+      installEscapeKeyMonitor()
+    }
+    .onDisappear {
+      removeEscapeKeyMonitor()
+    }
+  }
+
+  private var selectionBar: some View {
+    HStack {
+      Button {
+        bulkSelection.toggleSelectAll(visibleScriptIDs: visibleScriptIDs)
+      } label: {
+        HStack(spacing: 10) {
+          selectAllIndicator
+          Text("Select All")
+            .font(.custom("CrimsonText-Regular", size: scaled(15)))
+            .foregroundStyle(Color("colorText"))
+        }
+      }
+      .buttonStyle(.plain)
+      .opacity(
+        showsBulkSelectionControls
+          ? ((isSelectAllHovered || bulkSelection.isSelectionMode) ? 1 : 0.45)
+          : 0.3
+      )
+      .disabled(!showsBulkSelectionControls)
+      .onHover { isHovering in
+        isSelectAllHovered = isHovering
+      }
+
+      Spacer()
+
+      Button {
+        deleteConfirmation = .bulk(count: selectedScriptCount)
+      } label: {
+        Image(systemName: "trash")
+          .font(.system(size: 15, weight: .semibold))
+          .foregroundStyle(Color("colorSecondary"))
+          .padding(10)
+          .background(Color("colorSurface").opacity(0.9))
+          .clipShape(RoundedRectangle(cornerRadius: 10))
+      }
+      .buttonStyle(.plain)
+      .opacity(
+        showsBulkSelectionControls
+          ? (bulkSelection.isSelectionMode ? 1 : 0)
+          : 0.18
+      )
+      .disabled(!showsBulkSelectionControls || !bulkSelection.isSelectionMode)
+    }
+    .padding(.horizontal, 32)
+    .padding(.bottom, 18)
+  }
+
+  private var selectAllIndicator: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 4)
+        .fill(Color("colorSurface").opacity(0.95))
+        .frame(width: 18, height: 18)
+        .overlay(
+          RoundedRectangle(cornerRadius: 4)
+            .stroke(Color("colorText").opacity(0.28), lineWidth: 1.5)
         )
+
+      switch bulkSelection.selectAllState(visibleScriptIDs: visibleScriptIDs) {
+      case .none:
+        EmptyView()
+      case .mixed:
+        RoundedRectangle(cornerRadius: 1)
+          .fill(Color("colorPrimary"))
+          .frame(width: 10, height: 2.5)
+      case .all:
+        Image(systemName: "checkmark")
+          .font(.system(size: 11, weight: .bold))
+          .foregroundStyle(Color("colorPrimary"))
+      }
+    }
+  }
+
+  private var libraryErrorBinding: Binding<Bool> {
+    Binding(
+      get: { libraryErrorMessage != nil },
+      set: { isPresented in
+        if !isPresented {
+          libraryErrorMessage = nil
+        }
+      }
+    )
+  }
+
+  @ViewBuilder
+  private func deleteConfirmationOverlay(_ confirmation: DeleteConfirmation) -> some View {
+    ZStack {
+      Color.black.opacity(0.22)
+        .ignoresSafeArea()
+        .onTapGesture {
+          deleteConfirmation = nil
+        }
+
+      VStack(alignment: .leading, spacing: 14) {
+        Text(deleteConfirmationTitle(for: confirmation))
+          .font(.custom("IndieFlower", size: scaled(28)))
+          .foregroundStyle(Color("colorText"))
+
+        Text(deleteConfirmationMessage(for: confirmation))
+          .font(.custom("CrimsonText-Regular", size: scaled(16)))
+          .foregroundStyle(Color("colorText").opacity(0.72))
+          .fixedSize(horizontal: false, vertical: true)
+
+        HStack(spacing: 10) {
+          Button("Cancel") {
+            deleteConfirmation = nil
+          }
+          .buttonStyle(AiraSecondaryButtonStyle())
+
+          Button("Delete") {
+            performDeleteConfirmation(confirmation)
+          }
+          .buttonStyle(AiraPrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+      }
+      .padding(24)
+      .frame(width: 360)
+      .background(Color("colorSurface"))
+      .clipShape(RoundedRectangle(cornerRadius: 22))
+      .overlay(
+        RoundedRectangle(cornerRadius: 22)
+          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+      )
+      .shadow(color: Color.black.opacity(0.12), radius: 24, y: 12)
+      .padding(24)
+    }
+  }
+
+  private func deleteConfirmationTitle(for confirmation: DeleteConfirmation) -> String {
+    switch confirmation {
+    case .single:
+      return "Delete Script?"
+    case .bulk(let count):
+      return "Delete \(count) \(count == 1 ? "script" : "scripts")?"
+    }
+  }
+
+  private func deleteConfirmationMessage(for confirmation: DeleteConfirmation) -> String {
+    switch confirmation {
+    case .single(let meta):
+      return "This will permanently delete \"\(meta.title)\" from your library."
+    case .bulk:
+      return "This cannot be undone."
+    }
+  }
+
+  private func performDeleteConfirmation(_ confirmation: DeleteConfirmation) {
+    switch confirmation {
+    case .single(let meta):
+      deleteScript(meta.id)
+    case .bulk:
+      confirmBulkDelete()
+    }
+    deleteConfirmation = nil
+  }
+
+  private func editScript(_ id: UUID) {
+    guard
+      DocumentLibrarySessionRules.allowsEditing(
+        scriptID: id,
+        activeSessionScriptIDs: appState.activeSessionScriptIDs
+      )
+    else {
+      libraryErrorMessage = "End the active session before editing this script."
+      return
     }
 
-    var pageTitle: String {
-        switch filter {
-        case .allScripts:         return "Scripts"
-        case .starred:            return "Starred"
-        case .recent:             return "Recent"
-        case .collection(let id): return appState.collections.first(where: { $0.id == id })?.name ?? "Collection"
-        }
+    do {
+      let script = try appState.loadScript(id: id)
+      onEdit(script)
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func deleteScript(_ id: UUID) {
+    guard deletionIsAvailable else {
+      libraryErrorMessage = "End the active session before deleting scripts."
+      return
     }
 
-    var pageSubtitle: String {
-        switch filter {
-        case .allScripts:  return "Manage and organize your presentation scripts"
-        case .starred:     return "Scripts you've starred"
-        case .recent:      return "Recently edited scripts"
-        case .collection:  return "Scripts in this collection"
-        }
+    do {
+      try appState.deleteScript(id: id)
+      bulkSelection.selectedScriptIDs.remove(id)
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func duplicateScript(_ id: UUID) {
+    do {
+      let script = try appState.duplicateScript(id: id)
+      onEdit(script)
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func setScriptCollections(_ id: UUID, collectionIDs: [UUID]) {
+    do {
+      try appState.updateScriptCollections(id: id, collectionIDs: collectionIDs)
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func scriptIsInCollection(_ scriptID: UUID, collectionID: UUID) -> Bool {
+    do {
+      let script = try appState.readScript(id: scriptID)
+      return script.collectionIds.contains(collectionID)
+    } catch {
+      return appState.collections
+        .first(where: { $0.id == collectionID })?
+        .scriptIds
+        .contains(scriptID) ?? false
+    }
+  }
+
+  private func toggleStarred(_ id: UUID) {
+    do {
+      try appState.toggleStarred(id: id)
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func handleDrop(providers: [NSItemProvider]) -> Bool {
+    guard
+      let provider = providers.first(where: {
+        $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+      })
+    else {
+      return false
     }
 
-    let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+      if let error {
+        Task { @MainActor in
+          libraryErrorMessage = error.localizedDescription
+        }
+        return
+      }
 
-    private var visibleScriptIDs: [UUID] {
-        filteredScripts.map(\.id)
+      let url: URL?
+      switch item {
+      case let data as Data:
+        url = URL(dataRepresentation: data, relativeTo: nil)
+      case let itemURL as URL:
+        url = itemURL
+      case let string as String:
+        url = URL(string: string)
+      default:
+        url = nil
+      }
+
+      guard let url else {
+        Task { @MainActor in
+          libraryErrorMessage = "Aira could not read that dropped file."
+        }
+        return
+      }
+
+      Task { @MainActor in
+        importScript(from: url)
+      }
     }
 
-    private var selectedScriptCount: Int {
-        bulkSelection.selectedScriptIDs.count
+    return true
+  }
+
+  private func importScript(from url: URL) {
+    do {
+      let script = try appState.importScript(
+        from: url,
+        inCollection: DocumentLibraryImportLogic.selectedCollectionID(for: filter)
+      )
+      onEdit(script)
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func handleCardTap(for scriptID: UUID) {
+    let modifier = selectionModifier(for: NSApp.currentEvent?.modifierFlags ?? [])
+    guard modifier != .none else {
+      return
     }
 
-    private var showsBulkSelectionControls: Bool {
-        DocumentLibrarySessionRules.showsBulkSelectionControls(
-            sessionActive: appState.sessionActive,
-            visibleScriptCount: visibleScriptIDs.count
-        )
+    bulkSelection.handleCardSelection(
+      for: scriptID,
+      visibleScriptIDs: visibleScriptIDs,
+      modifier: modifier
+    )
+  }
+
+  private func confirmBulkDelete() {
+    guard deletionIsAvailable else {
+      libraryErrorMessage = "End the active session before deleting scripts."
+      return
     }
 
-    private var deletionIsAvailable: Bool {
-        DocumentLibrarySessionRules.allowsDeletion(sessionActive: appState.sessionActive)
+    do {
+      try bulkSelection.resolveBulkDeleteConfirmation(confirm: true) { scriptID in
+        try appState.deleteScript(id: scriptID)
+      }
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func selectionModifier(for flags: NSEvent.ModifierFlags)
+    -> DocumentLibrarySelectionModifier
+  {
+    if flags.contains(.shift) {
+      return .shift
+    }
+    if flags.contains(.command) {
+      return .command
+    }
+    return .none
+  }
+
+  private func installEscapeKeyMonitor() {
+    guard escapeKeyMonitor == nil else {
+      return
     }
 
-    private func scaled(_ size: CGFloat) -> CGFloat {
-        size * managerFontScale
+    escapeKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      if KeyboardShortcutDisplay.matches(event: event, shortcut: "Escape"),
+        bulkSelection.isSelectionMode
+      {
+        bulkSelection.clear()
+        return nil
+      }
+
+      return event
     }
+  }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-
-            // MARK: Header
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(pageTitle)
-                        .font(.custom("IndieFlower", size: scaled(36)))
-                        .foregroundStyle(Color("colorText"))
-                    Text(pageSubtitle)
-                        .font(.custom("Inter-Regular", size: scaled(14)))
-                        .foregroundStyle(Color("colorMuted"))
-                }
-                Spacer()
-                Button {
-                    onNewScript()
-                } label: {
-                    Label("New Script", systemImage: "plus")
-                }
-                .buttonStyle(AiraPrimaryButtonStyle())
-
-                Button {
-                    onImportScript()
-                } label: {
-                    Label("Import Script", systemImage: "square.and.arrow.down")
-                }
-                .buttonStyle(AiraSecondaryButtonStyle())
-            }
-            .padding(.horizontal, 32)
-            .padding(.top, 32)
-            .padding(.bottom, 18)
-
-            selectionBar
-
-            // MARK: Content
-            if appState.scripts.isEmpty {
-                Spacer()
-                EmptyLibraryView(onNewScript: onNewScript)
-                Spacer()
-            } else if filteredScripts.isEmpty {
-                Spacer()
-                EmptyFilteredLibraryView(filter: filter, onNewScript: onNewScript)
-                Spacer()
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(filteredScripts) { meta in
-                            ScriptCardView(
-                                meta: meta,
-                                isSelected: bulkSelection.selectedScriptIDs.contains(meta.id),
-                                showsSelectionControls: !appState.sessionActive && bulkSelection.isSelectionMode,
-                                selectionIsAvailable: !appState.sessionActive,
-                                editingIsAvailable: DocumentLibrarySessionRules.allowsEditing(
-                                    scriptID: meta.id,
-                                    activeSessionScriptIDs: appState.activeSessionScriptIDs
-                                ),
-                                deletionIsAvailable: deletionIsAvailable,
-                                onEdit: {
-                                    editScript(meta.id)
-                                },
-                                onCast: {
-                                    onCast(meta.id)
-                                },
-                                onDelete: {
-                                    if deletionIsAvailable {
-                                        pendingDelete = meta
-                                    } else {
-                                        libraryErrorMessage = "End the active session before deleting scripts."
-                                    }
-                                },
-                                onDuplicate: {
-                                    duplicateScript(meta.id)
-                                },
-                                onToggleStarred: {
-                                    toggleStarred(meta.id)
-                                },
-                                onToggleSelection: {
-                                    bulkSelection.toggleSingle(meta.id)
-                                },
-                                onCardTap: {
-                                    handleCardTap(for: meta.id)
-                                }
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 32)
-                    .padding(.bottom, 32)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .onDrop(of: [UTType.fileURL], isTargeted: $isDragTargeted) { providers in
-            handleDrop(providers: providers)
-        }
-        .overlay(alignment: .topLeading) {
-            if isDragTargeted {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color("colorPrimary"), lineWidth: 2)
-                    .padding(8)
-                    .allowsHitTesting(false)
-            }
-        }
-        .alert("Delete Script?", isPresented: pendingDeleteBinding) {
-            Button("Delete", role: .destructive) {
-                if let meta = pendingDelete {
-                    deleteScript(meta.id)
-                }
-                pendingDelete = nil
-            }
-            Button("Cancel", role: .cancel) {
-                pendingDelete = nil
-            }
-        } message: {
-            Text("This will permanently delete \"\(pendingDelete?.title ?? "this script")\" from your library.")
-        }
-        .alert(
-            "Delete \(selectedScriptCount) \(selectedScriptCount == 1 ? "script" : "scripts")?",
-            isPresented: $isBulkDeleteConfirmationPresented
-        ) {
-            Button("Delete", role: .destructive) {
-                confirmBulkDelete()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This cannot be undone.")
-        }
-        .alert("Library Action Failed", isPresented: libraryErrorBinding) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(libraryErrorMessage ?? "Please try again.")
-        }
-        .onChange(of: visibleScriptIDs) { _, newVisibleIDs in
-            bulkSelection.selectedScriptIDs = bulkSelection.selectedScriptIDs.intersection(Set(newVisibleIDs))
-            if bulkSelection.selectedScriptIDs.isEmpty {
-                bulkSelection.lastSelectedScriptID = nil
-            }
-        }
-        .onChange(of: appState.sessionActive) { _, isActive in
-            guard isActive else { return }
-            bulkSelection = DocumentLibraryBulkSelection()
-            pendingDelete = nil
-            isBulkDeleteConfirmationPresented = false
-        }
-        .onAppear {
-            installEscapeKeyMonitor()
-        }
-        .onDisappear {
-            removeEscapeKeyMonitor()
-        }
+  private func removeEscapeKeyMonitor() {
+    if let escapeKeyMonitor {
+      NSEvent.removeMonitor(escapeKeyMonitor)
+      self.escapeKeyMonitor = nil
     }
-
-    private var selectionBar: some View {
-        HStack {
-            Button {
-                bulkSelection.toggleSelectAll(visibleScriptIDs: visibleScriptIDs)
-            } label: {
-                HStack(spacing: 10) {
-                    selectAllIndicator
-                    Text("Select All")
-                        .font(.custom("CrimsonText-Regular", size: scaled(15)))
-                        .foregroundStyle(Color("colorText"))
-                }
-            }
-            .buttonStyle(.plain)
-            .opacity(
-                showsBulkSelectionControls
-                    ? ((isSelectAllHovered || bulkSelection.isSelectionMode) ? 1 : 0.45)
-                    : 0.3
-            )
-            .disabled(!showsBulkSelectionControls)
-            .onHover { isHovering in
-                isSelectAllHovered = isHovering
-            }
-
-            Spacer()
-
-            Button {
-                isBulkDeleteConfirmationPresented = true
-            } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color("colorSecondary"))
-                    .padding(10)
-                    .background(Color("colorSurface").opacity(0.9))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-            .buttonStyle(.plain)
-            .opacity(
-                showsBulkSelectionControls
-                    ? (bulkSelection.isSelectionMode ? 1 : 0)
-                    : 0.18
-            )
-            .disabled(!showsBulkSelectionControls || !bulkSelection.isSelectionMode)
-        }
-        .padding(.horizontal, 32)
-        .padding(.bottom, 18)
-    }
-
-    private var selectAllIndicator: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 4)
-                .fill(Color("colorSurface").opacity(0.95))
-                .frame(width: 18, height: 18)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color("colorText").opacity(0.28), lineWidth: 1.5)
-                )
-
-            switch bulkSelection.selectAllState(visibleScriptIDs: visibleScriptIDs) {
-            case .none:
-                EmptyView()
-            case .mixed:
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(Color("colorPrimary"))
-                    .frame(width: 10, height: 2.5)
-            case .all:
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Color("colorPrimary"))
-            }
-        }
-    }
-
-    private var pendingDeleteBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDelete != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDelete = nil
-                }
-            }
-        )
-    }
-
-    private var libraryErrorBinding: Binding<Bool> {
-        Binding(
-            get: { libraryErrorMessage != nil },
-            set: { isPresented in
-                if !isPresented {
-                    libraryErrorMessage = nil
-                }
-            }
-        )
-    }
-
-    private func editScript(_ id: UUID) {
-        guard DocumentLibrarySessionRules.allowsEditing(
-            scriptID: id,
-            activeSessionScriptIDs: appState.activeSessionScriptIDs
-        ) else {
-            libraryErrorMessage = "End the active session before editing this script."
-            return
-        }
-
-        do {
-            let script = try appState.loadScript(id: id)
-            onEdit(script)
-        } catch {
-            libraryErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func deleteScript(_ id: UUID) {
-        guard deletionIsAvailable else {
-            libraryErrorMessage = "End the active session before deleting scripts."
-            return
-        }
-
-        do {
-            try appState.deleteScript(id: id)
-            bulkSelection.selectedScriptIDs.remove(id)
-        } catch {
-            libraryErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func duplicateScript(_ id: UUID) {
-        do {
-            let script = try appState.duplicateScript(id: id)
-            onEdit(script)
-        } catch {
-            libraryErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func toggleStarred(_ id: UUID) {
-        do {
-            try appState.toggleStarred(id: id)
-        } catch {
-            libraryErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func handleDrop(providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) }) else {
-            return false
-        }
-
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-            if let error {
-                Task { @MainActor in
-                    libraryErrorMessage = error.localizedDescription
-                }
-                return
-            }
-
-            let url: URL?
-            switch item {
-            case let data as Data:
-                url = URL(dataRepresentation: data, relativeTo: nil)
-            case let itemURL as URL:
-                url = itemURL
-            case let string as String:
-                url = URL(string: string)
-            default:
-                url = nil
-            }
-
-            guard let url else {
-                Task { @MainActor in
-                    libraryErrorMessage = "Aira could not read that dropped file."
-                }
-                return
-            }
-
-            Task { @MainActor in
-                importScript(from: url)
-            }
-        }
-
-        return true
-    }
-
-    private func importScript(from url: URL) {
-        guard url.pathExtension.lowercased() == "txt" else {
-            libraryErrorMessage = "Only .txt files can be imported."
-            return
-        }
-
-        do {
-            let script = try appState.importScript(from: url)
-            onEdit(script)
-        } catch {
-            libraryErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func handleCardTap(for scriptID: UUID) {
-        let modifier = selectionModifier(for: NSApp.currentEvent?.modifierFlags ?? [])
-        guard modifier != .none else {
-            return
-        }
-
-        bulkSelection.handleCardSelection(
-            for: scriptID,
-            visibleScriptIDs: visibleScriptIDs,
-            modifier: modifier
-        )
-    }
-
-    private func confirmBulkDelete() {
-        guard deletionIsAvailable else {
-            libraryErrorMessage = "End the active session before deleting scripts."
-            return
-        }
-
-        do {
-            try bulkSelection.resolveBulkDeleteConfirmation(confirm: true) { scriptID in
-                try appState.deleteScript(id: scriptID)
-            }
-        } catch {
-            libraryErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func selectionModifier(for flags: NSEvent.ModifierFlags) -> DocumentLibrarySelectionModifier {
-        if flags.contains(.shift) {
-            return .shift
-        }
-        if flags.contains(.command) {
-            return .command
-        }
-        return .none
-    }
-
-    private func installEscapeKeyMonitor() {
-        guard escapeKeyMonitor == nil else {
-            return
-        }
-
-        escapeKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if KeyboardShortcutDisplay.matches(event: event, shortcut: "Escape"), bulkSelection.isSelectionMode {
-                bulkSelection.clear()
-                return nil
-            }
-
-            return event
-        }
-    }
-
-    private func removeEscapeKeyMonitor() {
-        if let escapeKeyMonitor {
-            NSEvent.removeMonitor(escapeKeyMonitor)
-            self.escapeKeyMonitor = nil
-        }
-    }
+  }
 }
 
 // MARK: - Empty State
 
 struct EmptyLibraryView: View {
-    @Environment(\.managerFontScale) private var managerFontScale
-    var onNewScript: () -> Void
+  @Environment(\.managerFontScale) private var managerFontScale
+  var onNewScript: () -> Void
 
-    private func scaled(_ size: CGFloat) -> CGFloat {
-        size * managerFontScale
-    }
+  private func scaled(_ size: CGFloat) -> CGFloat {
+    size * managerFontScale
+  }
 
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 48))
-                .foregroundStyle(Color("colorMuted"))
-            Text("Your first script is waiting")
-                .font(.custom("IndieFlower", size: scaled(28)))
-                .foregroundStyle(Color("colorText"))
-            Text("Create a script to get started.")
-                .font(.custom("CrimsonText-Regular", size: scaled(16)))
-                .foregroundStyle(Color("colorMuted"))
-            Button("Create Script") {
-                onNewScript()
-            }
-            .buttonStyle(AiraPrimaryButtonStyle())
-        }
-        .frame(maxWidth: .infinity)
+  var body: some View {
+    VStack(spacing: 16) {
+      Image(systemName: "doc.text")
+        .font(.system(size: 48))
+        .foregroundStyle(Color("colorMuted"))
+      Text("Your first script is waiting")
+        .font(.custom("IndieFlower", size: scaled(28)))
+        .foregroundStyle(Color("colorText"))
+      Text("Create a script to get started.")
+        .font(.custom("CrimsonText-Regular", size: scaled(16)))
+        .foregroundStyle(Color("colorMuted"))
+      Button("Create Script") {
+        onNewScript()
+      }
+      .buttonStyle(AiraPrimaryButtonStyle())
     }
+    .frame(maxWidth: .infinity)
+  }
 }
 
 struct EmptyFilteredLibraryView: View {
-    @Environment(\.managerFontScale) private var managerFontScale
-    let filter: SidebarNav
-    var onNewScript: () -> Void
+  @Environment(\.managerFontScale) private var managerFontScale
+  let filter: SidebarNav
+  var onNewScript: () -> Void
 
-    private func scaled(_ size: CGFloat) -> CGFloat {
-        size * managerFontScale
+  private func scaled(_ size: CGFloat) -> CGFloat {
+    size * managerFontScale
+  }
+
+  private var title: String {
+    switch filter {
+    case .collection:
+      return "This collection is empty"
+    case .starred:
+      return "No starred scripts yet"
+    case .recent:
+      return "No recent scripts yet"
+    case .allScripts:
+      return "Your first script is waiting"
     }
+  }
 
-    private var title: String {
-        switch filter {
-        case .collection:
-            return "This collection is empty"
-        case .starred:
-            return "No starred scripts yet"
-        case .recent:
-            return "No recent scripts yet"
-        case .allScripts:
-            return "Your first script is waiting"
+  private var subtitle: String {
+    switch filter {
+    case .collection:
+      return "Scripts only appear here when they explicitly belong to this collection."
+    case .starred:
+      return "Star a script to keep it close at hand."
+    case .recent:
+      return "Your recently edited scripts will appear here."
+    case .allScripts:
+      return "Create a script to get started."
+    }
+  }
+
+  var body: some View {
+    VStack(spacing: 16) {
+      Image(systemName: "folder")
+        .font(.system(size: 44))
+        .foregroundStyle(Color("colorMuted"))
+      Text(title)
+        .font(.custom("IndieFlower", size: scaled(28)))
+        .foregroundStyle(Color("colorText"))
+      Text(subtitle)
+        .font(.custom("CrimsonText-Regular", size: scaled(16)))
+        .foregroundStyle(Color("colorMuted"))
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: 320)
+      if showsCreateButton {
+        Button("Create Script") {
+          onNewScript()
         }
+        .buttonStyle(AiraPrimaryButtonStyle())
+      }
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  private var showsCreateButton: Bool {
+    if case .collection = filter {
+      return true
     }
 
-    private var subtitle: String {
-        switch filter {
-        case .collection:
-            return "Scripts only appear here when they explicitly belong to this collection."
-        case .starred:
-            return "Star a script to keep it close at hand."
-        case .recent:
-            return "Your recently edited scripts will appear here."
-        case .allScripts:
-            return "Create a script to get started."
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "folder")
-                .font(.system(size: 44))
-                .foregroundStyle(Color("colorMuted"))
-            Text(title)
-                .font(.custom("IndieFlower", size: scaled(28)))
-                .foregroundStyle(Color("colorText"))
-            Text(subtitle)
-                .font(.custom("CrimsonText-Regular", size: scaled(16)))
-                .foregroundStyle(Color("colorMuted"))
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 320)
-            if showsCreateButton {
-                Button("Create Script") {
-                    onNewScript()
-                }
-                .buttonStyle(AiraPrimaryButtonStyle())
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var showsCreateButton: Bool {
-        if case .collection = filter {
-            return true
-        }
-
-        return false
-    }
+    return false
+  }
 }
