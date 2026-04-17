@@ -16,7 +16,8 @@ final class AppUpdaterController: NSObject, ObservableObject {
     let configuration = AppUpdaterConfiguration.from(bundle: bundle)
     self.configuration = configuration
 
-    guard configuration.isConfigured else {
+    let isTestRun = ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
+    guard configuration.isConfigured && !isTestRun else {
       self.updater = nil
       self.userDriver = nil
       super.init()

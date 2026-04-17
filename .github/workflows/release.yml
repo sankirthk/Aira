@@ -42,7 +42,8 @@ jobs:
             -project Aira.xcodeproj \
             -scheme Aira \
             -destination "platform=macOS" \
-            -resultBundlePath build/TestResults/Aira.xcresult
+            -resultBundlePath build/TestResults/Aira.xcresult \
+            CODE_SIGN_ENTITLEMENTS=""
 
   package-and-notarize:
     name: Package And Notarize
