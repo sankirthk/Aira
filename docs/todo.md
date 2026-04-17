@@ -20,6 +20,8 @@ Work one task at a time. Read the REQ, read the relevant design/architecture sec
 - [x] Add NSMicrophoneUsageDescription and NSSpeechRecognitionUsageDescription to Info.plist
 - [x] Bundle custom fonts: Manrope-Bold, Inter-Regular, CrimsonText-Regular, IndieFlower-Regular — register all in Info.plist under `Fonts provided by application`
 - [x] Add color assets to Assets.xcassets (colorPrimary, colorSecondary, colorBackground, colorSurface, colorText, colorMuted, colorWarm — light + dark variants)
+- [ ] **T-000a** Main repository CI: add a single GitHub Actions workflow for pull requests and `main` pushes that checks Swift formatting, runs lint-style checks, runs `xcodebuild build`, and runs `xcodebuild test` for the `Aira` scheme. Keep this separate from the tag-driven release workflow.
+- [ ] **T-000b** Local pre-commit guard: add a tracked Git hook and installer that run the same core validation path as CI before commits, so obvious format/lint/build/test failures are blocked locally unless explicitly bypassed.
 
 ---
 

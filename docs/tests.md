@@ -11,6 +11,8 @@ Test status:
 
 Tests live in the `AiraTests` target in Xcode (XCTest).
 
+Repository automation is tracked here when it materially gates shipping quality. CI checks are not a substitute for the app's unit/integration/manual coverage, but they do enforce formatting, linting, and test execution on shared branches.
+
 ---
 
 ## Unit Tests
@@ -259,6 +261,8 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-048 | `Check for Updates…` is enabled only when the built app bundle resolves a valid Sparkle feed URL and public key | `[ ]` |
 | MT-049 | The branded update prompt appears for both `update found` and `ready to install` states, and `Cancel` cleanly dismisses without starting installation | `[ ]` |
 | MT-050 | A tagged release publishes DMG, ZIP, and `appcast.xml`, and an installed build successfully discovers the update from `https://raw.githubusercontent.com/sankirthk/aira-releases/main/appcast.xml` | `[ ]` |
+| MT-051 | Main-repo CI runs Swift formatting checks, lint-style checks, `xcodebuild build`, and `xcodebuild test` on pull requests and pushes to `main` | `[ ]` |
+| MT-052 | Installed pre-commit hook blocks a commit when formatting, linting, build, or tests fail, and allows the commit when the full local validation path passes | `[ ]` |
 
 ### Planned Refactor Coverage (Tasks T-025z ... T-025ag)
 
