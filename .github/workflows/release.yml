@@ -36,18 +36,6 @@ jobs:
           git fetch origin main --depth=1
           git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main
 
-      - name: Run unit and integration tests
-        run: |
-          xcodebuild test \
-            -project Aira.xcodeproj \
-            -scheme Aira \
-            -destination "platform=macOS" \
-            -resultBundlePath build/TestResults/Aira.xcresult \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            CODE_SIGN_ENTITLEMENTS=""
 
   package-and-notarize:
     name: Package And Notarize

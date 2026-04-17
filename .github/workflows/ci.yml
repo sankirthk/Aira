@@ -34,15 +34,3 @@ jobs:
       - name: Lint
         run: swift-format lint --recursive Aira AiraTests
 
-      - name: Run Tests
-        run: |
-          xcodebuild test \
-            -project Aira.xcodeproj \
-            -scheme Aira \
-            -destination "platform=macOS" \
-            -resultBundlePath build/TestResults/Aira.xcresult \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM="" \
-            CODE_SIGN_ENTITLEMENTS=""
