@@ -282,7 +282,7 @@ jobs:
             --notes "$RELEASE_NOTES_PATH" \
             --existing aira-site/src/content/release.ts \
             --output aira-site/src/content/release.ts \
-            --changelog-file aira-site/src/app/components/ChangeLogPage.tsx \
+            --changelog-file aira-site/src/pages/ChangelogPage.tsx \
             --tag "$TAG" \
             --release-date "$RELEASE_DATE" \
             --dmg-url "$DMG_URL" \
@@ -294,9 +294,9 @@ jobs:
           TAG: ${{ needs.package-and-notarize.outputs.tag }}
         run: |
           TARGET_BRANCH="$(git branch --show-current)"
-          git add src/content/release.ts src/app/components/ChangeLogPage.tsx
+          git add src/content/release.ts src/pages/ChangelogPage.tsx
 
-          if git diff --cached --quiet -- src/content/release.ts src/app/components/ChangeLogPage.tsx; then
+          if git diff --cached --quiet -- src/content/release.ts src/pages/ChangelogPage.tsx; then
             exit 0
           fi
 
