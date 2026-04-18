@@ -128,7 +128,6 @@ const templatePath = getArg("--template");
 const notesPath = getArg("--notes");
 const existingPath = getArg("--existing");
 const outputPath = getArg("--output");
-const changelogFilePath = getArg("--changelog-file");
 const tag = getArg("--tag");
 const releaseDate = getArg("--release-date");
 const dmgUrl = getArg("--dmg-url");
@@ -140,7 +139,6 @@ const tagKind = tag.includes("-beta.") ? "beta" : "release";
 const template = fs.readFileSync(templatePath, "utf8");
 const notes = fs.readFileSync(notesPath, "utf8");
 const existing = fs.readFileSync(existingPath, "utf8");
-const changelogFile = fs.readFileSync(changelogFilePath, "utf8");
 
 const summaryItems = extractBullets(extractSection(notes, "Highlights"));
 const changes = extractBullets(extractSection(notes, "Site Changelog")).map(parseChangeBullet);
@@ -153,11 +151,7 @@ const latestReleaseBlock = template
   .replaceAll("__RELEASE_NOTES_URL__", releaseNotesUrl)
   .replace("__SUMMARY_ITEMS__", renderSummaryItems(summaryItems));
 
-// Write updated latestRelease metadata to release.ts (replaces just the latestRelease block)
-fs.writeFileSync(outputPath, `${latestReleaseBlock}\n`);
-
-// Read existing changelog entries from ChangeLogPage.tsx
-const changelogMatch = changelogFile.match(
+const changelogMatch = existing.match(
   /export const changelog(?:\s*:\s*[^=]+)?\s*=\s*\[([\s\S]*?)\];([\s\S]*)$/
 );
 
@@ -166,25 +160,12 @@ const existingEntries = changelogMatch
   : [];
 const trailingContent = changelogMatch ? changelogMatch[2] : "\n";
 
-// Build the updated changelog block and splice it back into ChangeLogPage.tsx
-let changelogBlock = `${renderEntry(version, releaseDate, tagKind, changes)}\n`;
+let output = `${latestReleaseBlock}\n\n${renderEntry(version, releaseDate, tagKind, changes)}\n`;
 
 if (existingEntries.length > 0) {
-  changelogBlock += `${existingEntries.map((entry) => `  ${entry},`).join("\n")}\n`;
+  output += `${existingEntries.map((entry) => `  ${entry},`).join("\n")}\n`;
 }
 
-changelogBlock += `];${trailingContent}`;
+output += `];${trailingContent}`;
 
-let updatedChangelogFile;
-if (changelogMatch) {
-  // Replace the existing changelog export in the file
-  updatedChangelogFile = changelogFile.replace(
-    /export const changelog(?:\s*:\s*[^=]+)?\s*=\s*\[([\s\S]*?)\];([\s\S]*)$/,
-    changelogBlock
-  );
-} else {
-  // Append changelog export if not found
-  updatedChangelogFile = `${changelogFile}\n${changelogBlock}`;
-}
-
-fs.writeFileSync(changelogFilePath, updatedChangelogFile);
+fs.writeFileSync(outputPath, output);
