@@ -151,15 +151,14 @@ const latestReleaseBlock = template
   .replaceAll("__RELEASE_NOTES_URL__", releaseNotesUrl)
   .replace("__SUMMARY_ITEMS__", renderSummaryItems(summaryItems));
 
-const changelogMatch = existing.match(/export const changelog = \[([\s\S]*?)\];([\s\S]*)$/);
-if (!changelogMatch) {
-  throw new Error(`could not find "export const changelog = [" block in ${existingPath}`);
-}
-
-const existingEntries = splitEntries(changelogMatch[1]).filter(
-  (entry) => !entry.includes(`version: ${jsonString(version)}`)
+const changelogMatch = existing.match(
+  /export const changelog(?:\s*:\s*[^=]+)?\s*=\s*\[([\s\S]*?)\];([\s\S]*)$/
 );
-const trailingContent = changelogMatch[2];
+
+const existingEntries = changelogMatch
+  ? splitEntries(changelogMatch[1]).filter((entry) => !entry.includes(`version: ${jsonString(version)}`))
+  : [];
+const trailingContent = changelogMatch ? changelogMatch[2] : "\n";
 
 let output = `${latestReleaseBlock}\n\n${renderEntry(version, releaseDate, tagKind, changes)}\n`;
 
