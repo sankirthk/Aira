@@ -282,11 +282,20 @@ jobs:
             --notes "$RELEASE_NOTES_PATH" \
             --existing aira-site/src/content/release.ts \
             --output aira-site/src/content/release.ts \
-            --changelog-file aira-site/src/pages/ChangelogPage.tsx \
             --tag "$TAG" \
             --release-date "$RELEASE_DATE" \
             --dmg-url "$DMG_URL" \
             --release-notes-url "$RELEASE_NOTES_URL"
+
+      - name: Install site dependencies
+        working-directory: aira-site
+        run: bun install --frozen-lockfile
+
+      - name: Format and lint generated site files
+        working-directory: aira-site
+        run: |
+          bun run format
+          bun run lint --apply
 
       - name: Commit and push site metadata
         working-directory: aira-site
@@ -294,9 +303,9 @@ jobs:
           TAG: ${{ needs.package-and-notarize.outputs.tag }}
         run: |
           TARGET_BRANCH="$(git branch --show-current)"
-          git add src/content/release.ts src/pages/ChangelogPage.tsx
+          git add src/content/release.ts
 
-          if git diff --cached --quiet -- src/content/release.ts src/pages/ChangelogPage.tsx; then
+          if git diff --cached --quiet -- src/content/release.ts; then
             exit 0
           fi
 
