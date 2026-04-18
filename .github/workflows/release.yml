@@ -287,6 +287,11 @@ jobs:
             --dmg-url "$DMG_URL" \
             --release-notes-url "$RELEASE_NOTES_URL"
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install site dependencies
         working-directory: aira-site
         run: bun install --frozen-lockfile
