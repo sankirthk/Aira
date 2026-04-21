@@ -483,7 +483,7 @@ The appcast and ZIP may live in a separate public distribution repository from t
 **Release triggering:**
 
 - Releases are cut from immutable version tags such as `v1.0.0-beta.1`
-- The GitHub Actions release workflow validates the tagged commit, builds/signs/notarizes the app, generates Sparkle artifacts, and publishes them to `sankirthk/aira-releases`
+- The GitHub Actions release workflow validates the tagged commit with lightweight guardrails, then builds/signs/notarizes the app, generates Sparkle artifacts, and publishes them to `sankirthk/aira-releases`
 - App Store uploads run through a separate workflow that archives the App Store release configuration, exports App Store signing output, uploads that artifact to App Store Connect, and may optionally submit the processed build for review
 
 **Build-variant split:**
@@ -873,7 +873,7 @@ The main app repository should have a single CI workflow that runs on pull reque
 3. run `xcodebuild build` for the `Aira` scheme on macOS
 4. run `xcodebuild test` for the `Aira` scheme on macOS
 
-The release workflow may reuse the same `xcodebuild test` command for tag validation, but release publishing must remain separate from day-to-day CI.
+The release workflow should avoid rerunning full `xcodebuild build` and `xcodebuild test` validation when pull-request CI already enforced them. Release publishing must remain separate from day-to-day CI and should only keep lightweight tag/release-note guardrails before packaging.
 
 ### Unit Tests
 
