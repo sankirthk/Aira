@@ -13,6 +13,12 @@ Tests live in the `AiraTests` target in Xcode (XCTest).
 
 Repository automation is tracked here when it materially gates shipping quality. CI checks are not a substitute for the app's unit/integration/manual coverage, but they do enforce formatting, linting, and test execution on shared branches.
 
+### Repository Automation
+
+| ID | Test | Status |
+|---|---|---|
+| CI-001 | GitHub Actions `ci.yml` runs direct `Aira` build/test and App Store variant build without requiring local signing identities on hosted macOS runners | `[x]` |
+
 ---
 
 ## Unit Tests
