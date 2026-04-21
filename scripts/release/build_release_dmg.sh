@@ -16,13 +16,18 @@ SPARKLE_ARCHIVES_DIR="$WORK_DIR/sparkle-archives"
 OUTPUT_DIR="$ROOT_DIR/build/release"
 KEYCHAIN_PATH="$WORK_DIR/aira-release.keychain-db"
 CERT_PATH="$WORK_DIR/developer-id.p12"
-APPCAST_FILENAME="appcast.xml"
+DEFAULT_APPCAST_FILENAME="appcast.xml"
+BETA_APPCAST_FILENAME="appcast-beta.xml"
+APPCAST_FILENAME="$DEFAULT_APPCAST_FILENAME"
 RELEASE_REPOSITORY="${RELEASE_REPOSITORY:-sankirthk/aira-releases}"
 DEBUG_RELEASE="${DEBUG_RELEASE:-0}"
 RESOLVE_LOG_PATH="$WORK_DIR/resolve-packages.log"
 ARCHIVE_LOG_PATH="$WORK_DIR/archive.log"
 ARCHIVE_XATTR_LOG_PATH="$WORK_DIR/archive-app-xattrs.log"
 SOURCEPACKAGES_XATTR_LOG_PATH="$WORK_DIR/sourcepackages-xattrs.log"
+ACTIVE_APPCAST_CACHE_PATH="$WORK_DIR/active-appcast.xml"
+STABLE_APPCAST_CACHE_PATH="$WORK_DIR/stable-appcast.xml"
+BETA_APPCAST_CACHE_PATH="$WORK_DIR/beta-appcast.xml"
 
 if [[ "$DEBUG_RELEASE" == "1" ]]; then
   set -x
@@ -49,6 +54,122 @@ cleanup() {
   if [[ -f "$KEYCHAIN_PATH" ]]; then
     security delete-keychain "$KEYCHAIN_PATH" >/dev/null 2>&1 || true
   fi
+}
+
+normalize_version() {
+  local version="$1"
+  local parts=()
+  local part
+
+  IFS='.' read -r -a parts <<< "$version"
+
+  for part in "${parts[@]}"; do
+    if [[ ! "$part" =~ ^[0-9]+$ ]]; then
+      echo "error: version '$version' is not numeric dot-separated" >&2
+      exit 1
+    fi
+  done
+
+  while [[ "${#parts[@]}" -lt 3 ]]; do
+    parts+=("0")
+  done
+
+  printf '%s.%s.%s\n' "${parts[0]}" "${parts[1]}" "${parts[2]}"
+}
+
+fetch_existing_appcast_version() {
+  local appcast_path="$1"
+
+  if [[ ! -f "$appcast_path" ]]; then
+    return 0
+  fi
+
+  /usr/bin/python3 - "$appcast_path" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path = sys.argv[1]
+try:
+    root = ET.parse(path).getroot()
+except Exception as exc:
+    print(f"error: failed to parse appcast XML at {path}: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+namespace = {"sparkle": "http://www.andymatuschak.org/xml-namespaces/sparkle"}
+items = root.findall("./channel/item")
+if not items:
+    print(f"error: no <item> entries found in appcast {path}", file=sys.stderr)
+    sys.exit(1)
+
+versions = []
+for item in items:
+    version = item.findtext("sparkle:version", default="", namespaces=namespace).strip()
+    if not version:
+        continue
+    if not version.isdigit():
+        print(f"error: non-numeric sparkle:version '{version}' in {path}", file=sys.stderr)
+        sys.exit(1)
+    versions.append(int(version))
+
+if not versions:
+    print(f"error: no sparkle:version values found in appcast {path}", file=sys.stderr)
+    sys.exit(1)
+
+print(max(versions))
+PY
+}
+
+derive_feed_url() {
+  local base_url="$1"
+  local appcast_filename="$2"
+
+  /usr/bin/python3 - "$base_url" "$appcast_filename" <<'PY'
+import sys
+from urllib.parse import urlsplit, urlunsplit
+
+base_url = sys.argv[1]
+filename = sys.argv[2]
+
+parts = urlsplit(base_url)
+path = parts.path
+
+if not path.endswith(".xml"):
+    print(f"error: cannot derive appcast URL from non-XML base URL '{base_url}'", file=sys.stderr)
+    sys.exit(1)
+
+prefix = path.rsplit("/", 1)[0]
+new_path = f"{prefix}/{filename}" if prefix else f"/{filename}"
+print(urlunsplit((parts.scheme, parts.netloc, new_path, parts.query, parts.fragment)))
+PY
+}
+
+fetch_feed_file() {
+  local feed_url="$1"
+  local output_path="$2"
+  local http_status
+
+  if ! http_status="$(
+    curl -sS -L --output "$output_path" --write-out '%{http_code}' "$feed_url"
+  )"; then
+    rm -f "$output_path"
+    echo "error: failed to fetch appcast from $feed_url" >&2
+    return 2
+  fi
+
+  case "$http_status" in
+    200)
+      return 0
+      ;;
+    404)
+      rm -f "$output_path"
+      return 1
+      ;;
+    *)
+      rm -f "$output_path"
+      echo "error: fetching appcast from $feed_url returned HTTP $http_status" >&2
+      return 2
+      ;;
+  esac
 }
 
 dump_archive_diagnostics() {
@@ -185,6 +306,79 @@ echo "==> (Identity used for DMG signing only; xcodebuild uses automatic signing
 rm -rf "$ARCHIVE_PATH" "$DERIVED_DATA_PATH" "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR"
 mkdir -p "$STAGING_DIR" "$SPARKLE_ARCHIVES_DIR"
 
+TAG="${RELEASE_TAG:-}"
+RELEASE_LABEL=""
+TAG_BASE_VERSION=""
+RELEASE_MARKETING_VERSION=""
+PREVIOUS_PUBLISHED_BUILD=""
+RELEASE_BUILD_NUMBER=""
+XCODE_VERSION_OVERRIDES=()
+STABLE_SPARKLE_FEED_URL="$SPARKLE_FEED_URL"
+BETA_SPARKLE_FEED_URL="$(derive_feed_url "$SPARKLE_FEED_URL" "$BETA_APPCAST_FILENAME")"
+ACTIVE_SPARKLE_FEED_URL="$STABLE_SPARKLE_FEED_URL"
+ACTIVE_APPCAST_CACHE_PATH="$STABLE_APPCAST_CACHE_PATH"
+PUBLISHED_BUILD_CANDIDATES=()
+
+if [[ -n "$TAG" ]]; then
+  RELEASE_LABEL="${TAG#v}"
+  TAG_BASE_VERSION="${RELEASE_LABEL%%-*}"
+  RELEASE_MARKETING_VERSION="$(normalize_version "$TAG_BASE_VERSION")"
+
+  if [[ "$TAG" == *"-beta."* ]]; then
+    APPCAST_FILENAME="$BETA_APPCAST_FILENAME"
+    ACTIVE_SPARKLE_FEED_URL="$BETA_SPARKLE_FEED_URL"
+    ACTIVE_APPCAST_CACHE_PATH="$BETA_APPCAST_CACHE_PATH"
+  fi
+
+  if fetch_feed_file "$STABLE_SPARKLE_FEED_URL" "$STABLE_APPCAST_CACHE_PATH"; then
+    echo "==> Fetched stable appcast for release version planning"
+    PUBLISHED_BUILD_CANDIDATES+=("$(fetch_existing_appcast_version "$STABLE_APPCAST_CACHE_PATH")")
+  else
+    status=$?
+    if [[ "$status" -eq 1 ]]; then
+      echo "==> No stable appcast found at $STABLE_SPARKLE_FEED_URL"
+    else
+      exit 1
+    fi
+  fi
+
+  if fetch_feed_file "$BETA_SPARKLE_FEED_URL" "$BETA_APPCAST_CACHE_PATH"; then
+    echo "==> Fetched beta appcast for release version planning"
+    PUBLISHED_BUILD_CANDIDATES+=("$(fetch_existing_appcast_version "$BETA_APPCAST_CACHE_PATH")")
+  else
+    status=$?
+    if [[ "$status" -eq 1 ]]; then
+      echo "==> No beta appcast found at $BETA_SPARKLE_FEED_URL"
+    else
+      exit 1
+    fi
+  fi
+
+  if [[ "${#PUBLISHED_BUILD_CANDIDATES[@]}" -gt 0 ]]; then
+    PREVIOUS_PUBLISHED_BUILD="$(
+      printf '%s\n' "${PUBLISHED_BUILD_CANDIDATES[@]}" | sort -n | tail -n 1
+    )"
+    RELEASE_BUILD_NUMBER="$((PREVIOUS_PUBLISHED_BUILD + 1))"
+  else
+    RELEASE_BUILD_NUMBER="1"
+  fi
+
+  echo "==> Release tag:                 $TAG"
+  echo "==> Release feed URL:            $ACTIVE_SPARKLE_FEED_URL"
+  echo "==> Release appcast file:        $APPCAST_FILENAME"
+  echo "==> Computed marketing version:  $RELEASE_MARKETING_VERSION"
+  echo "==> Previous published build:    ${PREVIOUS_PUBLISHED_BUILD:-<none>}"
+  echo "==> Computed release build:      $RELEASE_BUILD_NUMBER"
+fi
+
+if [[ -n "$RELEASE_MARKETING_VERSION" ]]; then
+  XCODE_VERSION_OVERRIDES+=("MARKETING_VERSION=$RELEASE_MARKETING_VERSION")
+fi
+
+if [[ -n "$RELEASE_BUILD_NUMBER" ]]; then
+  XCODE_VERSION_OVERRIDES+=("CURRENT_PROJECT_VERSION=$RELEASE_BUILD_NUMBER")
+fi
+
 echo "==> Resolving Swift package dependencies"
 if ! xcodebuild \
   -resolvePackageDependencies \
@@ -217,7 +411,8 @@ if ! xcodebuild archive \
   CODE_SIGN_IDENTITY="Developer ID Application" \
   DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
   OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
-  SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
+  SPARKLE_FEED_URL="$ACTIVE_SPARKLE_FEED_URL" \
+  "${XCODE_VERSION_OVERRIDES[@]}" \
   2>&1 | tee "$ARCHIVE_LOG_PATH"; then
   if [[ "$DEBUG_RELEASE" == "1" ]]; then
     dump_archive_diagnostics
@@ -256,27 +451,6 @@ if [[ "$TAG" == *"-beta."* ]]; then
   IS_PRERELEASE=true
 fi
 
-normalize_version() {
-  local version="$1"
-  local parts=()
-  local part
-
-  IFS='.' read -r -a parts <<< "$version"
-
-  for part in "${parts[@]}"; do
-    if [[ ! "$part" =~ ^[0-9]+$ ]]; then
-      echo "error: version '$version' is not numeric dot-separated" >&2
-      exit 1
-    fi
-  done
-
-  while [[ "${#parts[@]}" -lt 3 ]]; do
-    parts+=("0")
-  done
-
-  printf '%s.%s.%s\n' "${parts[0]}" "${parts[1]}" "${parts[2]}"
-}
-
 NORMALIZED_APP_VERSION="$(normalize_version "$VERSION")"
 NORMALIZED_TAG_BASE_VERSION="$(normalize_version "$TAG_BASE_VERSION")"
 
@@ -284,6 +458,16 @@ if [[ "$NORMALIZED_APP_VERSION" != "$NORMALIZED_TAG_BASE_VERSION" ]]; then
   echo "error: release tag '$TAG' does not match app version '$VERSION'" >&2
   echo "       normalized tag base version: $NORMALIZED_TAG_BASE_VERSION" >&2
   echo "       normalized app version:      $NORMALIZED_APP_VERSION" >&2
+  exit 1
+fi
+
+if [[ -n "$RELEASE_BUILD_NUMBER" && "$BUILD" != "$RELEASE_BUILD_NUMBER" ]]; then
+  echo "error: archived build '$BUILD' does not match computed release build '$RELEASE_BUILD_NUMBER'" >&2
+  exit 1
+fi
+
+if [[ -n "$PREVIOUS_PUBLISHED_BUILD" && "$BUILD" -le "$PREVIOUS_PUBLISHED_BUILD" ]]; then
+  echo "error: archived build '$BUILD' does not advance past published Sparkle build '$PREVIOUS_PUBLISHED_BUILD'" >&2
   exit 1
 fi
 
@@ -346,10 +530,11 @@ strip_bundle_metadata "$APP_PATH"
 ditto -c -k --keepParent "$APP_PATH" "$ZIP_PATH"
 cp "$ZIP_PATH" "$SPARKLE_ARCHIVES_DIR/$ZIP_NAME"
 
-if curl -fsSL "$SPARKLE_FEED_URL" -o "$SPARKLE_ARCHIVES_DIR/$APPCAST_FILENAME"; then
-  echo "==> Fetched existing appcast from $SPARKLE_FEED_URL"
+if [[ -f "$ACTIVE_APPCAST_CACHE_PATH" ]]; then
+  cp "$ACTIVE_APPCAST_CACHE_PATH" "$SPARKLE_ARCHIVES_DIR/$APPCAST_FILENAME"
+  echo "==> Reused fetched appcast from $ACTIVE_SPARKLE_FEED_URL"
 else
-  echo "==> No existing appcast found at $SPARKLE_FEED_URL; generating a new feed"
+  echo "==> No existing appcast found at $ACTIVE_SPARKLE_FEED_URL; generating a new feed"
   rm -f "$SPARKLE_ARCHIVES_DIR/$APPCAST_FILENAME"
 fi
 
@@ -379,7 +564,7 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "zip_name=$ZIP_NAME"
     echo "appcast_path=$APPCAST_PATH"
     echo "appcast_name=$APPCAST_FILENAME"
-    echo "appcast_url=$SPARKLE_FEED_URL"
+    echo "appcast_url=$ACTIVE_SPARKLE_FEED_URL"
     echo "release_notes_url=$RELEASE_NOTES_URL"
     echo "is_prerelease=$IS_PRERELEASE"
   } >> "$GITHUB_OUTPUT"
@@ -392,6 +577,7 @@ echo "Build:           $BUILD"
 echo "Tag:             $TAG"
 echo "Release label:   $RELEASE_LABEL"
 echo "Release date:    $RELEASE_DATE"
+echo "Feed URL:        $ACTIVE_SPARKLE_FEED_URL"
 echo "DMG:             $DMG_PATH"
 echo "Sparkle ZIP:     $ZIP_PATH"
 echo "Sparkle appcast: $APPCAST_PATH"

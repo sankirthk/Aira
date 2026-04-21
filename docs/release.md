@@ -32,14 +32,14 @@ Each released app version should produce:
 
 1. A notarized `Aira-<version>.dmg`
 2. A signed Sparkle update archive, typically `Aira-<version>.zip`
-3. An updated `appcast.xml`
+3. An updated Sparkle appcast for the target direct-distribution channel
 4. Optional release notes URL for Sparkle
 
 Recommended division of responsibility:
 
 - `Aira.dmg`: manual installation for humans
 - `Aira.zip`: automatic updates for existing installed copies
-- `appcast.xml`: update feed consumed by Sparkle
+- Sparkle appcast: update feed consumed by Sparkle
 
 ## Why DMG For Humans And ZIP For Sparkle
 
@@ -94,6 +94,15 @@ The appcast can be hosted:
 
 The appcast does not need to be in the main source repo.
 
+## Stable And Beta Sparkle Feeds
+
+Direct-distribution builds use separate Sparkle feeds by channel:
+
+- stable feed: `appcast.xml`
+- beta feed: `appcast-beta.xml`
+
+Stable tags publish to the stable feed. Tags matching `v*.*.*-beta.*` publish to the beta feed and embed that beta feed URL into the shipped app bundle. This keeps beta updates from being offered to users installed on the stable direct-distribution track.
+
 ## Recommended Hosting Model
 
 Recommended setup:
@@ -105,6 +114,7 @@ Recommended setup:
   - notarized DMGs
   - Sparkle ZIP archives
   - `appcast.xml`
+  - `appcast-beta.xml`
   - release notes or release metadata if desired
 
 Example model:
@@ -136,12 +146,17 @@ Recommended release secrets:
 
 ## Versioning
 
-Each release must update:
+Each release must publish accurate app bundle versions:
 
-- `MARKETING_VERSION`
-- `CURRENT_PROJECT_VERSION`
+- `MARKETING_VERSION` is derived automatically from the pushed git tag base version.
+- `CURRENT_PROJECT_VERSION` is derived automatically in CI as one greater than the highest published Sparkle build across the stable and beta feeds.
 
-Sparkle compares versions using the appcast metadata and the app bundle version information. Keep both values accurate and monotonic.
+Example:
+
+- tag `v1.0.0-beta.3` publishes `MARKETING_VERSION = 1.0.0`
+- if the published feeds currently advertise max build `20`, CI publishes build `21`
+
+Sparkle compares versions using the appcast metadata and the app bundle version information. The published build number must remain numeric and strictly monotonic across both direct-distribution channels.
 
 ## Full Updates vs Delta Updates
 
@@ -163,16 +178,18 @@ Delta updates are deferred until the release pipeline is stable.
 The intended end-to-end release flow is:
 
 1. Feature work lands on `main`
-2. The release version/build is bumped in the app project
+2. A release tag defines the human version to ship
 3. A release tag such as `v1.0.0-beta.1` is created from a `main` commit and pushed
-4. CI checks out that exact tagged commit and verifies it is reachable from `main`
-5. CI archives, signs, and notarizes the app
-6. CI creates the human-facing DMG
-7. CI creates the Sparkle ZIP from the signed app
-8. CI signs the ZIP and generates or updates `appcast.xml`
-9. CI publishes both DMG and ZIP to the release repo
-10. CI commits the latest `appcast.xml` to the release repo's default branch for the stable feed URL
-11. Installed Aira copies detect the new appcast entry and offer the update
+4. CI checks out that exact tagged commit, verifies it is reachable from `main`, confirms release notes exist, and runs direct build/test plus App Store build validation
+5. CI derives `MARKETING_VERSION` from the tag and derives the next Sparkle build number from the highest build currently published across the stable and beta feeds
+6. CI selects the stable or beta Sparkle feed based on the tag
+7. CI archives, signs, and notarizes the app
+8. CI creates the human-facing DMG
+9. CI creates the Sparkle ZIP from the signed app
+10. CI signs the ZIP and generates or updates the channel-specific appcast
+11. CI publishes both DMG and ZIP to the release repo
+12. CI commits the latest channel-specific appcast to the release repo's default branch
+13. Installed Aira copies detect the new appcast entry and offer the update on their current channel
 
 ## Current State
 

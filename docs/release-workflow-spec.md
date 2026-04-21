@@ -57,11 +57,13 @@ Runs on:
 Responsibilities:
 1. check out the tagged commit
 2. verify the tagged commit is reachable from `main`
-3. restore any required caches
-4. build the app
-5. run unit tests
-6. run CI-stable integration tests
-7. fail the workflow if any required test fails
+3. verify the matching release notes file exists
+4. restore any required caches
+5. build the direct-distribution app
+6. run direct-distribution unit tests
+7. run CI-stable integration tests
+8. build the App Store variant
+9. fail the workflow if any required validation step fails
 
 This job produces no public side effects.
 
@@ -75,16 +77,19 @@ Needs:
 
 Responsibilities:
 1. import signing certificate material
-2. inject `SPARKLE_FEED_URL` and `SPARKLE_PUBLIC_ED_KEY` into the release build
-3. archive the app
-4. sign the app
-5. build the DMG
-6. build the Sparkle ZIP from the signed app
-7. sign the ZIP and feed with the Sparkle EdDSA private key
-8. notarize with Apple
-9. staple the notarization ticket
-10. verify the artifact with Gatekeeper-oriented checks
-11. emit release metadata needed by downstream jobs
+2. derive `MARKETING_VERSION` from the pushed tag base version
+3. derive the next `CURRENT_PROJECT_VERSION` from the highest published Sparkle build across the stable and beta feeds
+4. select `appcast.xml` or `appcast-beta.xml` based on whether the release tag is stable or beta
+5. inject the selected `SUFeedURL` and `SUPublicEDKey` into the release build
+6. archive the app
+7. sign the app
+8. build the DMG
+9. build the Sparkle ZIP from the signed app
+10. sign the ZIP and feed with the Sparkle EdDSA private key
+11. notarize with Apple
+12. staple the notarization ticket
+13. verify the artifact with Gatekeeper-oriented checks
+14. emit release metadata needed by downstream jobs
 
 Outputs required:
 - `version`
@@ -153,10 +158,10 @@ Needs:
 
 Responsibilities:
 1. check out `sankirthk/aira-releases`
-2. copy the generated `appcast.xml` into the repository default branch
+2. copy the generated channel-specific Sparkle appcast into the repository default branch
 3. commit the updated feed if content changed
 4. push to `main`
-5. preserve the stable public feed URL referenced by `SUFeedURL`
+5. preserve the stable public feed URL referenced by stable builds and the beta feed URL referenced by beta builds
 
 ### Job 6: Update Website Metadata
 
