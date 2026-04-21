@@ -23,7 +23,7 @@
 /* Begin PBXFileReference section */
 		3F3577A92F6F97F20024E0B8 /* Aira.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aira.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3F4F7E6E2F6FB72D008A1C02 /* AiraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		B10000012F80000000000001 /* AiraAppStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AiraAppStore.app; path = Aira.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000012F80000000000001 /* AiraAppStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AiraAppStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -676,7 +676,7 @@
 				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sankirthk.Aira;
-				PRODUCT_NAME = Aira;
+				PRODUCT_NAME = AiraAppStore;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -722,7 +722,7 @@
 				);
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sankirthk.Aira;
-				PRODUCT_NAME = Aira;
+				PRODUCT_NAME = AiraAppStore;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
