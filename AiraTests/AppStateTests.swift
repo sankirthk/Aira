@@ -601,6 +601,7 @@ struct AppStateTests {
       appearanceMode: .dark,
       managerTypography: .large,
       liveAnswerDisclosureAccepted: true,
+      hasCompletedInitialPermissionPrompt: true,
       shortcutToggleNotch: "⌘⇧1",
       shortcutTogglePill: "⌘⇧2",
       shortcutToggleVoiceSync: "⌘⇧3",
@@ -652,6 +653,7 @@ struct AppStateTests {
     appState.settings.screenCaptureExclusionEnabled = false
     appState.settings.appearanceMode = .light
     appState.settings.managerTypography = .small
+    appState.settings.hasCompletedInitialPermissionPrompt = true
     appState.settings.pillsEnabled = true
     appState.settings.maxPillCount = 2
     appState.settings.shortcutToggleNotch = "⌘⌥N"

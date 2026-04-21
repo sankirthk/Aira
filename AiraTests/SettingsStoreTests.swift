@@ -52,6 +52,7 @@ struct SettingsStoreTests {
       appearanceMode: .dark,
       managerTypography: .large,
       liveAnswerDisclosureAccepted: true,
+      hasCompletedInitialPermissionPrompt: true,
       pillsEnabled: true,
       maxPillCount: 2,
       pillConfigurations: [
@@ -98,6 +99,7 @@ struct SettingsStoreTests {
       appearanceMode: .light,
       managerTypography: .small,
       liveAnswerDisclosureAccepted: false,
+      hasCompletedInitialPermissionPrompt: true,
       pillsEnabled: true,
       maxPillCount: 2,
       pillConfigurations: [
@@ -159,10 +161,11 @@ struct SettingsStoreTests {
           "voiceSyncMode": "\(legacyMode)",
           "speechSensitivity": "medium",
           "autoScrollWPM": 135,
-          "appearanceMode": "system",
-          "managerTypography": "medium",
-          "liveAnswerDisclosureAccepted": false,
-          "pillsEnabled": false,
+        "appearanceMode": "system",
+        "managerTypography": "medium",
+        "liveAnswerDisclosureAccepted": false,
+        "hasCompletedInitialPermissionPrompt": true,
+        "pillsEnabled": false,
           "maxPillCount": 1,
           "pillContentMode": {
             "type": "voiceSync"
@@ -276,6 +279,7 @@ struct SettingsStoreTests {
         "appearanceMode": "system",
         "managerTypography": "medium",
         "liveAnswerDisclosureAccepted": false,
+        "hasCompletedInitialPermissionPrompt": false,
         "pillsEnabled": true,
         "maxPillCount": 0,
         "pillConfigurations": [
@@ -348,6 +352,7 @@ struct SettingsStoreTests {
     #expect(defaults.autoScrollWPM == ManualScrollConfiguration.defaultWPM)
     #expect(defaults.appearanceMode == .system)
     #expect(defaults.managerTypography == .medium)
+    #expect(!defaults.hasCompletedInitialPermissionPrompt)
     #expect(!defaults.pillsEnabled)
     #expect(defaults.maxPillCount == 1)
     #expect(defaults.pillConfigurations == PillWindowConfiguration.defaultSlots)

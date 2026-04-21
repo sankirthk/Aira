@@ -21,7 +21,7 @@ final class KeyboardShortcutMonitor {
   private var globalKeyMonitor: Any?
   private var bindings: [Binding] = []
 
-  func start(bindings: [Binding]) {
+  func start(bindings: [Binding], promptForAccessibility: Bool = false) {
     stop()
     self.bindings = bindings.filter { !$0.shortcut.isEmpty }
 
@@ -33,7 +33,7 @@ final class KeyboardShortcutMonitor {
     // created. During a session the app runs in .accessory mode, which means
     // NSEvent local/global monitors are unreliable — the CGEventTap is the
     // only mechanism that reliably captures keyboard events system-wide.
-    guard Self.checkAccessibilityTrusted(prompt: true) else {
+    guard Self.checkAccessibilityTrusted(prompt: promptForAccessibility) else {
       installEventMonitorFallback()
       return
     }
@@ -123,11 +123,6 @@ final class KeyboardShortcutMonitor {
     return false
   }
 
-  @discardableResult
-  private func checkAccessibilityTrusted() -> Bool {
-    Self.checkAccessibilityTrusted(prompt: true)
-  }
-
   private func installEventMonitorFallback() {
     localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
       self?.handle(event: event)
@@ -162,15 +157,19 @@ final class VoiceSyncKeyboardMonitor {
     toggleShortcut: String,
     scrollUpShortcut: String,
     scrollDownShortcut: String,
+    promptForAccessibility: Bool = false,
     onToggle: @escaping () -> Void,
     onScrollUp: @escaping () -> Void,
     onScrollDown: @escaping () -> Void
   ) {
-    monitor.start(bindings: [
-      .init(shortcut: toggleShortcut, suppressAutoRepeat: true, action: onToggle),
-      .init(shortcut: scrollUpShortcut, action: onScrollUp),
-      .init(shortcut: scrollDownShortcut, action: onScrollDown),
-    ])
+    monitor.start(
+      bindings: [
+        .init(shortcut: toggleShortcut, suppressAutoRepeat: true, action: onToggle),
+        .init(shortcut: scrollUpShortcut, action: onScrollUp),
+        .init(shortcut: scrollDownShortcut, action: onScrollDown),
+      ],
+      promptForAccessibility: promptForAccessibility
+    )
   }
 
   func stop() {

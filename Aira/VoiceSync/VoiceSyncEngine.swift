@@ -26,6 +26,8 @@ class VoiceSyncEngine: ObservableObject {
   private let recognizer = SFSpeechRecognizer(locale: .current)
   weak var audioLevelMonitor: AudioLevelMonitor?
   private var silenceDeadlineTask: Task<Void, Never>?
+  private let speechAuthorizationStatus: () -> SFSpeechRecognizerAuthorizationStatus
+  private let microphonePermissionGranted: () -> Bool
 
   private var scriptWords: [String] = []
   private var cursorIndex: Int = 0
@@ -38,6 +40,18 @@ class VoiceSyncEngine: ObservableObject {
   private var recognitionDrivesScroll: Bool = true
   private var previousPartialTokens: [String] = []
   private var recognitionGeneration: UInt64 = 0
+
+  init(
+    speechAuthorizationStatus: @escaping () -> SFSpeechRecognizerAuthorizationStatus = {
+      SFSpeechRecognizer.authorizationStatus()
+    },
+    microphonePermissionGranted: @escaping () -> Bool = {
+      AVAudioApplication.shared.recordPermission == .granted
+    }
+  ) {
+    self.speechAuthorizationStatus = speechAuthorizationStatus
+    self.microphonePermissionGranted = microphonePermissionGranted
+  }
 
   // MARK: - Public API
 
@@ -59,13 +73,13 @@ class VoiceSyncEngine: ObservableObject {
   func start() {
     guard state == .idle else { return }
     recognitionEnabled = true
-    requestPermissionsAndStartWithRecognition()
+    startWithRecognitionIfAuthorized()
   }
 
   func startAudioMonitoring() {
     guard state == .idle else { return }
     recognitionEnabled = false
-    requestMicrophonePermissionAndStart()
+    startMonitoringIfAuthorized()
   }
 
   func stop() {
@@ -167,39 +181,17 @@ class VoiceSyncEngine: ObservableObject {
 
   // MARK: - Permissions
 
-  private func requestPermissionsAndStartWithRecognition() {
-    let speechStatus = SFSpeechRecognizer.authorizationStatus()
-    let micStatus = AVAudioApplication.shared.recordPermission
+  private func startWithRecognitionIfAuthorized() {
+    let speechStatus = speechAuthorizationStatus()
 
-    if speechStatus == .authorized && micStatus == .granted {
+    if speechStatus == .authorized && microphonePermissionGranted() {
       startEngine()
-      return
-    }
-
-    SFSpeechRecognizer.requestAuthorization { [weak self] status in
-      guard status == .authorized else { return }
-      AVAudioApplication.requestRecordPermission { [weak self] granted in
-        guard granted else { return }
-        Task { @MainActor [weak self] in
-          self?.startEngine()
-        }
-      }
     }
   }
 
-  private func requestMicrophonePermissionAndStart() {
-    let micStatus = AVAudioApplication.shared.recordPermission
-
-    if micStatus == .granted {
+  private func startMonitoringIfAuthorized() {
+    if microphonePermissionGranted() {
       startEngine()
-      return
-    }
-
-    AVAudioApplication.requestRecordPermission { [weak self] granted in
-      guard granted else { return }
-      Task { @MainActor [weak self] in
-        self?.startEngine()
-      }
     }
   }
 

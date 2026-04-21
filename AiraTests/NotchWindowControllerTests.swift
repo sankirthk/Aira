@@ -56,7 +56,7 @@ struct NotchWindowControllerTests {
   }
 
   @Test func notchDefaultWidthUsesNarrowerLaunchValue() {
-    #expect(NotchWidthConfiguration.defaultWidth == 360)
+    #expect(NotchWidthConfiguration.defaultWidth == 380)
     #expect(AppSettings().notchWindowWidth == NotchWidthConfiguration.defaultWidth)
   }
 
@@ -105,9 +105,9 @@ struct NotchWindowControllerTests {
   }
 
   @Test func notchWindowUsesPersistedWidthRange() {
-    #expect(NotchWindowController.resolvedPanelWidth(280) == 320)
+    #expect(NotchWindowController.resolvedPanelWidth(280) == 340)
     #expect(NotchWindowController.resolvedPanelWidth(420) == 420)
-    #expect(NotchWindowController.resolvedPanelWidth(640) == 520)
+    #expect(NotchWindowController.resolvedPanelWidth(640) == 440)
   }
 
   @Test func notchResizeKeepsOverlayAnchoredBeneathScreenTop() {

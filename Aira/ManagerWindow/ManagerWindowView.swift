@@ -761,7 +761,8 @@ final class ManagerShortcutCoordinator {
         for: settings,
         onToggleNotch: onToggleNotch,
         onTogglePill: onTogglePill
-      )
+      ),
+      promptForAccessibility: false
     )
   }
 

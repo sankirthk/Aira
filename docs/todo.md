@@ -208,6 +208,7 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 - [x] **T-037** Pause on silence: no transcription result within threshold → hold last scroll offset — REQ-002. VoiceSyncEngine now schedules a silence deadline and transitions to `.paused` after 500ms without new transcription, resuming when speech results return.
 - [x] **T-038** AudioLevelMonitor: RMS tap on AVAudioEngine, normalize 0–1, publish level to VisualBeamView — REQ-004. AudioLevelMonitor continues to read RMS from the shared engine tap and publish normalized levels for VisualBeamView.
 - [x] **T-039** Keyboard Voice-Sync toggle: CGEvent tap, maps to configured shortcut, calls VoiceSyncEngine.togglePause() — REQ-039. Added VoiceSyncKeyboardMonitor using a session-scoped CGEvent tap and wired ManagerWindowView to start and stop it with active sessions.
+- [ ] **T-039u** First-run permission onboarding: on first launch request Accessibility, microphone, and speech-recognition permissions together, persist that the initial permission onboarding has been performed, and on later launches only re-check/request the specific permissions still missing. Session startup must not introduce an extra permission prompt path, and keyboard shortcuts must work once Accessibility is granted. — REQ-039
 
 ---
 
