@@ -58,12 +58,26 @@ enum OverlayContentPaddingConfiguration {
   }
 }
 
+enum OverlayFontSizeConfiguration {
+  static let minimum: CGFloat = 16
+  static let maximum: CGFloat = 26
+  static let `default`: CGFloat = 20
+
+  static func clamped(_ value: CGFloat) -> CGFloat {
+    min(max(value, minimum), maximum)
+  }
+}
+
 struct OverlayAppearance: Codable, Equatable {
   var textColor: String  // hex, e.g. "#F5F2EC"
   var backgroundColor: String  // hex, e.g. "#849688"
   var opacity: Double  // 0.2–1.0; applies to background only
   var fontName: String  // "CrimsonText-Regular", "Manrope-Bold", "Inter-Regular"
-  var fontSize: CGFloat  // 14–32
+  var fontSize: CGFloat {  // 16–26
+    didSet {
+      fontSize = OverlayFontSizeConfiguration.clamped(fontSize)
+    }
+  }
   var textAlignment: OverlayTextAlignment
   var lineSpacing: CGFloat {
     didSet {
@@ -96,7 +110,7 @@ struct OverlayAppearance: Codable, Equatable {
     backgroundColor: "#849688",
     opacity: 0.75,
     fontName: "CrimsonText-Regular",
-    fontSize: 20,
+    fontSize: OverlayFontSizeConfiguration.default,
     textAlignment: .left,
     lineSpacing: OverlayLineSpacingConfiguration.default,
     letterSpacing: OverlayLetterSpacingConfiguration.default,
@@ -122,7 +136,7 @@ struct OverlayAppearance: Codable, Equatable {
     self.backgroundColor = backgroundColor
     self.opacity = opacity
     self.fontName = fontName
-    self.fontSize = fontSize
+    self.fontSize = OverlayFontSizeConfiguration.clamped(fontSize)
     self.textAlignment = textAlignment
     self.lineSpacing = OverlayLineSpacingConfiguration.clamped(lineSpacing)
     self.letterSpacing = OverlayLetterSpacingConfiguration.clamped(letterSpacing)
@@ -151,7 +165,9 @@ struct OverlayAppearance: Codable, Equatable {
     backgroundColor = try container.decode(String.self, forKey: .backgroundColor)
     opacity = try container.decode(Double.self, forKey: .opacity)
     fontName = try container.decode(String.self, forKey: .fontName)
-    fontSize = try container.decode(CGFloat.self, forKey: .fontSize)
+    fontSize = OverlayFontSizeConfiguration.clamped(
+      try container.decode(CGFloat.self, forKey: .fontSize)
+    )
     textAlignment =
       try container.decodeIfPresent(OverlayTextAlignment.self, forKey: .textAlignment) ?? .left
     lineSpacing = OverlayLineSpacingConfiguration.clamped(

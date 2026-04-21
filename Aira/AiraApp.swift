@@ -26,9 +26,6 @@ struct AiraApp: App {
         .environmentObject(appState)
         .environment(\.managerFontScale, CGFloat(appState.settings.managerTypography.scaleFactor))
         .preferredColorScheme(preferredColorScheme)
-        .task {
-          AppPermissionCoordinator.shared.requestLaunchPermissionsIfNeeded()
-        }
         .task(id: appState.settings.appearanceMode) {
           applyAppAppearance()
           installMenuBarController()

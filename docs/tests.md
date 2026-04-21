@@ -341,7 +341,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-048 | `Check for Updates…` is enabled only when the built app bundle resolves a valid Sparkle feed URL and public key | `[ ]` |
 | MT-049 | The branded update prompt appears for both `update found` and `ready to install` states, and `Cancel` cleanly dismisses without starting installation | `[ ]` |
 | MT-050 | A tagged release publishes DMG, ZIP, and `appcast.xml`, and an installed build successfully discovers the update from `https://raw.githubusercontent.com/sankirthk/aira-releases/main/appcast.xml` | `[ ]` |
-| MT-051 | Main-repo CI runs Swift formatting checks, lint-style checks, `xcodebuild build`, and `xcodebuild test` on pull requests and pushes to `main` | `[ ]` |
+| MT-051 | Main-repo CI runs Swift formatting checks, lint-style checks, `xcodebuild build`, and `xcodebuild test` on pull requests, while release tags skip redundant validation builds | `[ ]` |
 | MT-052 | Installed pre-commit hook blocks a commit when formatting, linting, build, or tests fail, and allows the commit when the full local validation path passes | `[ ]` |
 | MT-053 | `scripts/dev/graphify-watch.sh` starts scoped watchers for `Aira` and `docs`, keeps running until interrupted, and prints the docs semantic-refresh reminder when `graphify-out/needs_update` appears | `[ ]` |
 
@@ -364,3 +364,4 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-055 | Scroll regression check after T-025ai: notch voice-sync, notch manual WPM, sync notch+pill, and manual pill sessions all scroll correctly after readability settings changes and long-script content updates | `[ ]` |
 | MT-069 | Voice mode inline highlighting follows spoken words only inside the currently visible overlay window in notch and pill sessions, retires words that scroll off the top, and does not highlight future off-screen words | `[ ]` |
 | MT-070 | System > During Session spoken-word highlighting toggle defaults off, persists across relaunch, and only affects overlay visuals without changing pause, manual scroll, or voice-driven scroll behavior | `[ ]` |
+| UT-071 | First-launch permission coordination requests Accessibility, speech recognition, and microphone access together, persists that onboarding ran, and later launches only retry the specific permissions still missing | `[w]` |

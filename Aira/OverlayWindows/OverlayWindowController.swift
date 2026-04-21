@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 
@@ -14,6 +15,7 @@ class OverlayWindowController {
   private let sessionShortcutMonitor = KeyboardShortcutMonitor()
   private let voiceSyncKeyboardMonitor = VoiceSyncKeyboardMonitor()
   private var settingsCancellable: AnyCancellable?
+  private var activationCancellable: AnyCancellable?
 
   let voiceSync = VoiceSyncEngine()
   let audioMonitor = AudioLevelMonitor()
@@ -34,6 +36,12 @@ class OverlayWindowController {
 
   init() {
     voiceSync.audioLevelMonitor = audioMonitor
+    activationCancellable = NotificationCenter.default.publisher(
+      for: NSApplication.didBecomeActiveNotification
+    )
+    .sink { [weak self] _ in
+      self?.startSessionKeyboardMonitorsIfNeeded()
+    }
   }
 
   private func bindAppState() {
@@ -295,16 +303,20 @@ class OverlayWindowController {
     }
 
     let settings = appState.settings
-    sessionShortcutMonitor.start(bindings: [
-      .init(shortcut: settings.shortcutEndSession) { [weak self] in
-        self?.endSession()
-      }
-    ])
+    sessionShortcutMonitor.start(
+      bindings: [
+        .init(shortcut: settings.shortcutEndSession) { [weak self] in
+          self?.endSession()
+        }
+      ],
+      promptForAccessibility: false
+    )
 
     voiceSyncKeyboardMonitor.start(
       toggleShortcut: settings.shortcutToggleVoiceSync,
       scrollUpShortcut: settings.shortcutScrollUp,
       scrollDownShortcut: settings.shortcutScrollDown,
+      promptForAccessibility: false,
       onToggle: { [weak self] in
         Task { @MainActor in
           self?.voiceSync.togglePause()

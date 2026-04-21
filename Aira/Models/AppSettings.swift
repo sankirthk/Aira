@@ -11,9 +11,9 @@ enum ManualScrollConfiguration {
 }
 
 enum NotchWidthConfiguration {
-  static let minimumWidth: Double = 320
-  static let maximumWidth: Double = 520
-  static let defaultWidth: Double = 360
+  static let minimumWidth: Double = 340
+  static let maximumWidth: Double = 440
+  static let defaultWidth: Double = 380
 
   static func clampedWidth(_ value: Double) -> Double {
     min(max(value, minimumWidth), maximumWidth)
@@ -21,9 +21,9 @@ enum NotchWidthConfiguration {
 }
 
 enum NotchHeightConfiguration {
-  static let minimumHeight: Double = 140
-  static let maximumHeight: Double = 320
-  static let defaultHeight: Double = 164
+  static let minimumHeight: Double = 148
+  static let maximumHeight: Double = 220
+  static let defaultHeight: Double = 168
 
   static func clampedHeight(_ value: Double) -> Double {
     min(max(value, minimumHeight), maximumHeight)
@@ -49,6 +49,7 @@ struct AppSettings: Codable, Equatable {
   var appearanceMode: AppearanceMode = .system
   var managerTypography: ManagerTypography = .medium
   var liveAnswerDisclosureAccepted: Bool = false
+  var hasCompletedInitialPermissionPrompt: Bool = false
 
   // Pill Windows (REQ-009, REQ-044)
   var pillsEnabled: Bool = false
@@ -82,6 +83,7 @@ struct AppSettings: Codable, Equatable {
     appearanceMode: AppearanceMode = .system,
     managerTypography: ManagerTypography = .medium,
     liveAnswerDisclosureAccepted: Bool = false,
+    hasCompletedInitialPermissionPrompt: Bool = false,
     pillsEnabled: Bool = false,
     maxPillCount: Int = 1,
     pillConfigurations: [PillWindowConfiguration] = PillWindowConfiguration.defaultSlots,
@@ -106,6 +108,7 @@ struct AppSettings: Codable, Equatable {
     self.appearanceMode = appearanceMode
     self.managerTypography = managerTypography
     self.liveAnswerDisclosureAccepted = liveAnswerDisclosureAccepted
+    self.hasCompletedInitialPermissionPrompt = hasCompletedInitialPermissionPrompt
     self.pillsEnabled = pillsEnabled
     self.maxPillCount = Self.normalizedMaxPillCount(maxPillCount)
     self.pillConfigurations = Self.normalizedPillConfigurations(from: pillConfigurations)
@@ -173,6 +176,7 @@ struct AppSettings: Codable, Equatable {
     case appearanceMode
     case managerTypography
     case liveAnswerDisclosureAccepted
+    case hasCompletedInitialPermissionPrompt
     case pillsEnabled
     case maxPillCount
     case pillConfigurations
@@ -218,6 +222,9 @@ struct AppSettings: Codable, Equatable {
       try container.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
     managerTypography =
       try container.decodeIfPresent(ManagerTypography.self, forKey: .managerTypography) ?? .medium
+    hasCompletedInitialPermissionPrompt =
+      try container.decodeIfPresent(Bool.self, forKey: .hasCompletedInitialPermissionPrompt)
+      ?? false
     liveAnswerDisclosureAccepted =
       try container.decodeIfPresent(Bool.self, forKey: .liveAnswerDisclosureAccepted) ?? false
     pillsEnabled = try container.decodeIfPresent(Bool.self, forKey: .pillsEnabled) ?? false
@@ -269,6 +276,8 @@ struct AppSettings: Codable, Equatable {
     try container.encode(screenCaptureExclusionEnabled, forKey: .screenCaptureExclusionEnabled)
     try container.encode(appearanceMode, forKey: .appearanceMode)
     try container.encode(managerTypography, forKey: .managerTypography)
+    try container.encode(
+      hasCompletedInitialPermissionPrompt, forKey: .hasCompletedInitialPermissionPrompt)
     try container.encode(liveAnswerDisclosureAccepted, forKey: .liveAnswerDisclosureAccepted)
     try container.encode(pillsEnabled, forKey: .pillsEnabled)
     try container.encode(maxPillCount, forKey: .maxPillCount)

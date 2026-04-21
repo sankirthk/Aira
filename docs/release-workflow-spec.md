@@ -58,12 +58,7 @@ Responsibilities:
 1. check out the tagged commit
 2. verify the tagged commit is reachable from `main`
 3. verify the matching release notes file exists
-4. restore any required caches
-5. build the direct-distribution app
-6. run direct-distribution unit tests
-7. run CI-stable integration tests
-8. build the App Store variant
-9. fail the workflow if any required validation step fails
+4. fail the workflow if tag ancestry or release-note presence checks fail
 
 This job produces no public side effects.
 
