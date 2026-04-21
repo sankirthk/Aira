@@ -45,7 +45,7 @@ cat > "$EXPORT_OPTIONS_PLIST" <<EOF
   <key>destination</key>
   <string>export</string>
   <key>method</key>
-  <string>app-store</string>
+  <string>app-store-connect</string>
   <key>signingStyle</key>
   <string>automatic</string>
   <key>teamID</key>

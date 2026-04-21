@@ -16,7 +16,7 @@ final class AppUpdatePromptWindowController: NSWindowController, NSWindowDelegat
     self.onSecondaryAction = onSecondaryAction
 
     let panel = AiraUpdatePromptPanel(
-      contentRect: CGRect(x: 0, y: 0, width: 360, height: 220),
+      contentRect: CGRect(x: 0, y: 0, width: 440, height: 270),
       styleMask: [.borderless],
       backing: .buffered,
       defer: false
@@ -130,14 +130,14 @@ private struct AppUpdatePromptView: View {
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 22, style: .continuous)
+      RoundedRectangle(cornerRadius: 30, style: .continuous)
         .fill(Color("colorBackground"))
         .overlay(
-          RoundedRectangle(cornerRadius: 22, style: .continuous)
+          RoundedRectangle(cornerRadius: 30, style: .continuous)
             .stroke(Color("colorPrimary").opacity(0.35), lineWidth: 1.5)
         )
 
-      VStack(alignment: .leading, spacing: 18) {
+      VStack(alignment: .leading, spacing: 22) {
         HStack {
           Text(content.versionLabel)
             .font(.custom("CrimsonText-Regular", size: 14))
@@ -154,11 +154,11 @@ private struct AppUpdatePromptView: View {
 
         VStack(alignment: .leading, spacing: 10) {
           Text(content.title)
-            .font(.custom("IndieFlower", size: 30))
+            .font(.custom("IndieFlower", size: 34))
             .foregroundStyle(Color("colorText"))
 
           Text(content.message)
-            .font(.custom("CrimsonText-Regular", size: 18))
+            .font(.custom("CrimsonText-Regular", size: 19))
             .foregroundStyle(Color("colorText").opacity(0.82))
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -175,8 +175,8 @@ private struct AppUpdatePromptView: View {
             .buttonStyle(AiraCardCastButtonStyle())
         }
       }
-      .padding(22)
+      .padding(28)
     }
-    .frame(width: 360, height: 220)
+    .frame(width: 440, height: 270)
   }
 }
