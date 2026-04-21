@@ -180,7 +180,7 @@ The intended end-to-end release flow is:
 1. Feature work lands on `main`
 2. A release tag defines the human version to ship
 3. A release tag such as `v1.0.0-beta.1` is created from a `main` commit and pushed
-4. CI checks out that exact tagged commit, verifies it is reachable from `main`, confirms release notes exist, and runs direct build/test plus App Store build validation
+4. CI checks out that exact tagged commit, verifies it is reachable from `main`, and confirms release notes exist
 5. CI derives `MARKETING_VERSION` from the tag and derives the next Sparkle build number from the highest build currently published across the stable and beta feeds
 6. CI selects the stable or beta Sparkle feed based on the tag
 7. CI archives, signs, and notarizes the app

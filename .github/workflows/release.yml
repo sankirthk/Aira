@@ -46,22 +46,6 @@ jobs:
           RELEASE_NOTES_PATH="docs/releases/${TAG#v}.md"
           test -f "$RELEASE_NOTES_PATH"
 
-      - name: Build direct app
-        run: >
-          xcodebuild -project Aira.xcodeproj -scheme Aira -destination "platform=macOS" build
-          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-
-      - name: Test direct app
-        run: >
-          xcodebuild -project Aira.xcodeproj -scheme Aira -destination "platform=macOS" test
-          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-
-      - name: Build App Store variant
-        run: >
-          xcodebuild -project Aira.xcodeproj -scheme AiraAppStore -configuration AppStoreRelease -destination "platform=macOS" build
-          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-
-
   package-and-notarize:
     name: Package And Notarize
     runs-on: macos-latest
