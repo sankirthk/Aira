@@ -36,11 +36,17 @@ jobs:
           xcodebuild build \
             -project Aira.xcodeproj \
             -scheme Aira \
-            -destination "platform=macOS"
+            -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
 
       - name: Test
         run: |
           xcodebuild test \
             -project Aira.xcodeproj \
             -scheme Aira \
-            -destination "platform=macOS"
+            -destination "platform=macOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
