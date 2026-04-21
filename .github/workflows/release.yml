@@ -16,14 +16,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  group: release-aira-direct-feed
   cancel-in-progress: false
 
 jobs:
   validate:
     name: Validate
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v4
@@ -38,6 +38,28 @@ jobs:
           SOURCE_DEFAULT_BRANCH="$(gh api "repos/${{ github.repository }}" --jq '.default_branch')"
           git fetch origin "$SOURCE_DEFAULT_BRANCH" --depth=1
           git merge-base --is-ancestor "$(git rev-parse HEAD)" "origin/$SOURCE_DEFAULT_BRANCH"
+
+      - name: Verify release notes exist
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          RELEASE_NOTES_PATH="docs/releases/${TAG#v}.md"
+          test -f "$RELEASE_NOTES_PATH"
+
+      - name: Build direct app
+        run: >
+          xcodebuild -project Aira.xcodeproj -scheme Aira -destination "platform=macOS" build
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Test direct app
+        run: >
+          xcodebuild -project Aira.xcodeproj -scheme Aira -destination "platform=macOS" test
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Build App Store variant
+        run: >
+          xcodebuild -project Aira.xcodeproj -scheme AiraAppStore -configuration AppStoreRelease -destination "platform=macOS" build
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
 
 
   package-and-notarize:
