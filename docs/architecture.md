@@ -14,12 +14,12 @@ The developer is new to Swift. Technical decisions are explained clearly, includ
 
 These constraints apply to every decision in this document. They are non-negotiable.
 
-- **Binary size.** Keep dependencies minimal. Sparkle is the only approved third-party package in the current direct-distribution build; all other functionality must use Apple's native frameworks. Target app bundle under 10 MB after Archive build.
+- **Binary size.** Keep dependencies minimal. Sparkle is the only approved third-party package, and only in the direct-distribution build; all other functionality must use Apple's native frameworks. Target app bundle under 10 MB after Archive build.
 - **Memory.** Overlay windows hold only the active script segment in memory during a session, not the full document.
 - **Battery.** The microphone tap (`AVAudioEngine`) runs **only during an active presenter session**. It is fully stopped and released when the session ends or the overlays are closed. Zero audio capture at idle.
 - **CPU.** No polling loops. Use Combine publishers or `async/await` for all reactive state. Scroll animation is driven by a single frame-synced session playhead clock (`CADisplayLink` / AppKit display link host) rather than `Timer` loops or per-view sleep loops.
 - **Startup.** Cold launch must not block the main thread. Scripts are loaded lazily from disk — the library view loads metadata only; full script body is read on demand when the editor opens.
-- **No telemetry, no unrelated background network activity.** Zero ambient analytics or service traffic is permitted. The only allowed outbound network path in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). Charles Proxy / Network Instruments should show no other outbound traffic during a full idle session.
+- **No telemetry, no unrelated background network activity.** Zero ambient analytics or service traffic is permitted. The only allowed outbound network path in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). Mac App Store builds must not include Sparkle traffic at all. Charles Proxy / Network Instruments should show no other outbound traffic during a full idle session.
 
 ---
 
@@ -33,11 +33,11 @@ These constraints apply to every decision in this document. They are non-negotia
 | Voice Activity Detection (VAD) | Hybrid of `AudioLevelMonitor` activity and `SFSpeechRecognizer` result cadence | Live voice motion stays active while either recent audio activity or recent recognition results indicate speech. Recognition pauses still halt anchored speech progress, and matcher output continues to correct playhead position. |
 | Stealth (screen capture exclusion) | `NSWindow.sharingType = .none` | A single macOS API flag that excludes a window from all screen capture streams, including Zoom and Teams. Must be set at window creation time. |
 | Global keyboard shortcut | `CGEvent` tap via `CGEventTap` | Captures keyboard events globally, regardless of which window has focus. Used for the Voice-Sync toggle shortcut. |
-| Updater | Sparkle | Direct-distribution updater for signed ZIP-based in-place updates. Supports appcast verification, EdDSA update signing, and sandbox-compatible installer launch services. |
+| Updater | Sparkle in direct builds, no-op updater in App Store builds | Direct-distribution updater uses signed ZIP-based in-place updates, appcast verification, EdDSA update signing, and sandbox-compatible installer launch services. App Store builds omit Sparkle and all self-update UI. |
 | Script import | `NSOpenPanel` + `FileManager` | Standard macOS file picker for `.txt` import. Drag-and-drop handled via `NSPasteboard` UTType. No third-party dependency. |
 | Local storage — scripts | `FileManager` + `JSON` (`Codable`) | Plain JSON files in `~/Library/Application Support/Aira/Scripts/`. No database, no ORM. Scripts are plain text with metadata — no relational structure is needed. Zero added binary weight. |
 | Local storage — collections | `FileManager` + `JSON` (`Codable`) | Single `collections.json` file in `~/Library/Application Support/Aira/`. Contains collection definitions and script membership lists. |
-| Local storage — settings | `UserDefaults` | Standard macOS preference storage. Handles all scalar settings (font size, opacity, shortcuts, countdown duration) with zero overhead. |
+| Local storage — settings | `UserDefaults` | Standard macOS preference storage. Handles all scalar settings (font size, alignment, spacing, opacity, text shadow, padding, shortcuts, countdown duration) with zero overhead. |
 | Distribution | Xcode Archive + `notarytool` | Standard Apple notarization pipeline. Required for Gatekeeper to pass without warnings. |
 | AI converter | **Deferred — future release** | Not in v1 scope. No `URLSession`, no `Keychain`, no API key UI, no networking code ships in v1. The requirements (REQ-017–REQ-020) remain normative for a future release. |
 
@@ -53,8 +53,11 @@ Aira/
 │   ├── AiraApp.swift            — @main entry point, AppDelegate, menu bar setup
 │   ├── AppState.swift           — global ObservableObject (active script, session state, settings, open pills)
 │   ├── AppUpdaterConfiguration.swift — resolves Sparkle feed/public-key bundle configuration and fail-closed state
-│   ├── AppUpdaterController.swift — owns Sparkle updater startup and Check for Updates availability
-│   ├── AiraSparkleUserDriver.swift — custom Sparkle user driver that replaces stock update prompts
+│   ├── AppUpdating.swift        — protocol defining updater capabilities consumed by app shell
+│   ├── AppUpdaterController.swift — updater façade/factory that selects direct or App Store behavior
+│   ├── SparkleAppUpdater.swift  — direct-build Sparkle implementation and Check for Updates availability
+│   ├── NoOpAppUpdater.swift     — App Store implementation with no self-update capability
+│   ├── AiraSparkleUserDriver.swift — custom Sparkle user driver that replaces stock update prompts in direct builds
 │   ├── AppUpdatePromptContent.swift — copy model for Aira-branded updater prompts
 │   └── AppUpdatePromptWindowController.swift — branded floating update prompt window controller
 │
@@ -101,8 +104,7 @@ Aira/
     ├── ScriptMeta.swift         — lightweight index entry: id, title, lastEdited, wordCount, starred
     ├── Collection.swift         — Codable struct: id, name, scriptIds
     ├── AppSettings.swift        — all user preference properties with defaults (including pillsEnabled, maxPillCount)
-    ├── OverlayAppearance.swift  — Codable struct: textColor, backgroundColor, opacity, fontName, fontSize
-    └── MoodPreset.swift         — named OverlayAppearance bundle
+    ├── OverlayAppearance.swift  — Codable struct: textColor, backgroundColor, opacity, fontName, fontSize, textAlignment, lineSpacing
 
 # Future modules (not in v1):
 # AIIntegration/               — URLSession calls to third-party AI providers
@@ -124,7 +126,7 @@ panel.sharingType = .none
 
 This single flag excludes the window from all screen capture streams, including Zoom, Teams, and macOS `ScreenCaptureKit`-based recorders. The window remains fully visible to the local user.
 
-**Important:** This flag must be set before the session starts, at window creation time. It cannot be changed mid-session.
+`AppSettings.screenCaptureExclusionEnabled` is the single persisted source of truth for this behavior. It defaults to `true` and is controlled by Preferences > System. Overlay controllers read that setting through `OverlayStealthConfiguration` so notch and pill windows stay consistent.
 
 **Failure detection (REQ-007):** Before calling `VoiceSyncEngine.start()`, verify that the flag was accepted. If the running macOS version or system configuration does not honor `sharingType = .none` (detectable by checking the panel's actual `sharingType` property after setting it), display a yellow warning banner in the Manager App above the "Go Live" button. The warning informs the user that stealth cannot be guaranteed. The session is not blocked — the user decides how to proceed.
 
@@ -460,11 +462,13 @@ The current build settings embed:
 
 **App-side flow:**
 
-1. `AppUpdaterController` reads `SUFeedURL` and `SUPublicEDKey` from the bundle via `AppUpdaterConfiguration`
-2. If either value is missing or invalid, the updater fails closed and `Check for Updates…` remains disabled
-3. If configured, `SPUUpdater` starts using `AiraSparkleUserDriver`
-4. `AiraSparkleUserDriver` replaces Sparkle's stock `update found` and `ready to install` alerts with Aira-branded popup windows
-5. Download progress, extraction progress, and updater errors continue through Sparkle's standard user-driver surfaces for now
+1. `AppUpdaterController` resolves build flavor and constructs an `AppUpdating` implementation
+2. Direct builds read `SUFeedURL` and `SUPublicEDKey` from the bundle via `AppUpdaterConfiguration`
+3. If either direct-build value is missing or invalid, the updater fails closed and `Check for Updates…` remains disabled
+4. If configured, direct builds start `SPUUpdater` using `AiraSparkleUserDriver`
+5. `AiraSparkleUserDriver` replaces Sparkle's stock `update found` and `ready to install` alerts with Aira-branded popup windows
+6. App Store builds instantiate `NoOpAppUpdater`, report `canCheckForUpdates = false`, and expose no self-update UI
+7. Download progress, extraction progress, and updater errors continue through Sparkle's standard user-driver surfaces for now in direct builds only
 
 **Release artifacts:**
 
@@ -480,6 +484,16 @@ The appcast and ZIP may live in a separate public distribution repository from t
 
 - Releases are cut from immutable version tags such as `v1.0.0-beta.1`
 - The GitHub Actions release workflow validates the tagged commit, builds/signs/notarizes the app, generates Sparkle artifacts, and publishes them to `sankirthk/aira-releases`
+- App Store uploads run through a separate workflow that archives the App Store release configuration, exports App Store signing output, uploads that artifact to App Store Connect, and may optionally submit the processed build for review
+
+**Build-variant split:**
+
+- One product codebase remains shared across both release paths
+- Xcode keeps direct distribution in target `Aira` and adds target `AiraAppStore` because Sparkle package linkage is target-scoped rather than configuration-scoped in this project
+- `AiraAppStore` archives with `AppStoreRelease`, uses App Store-specific entitlements and plist input, and ships without Sparkle linkage
+- Direct builds keep Sparkle linkage, `SU*` Info.plist values, and Sparkle mach-lookup entitlements
+- App Store builds omit Sparkle linkage, omit `SU*` Info.plist values, remove Sparkle mach-lookup entitlements, and hide updater commands entirely
+- CI must build both `Release` and `AppStoreRelease` so distribution regressions are caught before shipping
 
 ---
 
@@ -499,7 +513,7 @@ struct OverlayAppearance: Codable, Equatable {
 }
 ```
 
-**Default appearance** is stored in `AppSettings.defaultOverlayAppearance` (a single `OverlayAppearance` value). The Settings > Overlays tab edits this value. `UserDefaults` stores it via `SettingsStore`. Both Notch and Pill windows are initialised from this single value — there are no separate per-pill appearance defaults.
+**Default appearance** is stored in `AppSettings.defaultOverlayAppearance` (a single `OverlayAppearance` value). The Settings > Overlays tab edits this value, with Overlay Font as the only typeface picker and Accessibility handling alignment, spacing, text shadow, and inner padding. `UserDefaults` stores it via `SettingsStore`. Both Notch and Pill windows are initialised from this single value — there are no separate per-pill appearance defaults.
 
 **Pill settings** are two additional fields on `AppSettings`:
 - `pillsEnabled: Bool = false` — gates whether pills can be launched. The "Go Live" pill flow checks this before presenting `PillSetupView`.
@@ -510,8 +524,6 @@ struct OverlayAppearance: Codable, Equatable {
 **Persistence:** Per-window overrides are in-session only and are not persisted when the session ends. Each new session starts from `AppSettings.defaultOverlayAppearance`. This keeps the data model simple; if persistent per-window settings become a requirement, it can be added by storing a `[String: OverlayAppearance]` keyed by window type in `UserDefaults`.
 
 **Live preview in popover:** `OverlayAppearancePopover` observes the controller's `currentAppearance` and renders a miniature preview strip as a `RoundedRectangle` with the chosen colors and a sample word in the chosen font and size. Updates happen synchronously as sliders move — no debounce needed since there is no disk write on each change.
-
-**Mood Presets (REQ-024):** `MoodPreset` is a named `OverlayAppearance` bundle. Applying a preset sets `currentAppearance` on the target window to the preset's values. Presets are also available in Settings > Overlays to update the global defaults.
 
 ---
 
@@ -652,9 +664,9 @@ Manual scroll needs one consistent source of truth for session-level scroll beha
 - keyboard scroll shortcuts during a session
 - mouse wheel / trackpad scrolling directly on the overlay
 
-To keep these aligned, the session owns a single display-synced scroll driver. That driver is the only code allowed to advance the rendered offset. It consumes measured viewport metrics plus higher-level inputs like “move one line,” “scroll by wheel delta,” or “advance at N WPM,” and emits the next normalized scroll offset on each display refresh.
+To keep these aligned, the session owns a single display-synced scroll driver. That driver is the only code allowed to advance the rendered offset. It consumes measured viewport metrics plus higher-level inputs like “move one line,” “scroll by wheel delta,” or “advance at N points per second,” and emits the next normalized scroll offset on each display refresh.
 
-**Settings model:** `AppSettings.autoScrollWPM` remains persisted in `UserDefaults`, but is clamped to a bounded presenter-safe range of `100...300`. The System tab renders this as a slider with a live `NNN WPM` label. The default remains `135`.
+**Settings model:** `AppSettings.autoScrollWPM` remains the persisted storage key for backward compatibility, but the value now represents a bounded presenter-safe `10...100` points-per-second range. The System tab renders this as a slider with a live `NNN pt/s` label. The default remains `50`.
 
 **Primary viewport metrics:** `PrompterContentView` reports its measured content height, viewport height, effective line height, and rendered line metrics to the shared session scroll driver. The notch window is the primary metrics source when present; otherwise the first active pill window is used. The notch presentation reports metrics for the readable region below the notch cutout, not the full panel bounds.
 
@@ -664,19 +676,19 @@ To keep these aligned, the session owns a single display-synced scroll driver. T
 
 **Keyboard nudges:** `VoiceSyncKeyboardMonitor` continues to capture the configured up/down shortcuts globally during an active session. Instead of directly mutating the offset, the handler asks the session scroll driver to enqueue a one-line nudge using the measured rendered line height.
 
-**Pause shortcut:** The session pause shortcut must pause the active scroll mode itself, not just the speech recognizer state. Manual WPM scroll, classic voice-sync jumps, and cinematic voice-driven drift all need to respect one explicit user-pause flag so the shortcut behaves consistently regardless of how the overlay is currently moving.
+**Pause shortcut:** The session pause shortcut must pause the active scroll mode itself, not just the speech recognizer state. Manual point-based scroll, classic voice-sync jumps, and cinematic voice-driven drift all need to respect one explicit user-pause flag so the shortcut behaves consistently regardless of how the overlay is currently moving.
 
-**Mouse wheel / trackpad:** `PrompterContentView` continues to use an AppKit `NSViewRepresentable` interceptor because `.nonactivatingPanel` does not reliably deliver SwiftUI scroll gestures. Wheel deltas are forwarded into the same driver instead of bypassing it, so wheel input, keyboard nudges, and WPM auto-scroll cannot fight each other.
+**Mouse wheel / trackpad:** `PrompterContentView` continues to use an AppKit `NSViewRepresentable` interceptor because `.nonactivatingPanel` does not reliably deliver SwiftUI scroll gestures. Wheel deltas are forwarded into the same driver instead of bypassing it, so wheel input, keyboard nudges, and auto-scroll cannot fight each other. Overlay panels also forward direct `scrollWheel(with:)` delivery through their `NSPanel` subclass before duplicate-collapse logic so manual pill scrolling still works when monitor delivery is unreliable. Hover-pause remains notch-only; pill wheel/trackpad scrolling must stay available regardless of the hover-pause setting.
 
 **Single manual offset authority:** Legacy mirrored offset channels like direct `keyNudgeOffset` writes must not drive the overlay once the display-synced manual driver is active. The driver remains the only authority for rendered manual scroll position; other subsystems may publish intent such as “nudge one line” but not directly assign the displayed manual offset.
 
 **Shared synced-session authority:** In Sync mode, `VoiceSyncEngine` remains responsible for speech matching and cursor tracking, but `SessionScrollCoordinator` owns the shared content progress for the whole session rather than a single rendered offset. The primary synced overlay advances progress using the same display-synced manual driver used by the notch-only path, then each follower synced window projects that shared progress into its own local offset using its own measured layout metrics. The primary overlay must not re-project coordinator progress back into itself, or it will fight its own display-linked motion and reintroduce jitter.
 
-**Manual auto-scroll pacing:** Manual WPM scroll must derive its velocity from the actual rendered scrollable distance of the current overlay content and the total script read time implied by the configured WPM. In practice, the display-synced driver advances across the full normalized scroll range over `totalSpeakableWords / WPM` minutes, using the normalized overlay token count rather than a line-average heuristic, starts from the top of a fresh session unless the user is explicitly resuming the same session state, and stays perfectly linear at the display refresh cadence.
+**Manual auto-scroll pacing:** Manual auto-scroll must derive its velocity from a fixed configured points-per-second value rather than token counts, word counts, or total document length. In practice, the display-synced driver advances by the same physical on-screen distance every second at a given setting, starts from the top of a fresh session unless the user is explicitly resuming the same session state, and stays perfectly linear at the display refresh cadence.
 
-**Speakable token filtering:** WPM pacing, content-progress projection, and speech matching all share the same tokenization rules. Non-spoken metadata such as email addresses, raw URLs, and FAQ-style section markers like `Q)` / `A)` must be ignored by that tokenizer so scripts with administrative formatting do not distort scroll speed or tracking.
+**Speakable token filtering:** Speech matching still shares the same tokenization rules. Non-spoken metadata such as email addresses, raw URLs, and FAQ-style section markers like `Q)` / `A)` must be ignored by that tokenizer so scripts with administrative formatting do not distort speech tracking.
 
-**Sparse-layout pacing:** Manual WPM auto-scroll must advance by speakable content progress, not by a fixed rendered-offset speed. Scripts with many paragraph breaks, headings, bullets, or FAQ formatting create sparse vertical regions; if the app advances raw offset linearly through those regions, the visible pace feels wrong. The display-linked driver therefore converts each frame's WPM progress step into that window's local rendered offset using the current line metrics, with continuous interpolation between adjacent speakable line anchors rather than snapping whole frames to the next line.
+**Sparse-layout pacing:** Manual auto-scroll now intentionally advances by fixed rendered distance. Scripts with many paragraph breaks, headings, or bullets therefore remain physically consistent on screen instead of slowing down because of document analysis or local line-density heuristics.
 
 **Why this structure?** The earlier fixed `0.04` keyboard jump and `Task.sleep`-driven loops were brittle because they ignored actual script length, font size, viewport size, and display refresh timing. Centralizing all manual motion in one display-synced driver keeps WPM, keyboard nudges, and wheel scrolling coherent and prevents snapback or micro-stutter from competing offset writers.
 
@@ -871,7 +883,7 @@ The release workflow may reuse the same `xcodebuild test` command for tag valida
 | `ScriptStore` | Create, Read, Update, Delete; JSON round-trip for `Script` Codable; duplicate (new UUID, "Copy of" title, source unchanged); importFromURL (content matches file, new UUID generated, oversized file rejected); handling of missing or corrupt files (graceful error) |
 | `CollectionStore` | Create, rename, delete (scripts not deleted); addScript; removeScript; filtering by collection returns correct script IDs; JSON round-trip for `Collection` Codable |
 | `SettingsStore` | Read/write for every settings key; default value initialization; `OverlayAppearance` Codable round-trip; persistence across store re-initialization |
-| `Models` | `Script` Codable round-trip including `collectionIds`; `AppSettings` Codable round-trip; `MoodPreset` application (all OverlayAppearance properties set correctly); `OverlayAppearance` Equatable (same values = equal) |
+| `Models` | `Script` Codable round-trip including `collectionIds`; `AppSettings` Codable round-trip; `OverlayAppearance` Equatable (same values = equal) |
 | `CountdownView` logic | Timer fires at 1-second intervals; stops at zero; emits `sessionDidStart` signal exactly once; duration = 0 skips immediately to `sessionDidStart`; uses window's OverlayAppearance colors |
 | `VoiceSyncKeyboardMonitor` | `start()` installs event tap; `stop()` removes event tap; handler called exactly once per matching keypress; non-matching keypresses pass through |
 
@@ -971,7 +983,7 @@ The following must be verified before any release build is signed and distribute
 | REQ-021 Window Size Adjustment | Pill Window NSPanel resizable; Notch width from SettingsStore |
 | REQ-022 Text Size Adjustment | OverlayAppearance.fontSize → PrompterContentView |
 | REQ-023 Custom Text Colors | OverlayAppearance.textColor → PrompterContentView |
-| REQ-024 Mood Presets | MoodPreset model applies full OverlayAppearance bundle |
+| REQ-024 Mood Presets | Removed from Preferences; overlay appearance is configured directly through persisted `OverlayAppearance` fields |
 | REQ-025 Local-First Architecture | §3.6, §3.14 storage; §1 no cloud frameworks in stack |
 | REQ-026 No Telemetry | §8 security checklist; §0 zero ambient network activity |
 | REQ-027 No Account Required | No auth framework, no Keychain in v1 |

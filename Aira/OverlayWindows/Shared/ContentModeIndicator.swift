@@ -2,13 +2,13 @@ import SwiftUI
 
 /// Small badge shown on hover in Pill windows indicating Voice-Sync vs Manual mode.
 struct ContentModeIndicator: View {
-  let mode: PillContentMode
+  let systemImageName: String
   let isVisible: Bool
 
   var body: some View {
     Group {
       if isVisible {
-        Image(systemName: mode == .voiceSync ? "waveform" : "hand.point.up")
+        Image(systemName: systemImageName)
           .font(.system(size: 11, weight: .medium))
           .foregroundStyle(.white)
           .padding(5)

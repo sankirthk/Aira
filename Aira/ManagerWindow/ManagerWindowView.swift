@@ -155,6 +155,9 @@ struct ManagerWindowView: View {
           },
           onOpenScript: { id in
             openScriptFromSidebar(id: id)
+          },
+          onMoveScriptToCollection: { scriptID, collectionID in
+            moveScript(scriptID, toCollection: collectionID)
           }
         )
         .frame(width: 230)
@@ -307,6 +310,19 @@ struct ManagerWindowView: View {
         selectedNav: selectedNav
       )
       pendingDeleteCollection = nil
+    } catch {
+      collectionErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func moveScript(_ scriptID: UUID, toCollection collectionID: UUID) {
+    do {
+      let script = try appState.readScript(id: scriptID)
+      let nextCollectionIDs = DocumentLibraryMoveScriptLogic.updatedCollectionIDs(
+        existingCollectionIDs: script.collectionIds,
+        adding: collectionID
+      )
+      try appState.updateScriptCollections(id: scriptID, collectionIDs: nextCollectionIDs)
     } catch {
       collectionErrorMessage = error.localizedDescription
     }

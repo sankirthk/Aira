@@ -1,0 +1,96 @@
+name: App Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch, tag, or SHA to build
+        required: false
+        default: main
+        type: string
+      upload_to_app_store_connect:
+        description: Upload exported package to App Store Connect
+        required: true
+        default: true
+        type: boolean
+      submit_for_review:
+        description: Reserved gate for future automated review submission
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-store-${{ inputs.source_ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package App Store Build
+    runs-on: macos-latest
+    timeout-minutes: 60
+    outputs:
+      pkg_name: ${{ steps.package.outputs.pkg_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - name: Archive and export App Store package
+        id: package
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPSTORE_CONNECT_KEY_ID: ${{ secrets.APPSTORE_CONNECT_KEY_ID }}
+          APPSTORE_CONNECT_ISSUER_ID: ${{ secrets.APPSTORE_CONNECT_ISSUER_ID }}
+          APPSTORE_CONNECT_PRIVATE_KEY: ${{ secrets.APPSTORE_CONNECT_PRIVATE_KEY }}
+        run: bash scripts/release/build_app_store_package.sh
+
+      - name: Upload App Store package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-store-package
+          path: ${{ steps.package.outputs.pkg_path }}
+          if-no-files-found: error
+
+  upload:
+    name: Upload To App Store Connect
+    runs-on: macos-latest
+    timeout-minutes: 30
+    needs: package
+    if: ${{ inputs.upload_to_app_store_connect }}
+    steps:
+      - name: Download exported package
+        uses: actions/download-artifact@v4
+        with:
+          name: app-store-package
+          path: build/app-store
+
+      - name: Upload package
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          PKG_NAME: ${{ needs.package.outputs.pkg_name }}
+        run: |
+          xcrun altool --upload-app \
+            -f "build/app-store/$PKG_NAME" \
+            -t macos \
+            -u "$APPLE_ID" \
+            -p "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --output-format xml
+
+  submit-review-gate:
+    name: Submit Review Gate
+    runs-on: ubuntu-latest
+    needs:
+      - package
+      - upload
+    if: ${{ always() && inputs.submit_for_review }}
+    steps:
+      - name: Manual review submission required
+        run: |
+          echo "App Store upload completed or attempted."
+          echo "Review submission remains gated/manual."
+          echo "Submit the processed build from App Store Connect after verification."

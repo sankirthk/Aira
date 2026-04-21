@@ -5,12 +5,17 @@ import Speech
 
 @MainActor
 class VoiceSyncEngine: ObservableObject {
+  static let inputTapBufferSize: AVAudioFrameCount = 128
+
   @Published var state: EngineState = .idle
   @Published var isPausedByUser: Bool = false
   @Published var scrollOffset: CGFloat = 0
   @Published var manualLineNudgeID: Int = 0
   @Published var manualLineNudgeDirection: CGFloat = 0
   @Published var currentWordIndex: Int?
+  @Published var highlightedWordRange: Range<Int>?
+  @Published var visualCurrentWordIndex: Int?
+  @Published var visualHighlightedWordRange: Range<Int>?
   @Published var isHumanSpeechActive: Bool = false
 
   private var audioEngine: AVAudioEngine?
@@ -24,18 +29,31 @@ class VoiceSyncEngine: ObservableObject {
 
   private var scriptWords: [String] = []
   private var cursorIndex: Int = 0
+  private var visualCursorIndex: Int = 0
+  private var visibleWordRange: Range<Int> = 0..<0
+  private let strictMatchLookAhead: Int = 3
+  private let visualMatchLookAhead: Int = 3
   private let silenceThresholdNanoseconds: UInt64 = 500_000_000
   private var recognitionEnabled: Bool = false
+  private var recognitionDrivesScroll: Bool = true
+  private var previousPartialTokens: [String] = []
+  private var recognitionGeneration: UInt64 = 0
 
   // MARK: - Public API
 
   func loadScript(text: String, startingAt offset: CGFloat = 0) {
     scriptWords = VoiceSyncMatching.tokenize(text)
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * offset)
+    visibleWordRange = 0..<scriptWords.count
     scrollOffset = offset
     isPausedByUser = false
     currentWordIndex = nil
+    highlightedWordRange = nil
+    visualCurrentWordIndex = nil
+    visualHighlightedWordRange = nil
     isHumanSpeechActive = false
+    visualCursorIndex = cursorIndex
+    previousPartialTokens = []
   }
 
   func start() {
@@ -51,6 +69,8 @@ class VoiceSyncEngine: ObservableObject {
   }
 
   func stop() {
+    recognitionGeneration &+= 1
+    state = .idle
     silenceDeadlineTask?.cancel()
     silenceDeadlineTask = nil
     recognitionTask?.cancel()
@@ -65,28 +85,78 @@ class VoiceSyncEngine: ObservableObject {
     manualLineNudgeID = 0
     manualLineNudgeDirection = 0
     currentWordIndex = nil
+    highlightedWordRange = nil
+    visualCurrentWordIndex = nil
+    visualHighlightedWordRange = nil
     isHumanSpeechActive = false
     audioLevelMonitor?.reset()
     recognitionEnabled = false
-    state = .idle
+    recognitionDrivesScroll = true
+    scriptWords = []
+    visibleWordRange = 0..<0
+    visualCursorIndex = 0
+    previousPartialTokens = []
   }
 
   func togglePause() {
     isPausedByUser.toggle()
   }
 
-  func nudgeScroll(by delta: CGFloat) {
+  func enableRecognitionIfNeeded() {
+    guard !recognitionEnabled else { return }
+    recognitionEnabled = true
+    restartRecognitionIfNeeded()
+  }
+
+  func setRecognitionDrivesScroll(_ drivesScroll: Bool) {
+    recognitionDrivesScroll = drivesScroll
+  }
+
+  func nudgeScroll(by delta: CGFloat, resetSpokenTracking: Bool = true) {
     let updatedOffset = min(max(scrollOffset + delta, 0), 1)
     scrollOffset = updatedOffset
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * updatedOffset)
-    currentWordIndex = nil
+    if resetSpokenTracking {
+      currentWordIndex = nil
+      highlightedWordRange = nil
+      visualCurrentWordIndex = nil
+      visualHighlightedWordRange = nil
+      visualCursorIndex = cursorIndex
+      previousPartialTokens = []
+    }
   }
 
-  func nudgeScroll(to offset: CGFloat) {
+  func nudgeScroll(to offset: CGFloat, resetSpokenTracking: Bool = true) {
     let clamped = min(max(offset, 0), 1)
     scrollOffset = clamped
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * clamped)
+    if resetSpokenTracking {
+      currentWordIndex = nil
+      highlightedWordRange = nil
+      visualCurrentWordIndex = nil
+      visualHighlightedWordRange = nil
+      visualCursorIndex = cursorIndex
+      previousPartialTokens = []
+    }
+  }
+
+  func updateVisibleWordRange(_ range: Range<Int>) {
+    let lower = min(max(range.lowerBound, 0), scriptWords.count)
+    let upper = min(max(range.upperBound, lower), scriptWords.count)
+    visibleWordRange = lower..<upper
+  }
+
+  func reseedHighlight(to wordIndex: Int) {
+    guard !scriptWords.isEmpty else { return }
+
+    let clampedIndex = min(max(wordIndex, 0), scriptWords.count - 1)
+    cursorIndex = clampedIndex
+    visualCursorIndex = clampedIndex
     currentWordIndex = nil
+    highlightedWordRange = nil
+    visualCurrentWordIndex = clampedIndex
+    visualHighlightedWordRange = 0..<clampedIndex
+    previousPartialTokens = []
   }
 
   func requestManualLineNudge(direction: CGFloat) {
@@ -98,6 +168,14 @@ class VoiceSyncEngine: ObservableObject {
   // MARK: - Permissions
 
   private func requestPermissionsAndStartWithRecognition() {
+    let speechStatus = SFSpeechRecognizer.authorizationStatus()
+    let micStatus = AVAudioApplication.shared.recordPermission
+
+    if speechStatus == .authorized && micStatus == .granted {
+      startEngine()
+      return
+    }
+
     SFSpeechRecognizer.requestAuthorization { [weak self] status in
       guard status == .authorized else { return }
       AVAudioApplication.requestRecordPermission { [weak self] granted in
@@ -110,6 +188,13 @@ class VoiceSyncEngine: ObservableObject {
   }
 
   private func requestMicrophonePermissionAndStart() {
+    let micStatus = AVAudioApplication.shared.recordPermission
+
+    if micStatus == .granted {
+      startEngine()
+      return
+    }
+
     AVAudioApplication.requestRecordPermission { [weak self] granted in
       guard granted else { return }
       Task { @MainActor [weak self] in
@@ -127,7 +212,7 @@ class VoiceSyncEngine: ObservableObject {
     let inputNode = engine.inputNode
     let format = inputNode.outputFormat(forBus: 0)
 
-    inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) {
+    inputNode.installTap(onBus: 0, bufferSize: Self.inputTapBufferSize, format: format) {
       [weak self, recognitionBox] buffer, _ in
       // recognitionBox is captured by reference and is lock-protected,
       // so this audio-thread access is safe across recognition restarts.
@@ -145,19 +230,25 @@ class VoiceSyncEngine: ObservableObject {
       let request = SFSpeechAudioBufferRecognitionRequest()
       request.requiresOnDeviceRecognition = true
       request.shouldReportPartialResults = true
+      request.addsPunctuation = false
       recognitionBox.set(request)
+      let generation = recognitionGeneration
 
       recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+        guard let self else { return }
+        guard generation == self.recognitionGeneration else { return }
         if let result {
           Task { @MainActor [weak self] in
-            self?.handleRecognitionResult(result)
+            guard let self, generation == self.recognitionGeneration else { return }
+            self.handleRecognitionResult(result)
           }
           // On-device recognition tasks have a ~1 minute limit.
           // When isFinal is true the task is done — restart immediately
           // so voice sync continues uninterrupted.
           if result.isFinal {
             Task { @MainActor [weak self] in
-              self?.restartRecognitionIfNeeded()
+              guard let self, generation == self.recognitionGeneration else { return }
+              self.restartRecognitionIfNeeded()
             }
           }
         }
@@ -172,7 +263,8 @@ class VoiceSyncEngine: ObservableObject {
             category: "voice"
           )
           Task { @MainActor [weak self] in
-            self?.restartRecognitionIfNeeded()
+            guard let self, generation == self.recognitionGeneration else { return }
+            self.restartRecognitionIfNeeded()
           }
         }
       }
@@ -192,6 +284,12 @@ class VoiceSyncEngine: ObservableObject {
   // MARK: - Word Matching
 
   private func handleRecognitionResult(_ result: SFSpeechRecognitionResult) {
+    defer {
+      if result.isFinal {
+        previousPartialTokens = []
+      }
+    }
+
     guard state != .idle else { return }
     guard !isPausedByUser else { return }
 
@@ -200,12 +298,15 @@ class VoiceSyncEngine: ObservableObject {
       state = .running
     }
 
-    let spoken = result.bestTranscription.segments
-      .compactMap { VoiceSyncMatching.normalizeToken($0.substring) }
-
-    guard !spoken.isEmpty else { return }
+    let recognizedWords = VoiceSyncMatching.recognizedWords(from: result.bestTranscription.segments)
+    guard !recognizedWords.isEmpty else { return }
 
     isHumanSpeechActive = true
+    let searchRange = normalizedSearchRange()
+    guard !searchRange.isEmpty else { return }
+    processVisualPartialDelta(recognizedWords, searchRange: searchRange)
+
+    guard recognitionDrivesScroll else { return }
 
     // Tiered Matching Strategy
     // Apple's partial results update the trailing words constantly. We use the
@@ -215,45 +316,33 @@ class VoiceSyncEngine: ObservableObject {
     // 40 words ahead just because the user said "the".
     var match: VoiceSyncMatching.Match?
 
-    // 1. High confidence: 3 words match -> safe to jump up to 45 words ahead (skipping a paragraph)
-    if spoken.count >= 3 {
-      let window = Array(spoken.suffix(3))
-      match = VoiceSyncMatching.findDetailedMatch(
-        scriptWords: scriptWords,
-        spokenWindow: window,
-        cursorIndex: cursorIndex,
-        lookAhead: 45,
-        minimumOverlap: 3
-      )
-    }
+    for configuration in VoiceSyncMatching.matchConfigurations {
+      guard
+        let window = VoiceSyncMatching.trailingRecognizedWindow(
+          from: recognizedWords,
+          length: configuration.windowLength,
+          minimumWordConfidence: configuration.minimumWordConfidence,
+          minimumAverageConfidence: configuration.minimumAverageConfidence
+        )
+      else { continue }
 
-    // 2. Medium confidence: 2 words match -> safe to jump up to 12 words ahead (skipping a line)
-    if match == nil, spoken.count >= 2 {
-      let window = Array(spoken.suffix(2))
       match = VoiceSyncMatching.findDetailedMatch(
         scriptWords: scriptWords,
-        spokenWindow: window,
-        cursorIndex: cursorIndex,
-        lookAhead: 12,
-        minimumOverlap: 2
+        spokenWindow: window.map(\.token),
+        cursorIndex: searchRange.lowerBound,
+        lookAhead: min(searchRange.count, strictMatchLookAhead),
+        minimumOverlap: configuration.windowLength
       )
-    }
 
-    // 3. Low confidence: 1 word match -> safe to jump up to 4 words ahead (skipping a filler word)
-    if match == nil, spoken.count >= 1 {
-      let window = Array(spoken.suffix(1))
-      match = VoiceSyncMatching.findDetailedMatch(
-        scriptWords: scriptWords,
-        spokenWindow: window,
-        cursorIndex: cursorIndex,
-        lookAhead: 4,
-        minimumOverlap: 1
-      )
+      if match != nil {
+        break
+      }
     }
 
     guard let match else { return }
 
     currentWordIndex = match.currentWordIndex
+    highlightedWordRange = match.startIndex..<match.matchedWindowEnd
 
     // Directly use the matched index. Visual smoothing is handled by UI.
     guard match.currentWordIndex > cursorIndex else { return }
@@ -265,6 +354,78 @@ class VoiceSyncEngine: ObservableObject {
     )
 
     scrollOffset = offset
+
+  }
+
+  private func normalizedSearchRange() -> Range<Int> {
+    guard !scriptWords.isEmpty else { return 0..<0 }
+    let lower = min(max(max(cursorIndex, visibleWordRange.lowerBound), 0), scriptWords.count)
+    let upper = min(max(visibleWordRange.upperBound, lower), scriptWords.count)
+    return lower..<upper
+  }
+
+  private func processVisualPartialDelta(
+    _ recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    searchRange: Range<Int>
+  ) {
+    let partialTokens = recognizedWords.map(\.token)
+    let stablePrefixCount = VoiceSyncMatching.commonPrefixLength(
+      lhs: previousPartialTokens,
+      rhs: partialTokens
+    )
+
+    let visualSearchLowerBound = min(
+      max(max(visualCursorIndex, searchRange.lowerBound), 0),
+      scriptWords.count
+    )
+    let visualSearchUpperBound = min(
+      max(searchRange.upperBound, visualSearchLowerBound), scriptWords.count)
+    let visualSearchRange = visualSearchLowerBound..<visualSearchUpperBound
+
+    guard !visualSearchRange.isEmpty else {
+      previousPartialTokens = partialTokens
+      return
+    }
+
+    var nextVisualCursor = visualCursorIndex
+    var lastMatchedVisualIndex: Int?
+
+    for token in partialTokens.dropFirst(stablePrefixCount) {
+      let searchStart = min(
+        max(nextVisualCursor, visualSearchRange.lowerBound), visualSearchRange.upperBound)
+      let remainingLookAhead = min(
+        max(visualSearchRange.upperBound - searchStart, 0),
+        visualMatchLookAhead
+      )
+      guard remainingLookAhead > 0 else { continue }
+      guard
+        let match = VoiceSyncMatching.findDetailedMatch(
+          scriptWords: scriptWords,
+          spokenWindow: [token],
+          cursorIndex: searchStart,
+          lookAhead: remainingLookAhead,
+          minimumOverlap: 1
+        )
+      else { continue }
+
+      nextVisualCursor = match.currentWordIndex + 1
+      lastMatchedVisualIndex = match.currentWordIndex
+
+      // In voice-driven mode, keep immediate per-word updates so follow feels
+      // live. In classical highlight-only mode, publish once per partial below
+      // to avoid redraw bursts that can make scrolling look jerky.
+      if recognitionDrivesScroll {
+        visualCurrentWordIndex = match.currentWordIndex
+        visualHighlightedWordRange = 0..<match.currentWordIndex
+      }
+    }
+
+    visualCursorIndex = nextVisualCursor
+    if !recognitionDrivesScroll, let lastMatchedVisualIndex {
+      visualCurrentWordIndex = lastMatchedVisualIndex
+      visualHighlightedWordRange = 0..<lastMatchedVisualIndex
+    }
+    previousPartialTokens = partialTokens
   }
 
   private func restartRecognitionIfNeeded() {
@@ -275,16 +436,22 @@ class VoiceSyncEngine: ObservableObject {
     let request = SFSpeechAudioBufferRecognitionRequest()
     request.requiresOnDeviceRecognition = true
     request.shouldReportPartialResults = true
+    request.addsPunctuation = false
     recognitionBox.set(request)
+    let generation = recognitionGeneration
 
     recognitionTask = recognizer?.recognitionTask(with: request) { [weak self] result, error in
+      guard let self else { return }
+      guard generation == self.recognitionGeneration else { return }
       if let result {
         Task { @MainActor [weak self] in
-          self?.handleRecognitionResult(result)
+          guard let self, generation == self.recognitionGeneration else { return }
+          self.handleRecognitionResult(result)
         }
         if result.isFinal {
           Task { @MainActor [weak self] in
-            self?.restartRecognitionIfNeeded()
+            guard let self, generation == self.recognitionGeneration else { return }
+            self.restartRecognitionIfNeeded()
           }
         }
       }
@@ -297,7 +464,8 @@ class VoiceSyncEngine: ObservableObject {
           category: "voice"
         )
         Task { @MainActor [weak self] in
-          self?.restartRecognitionIfNeeded()
+          guard let self, generation == self.recognitionGeneration else { return }
+          self.restartRecognitionIfNeeded()
         }
       }
     }
@@ -305,14 +473,17 @@ class VoiceSyncEngine: ObservableObject {
 
   private func scheduleSilenceDeadline() {
     silenceDeadlineTask?.cancel()
+    let generation = recognitionGeneration
     silenceDeadlineTask = Task { [weak self] in
       try? await Task.sleep(nanoseconds: self?.silenceThresholdNanoseconds ?? 500_000_000)
       guard !Task.isCancelled else { return }
       await MainActor.run {
         guard let self else { return }
+        guard generation == self.recognitionGeneration else { return }
         if self.state == .running {
           self.state = .paused
           self.isHumanSpeechActive = false
+          self.highlightedWordRange = nil
         }
       }
     }
@@ -344,6 +515,22 @@ final class RecognitionRequestBox {
 }
 
 struct VoiceSyncMatching {
+  struct RecognizedWord: Equatable {
+    let token: String
+    let confidence: Float
+  }
+
+  struct MatchConfiguration {
+    let windowLength: Int
+    let minimumWordConfidence: Float
+    let minimumAverageConfidence: Float
+  }
+
+  struct TokenSpan: Equatable {
+    let normalized: String
+    let range: NSRange
+  }
+
   struct Match: Equatable {
     let startIndex: Int
     let overlap: Int
@@ -358,10 +545,64 @@ struct VoiceSyncMatching {
   }
 
   static func tokenize(_ text: String) -> [String] {
-    text
-      .lowercased()
-      .components(separatedBy: .whitespacesAndNewlines)
-      .compactMap { normalizeToken($0) }
+    tokenSpans(in: text).map(\.normalized)
+  }
+
+  static let matchConfigurations: [MatchConfiguration] = [
+    MatchConfiguration(
+      windowLength: 3, minimumWordConfidence: 0.35, minimumAverageConfidence: 0.55),
+    MatchConfiguration(
+      windowLength: 2, minimumWordConfidence: 0.45, minimumAverageConfidence: 0.62),
+    MatchConfiguration(
+      windowLength: 1, minimumWordConfidence: 0.72, minimumAverageConfidence: 0.72),
+  ]
+
+  static func recognizedWords(from segments: [SFTranscriptionSegment]) -> [RecognizedWord] {
+    segments.compactMap { segment in
+      guard let token = normalizeToken(segment.substring) else { return nil }
+      return RecognizedWord(token: token, confidence: segment.confidence)
+    }
+  }
+
+  static func trailingRecognizedWindow(
+    from recognizedWords: [RecognizedWord],
+    length: Int,
+    minimumWordConfidence: Float,
+    minimumAverageConfidence: Float
+  ) -> [RecognizedWord]? {
+    guard recognizedWords.count >= length else { return nil }
+    let window = Array(recognizedWords.suffix(length))
+    guard window.allSatisfy({ $0.confidence >= minimumWordConfidence }) else { return nil }
+    let averageConfidence =
+      window.reduce(Float.zero) { partial, word in
+        partial + word.confidence
+      } / Float(length)
+    guard averageConfidence >= minimumAverageConfidence else { return nil }
+    return window
+  }
+
+  static func commonPrefixLength(lhs: [String], rhs: [String]) -> Int {
+    let maxCount = min(lhs.count, rhs.count)
+    var prefixLength = 0
+
+    while prefixLength < maxCount, lhs[prefixLength] == rhs[prefixLength] {
+      prefixLength += 1
+    }
+
+    return prefixLength
+  }
+
+  static func tokenSpans(in text: String) -> [TokenSpan] {
+    let nsText = text as NSString
+    let fullRange = NSRange(location: 0, length: nsText.length)
+    let regex = try? NSRegularExpression(pattern: #"[^\s]+"#)
+    let matches = regex?.matches(in: text, range: fullRange) ?? []
+
+    return matches.compactMap { match in
+      let rawToken = nsText.substring(with: match.range)
+      guard let normalized = normalizeToken(rawToken) else { return nil }
+      return TokenSpan(normalized: normalized, range: match.range)
+    }
   }
 
   static func normalizeToken(_ token: String) -> String? {

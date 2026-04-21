@@ -11,17 +11,24 @@ final class SessionPlayheadCoordinator: ObservableObject {
   @Published private(set) var progress: Double = 0
   @Published private(set) var velocity: Double = 0
   @Published private(set) var isPaused: Bool = false
+  @Published private(set) var isSessionStarted: Bool = false
 
   func beginSession() {
     progress = 0
     velocity = 0
     isPaused = false
+    isSessionStarted = false
   }
 
   func endSession() {
     progress = 0
     velocity = 0
     isPaused = false
+    isSessionStarted = false
+  }
+
+  func markSessionStarted() {
+    isSessionStarted = true
   }
 
   func updateProgress(_ progress: Double) {

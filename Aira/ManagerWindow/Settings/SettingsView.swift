@@ -4,12 +4,13 @@ import SwiftUI
 // MARK: - Tab
 
 private enum SettingsTab: CaseIterable, Hashable {
-  case appearance, notch, system
+  case appearance, notch, pills, system
 
   var label: String {
     switch self {
     case .appearance: return "Appearance"
     case .notch: return "The Notch"
+    case .pills: return "Pills"
     case .system: return "System"
     }
   }
@@ -136,6 +137,10 @@ struct SettingsView: View {
         case .notch:
           settingsStaticContainer {
             NotchTabContent()
+          }
+        case .pills:
+          settingsScrollContainer {
+            PillsTabContent()
           }
         case .system:
           settingsScrollContainer {
@@ -585,7 +590,6 @@ private struct AppearanceTabContent: View {
 
 private struct NotchTabContent: View {
   @EnvironmentObject var appState: AppState
-  @State private var expandedManualPillSlot: Int? = nil
   private let swatchRowMaxWidth: CGFloat = 700
   private let swatchSpacing: CGFloat = 10
 
@@ -602,16 +606,94 @@ private struct NotchTabContent: View {
     ("Charcoal", "#2B2B2B"),
     ("Warm Tan", "#D4A574"),
   ]
-  private let moodPresets = MoodPreset.all
   private var previewHasPhysicalNotch: Bool { NotchWindowController.builtInDisplayHasPhysicalNotch }
-  private var previewTextTopPadding: CGFloat { previewHasPhysicalNotch ? 40 : 18 }
+  private var previewLayout: NotchPreviewLayout.ResolvedLayout {
+    NotchPreviewLayout.resolve(
+      text: previewSampleText,
+      preferredWidth: appState.settings.notchWindowWidth,
+      preferredHeight: appState.settings.notchWindowHeight,
+      hasPhysicalNotch: previewHasPhysicalNotch,
+      appearance: appState.settings.defaultOverlayAppearance
+    )
+  }
+  private let previewSampleText = NotchPreviewLayout.defaultSampleText
+  private var previewPanelHeight: CGFloat {
+    max(156, previewLayout.height + 28)
+  }
+  private var lineSpacingBinding: Binding<CGFloat> {
+    Binding(
+      get: {
+        OverlayLineSpacingConfiguration.clamped(
+          appState.settings.defaultOverlayAppearance.lineSpacing)
+      },
+      set: {
+        appState.settings.defaultOverlayAppearance.lineSpacing =
+          OverlayLineSpacingConfiguration.clamped($0)
+      }
+    )
+  }
+
+  private var letterSpacingBinding: Binding<CGFloat> {
+    Binding(
+      get: {
+        OverlayLetterSpacingConfiguration.clamped(
+          appState.settings.defaultOverlayAppearance.letterSpacing)
+      },
+      set: {
+        appState.settings.defaultOverlayAppearance.letterSpacing =
+          OverlayLetterSpacingConfiguration.clamped($0)
+      }
+    )
+  }
+
+  private var wordSpacingBinding: Binding<CGFloat> {
+    Binding(
+      get: {
+        OverlayWordSpacingConfiguration.clamped(
+          appState.settings.defaultOverlayAppearance.wordSpacing)
+      },
+      set: {
+        appState.settings.defaultOverlayAppearance.wordSpacing =
+          OverlayWordSpacingConfiguration.clamped($0)
+      }
+    )
+  }
+
+  private var textShadowBinding: Binding<CGFloat> {
+    Binding(
+      get: {
+        OverlayTextShadowConfiguration.clamped(
+          appState.settings.defaultOverlayAppearance.textShadow)
+      },
+      set: {
+        appState.settings.defaultOverlayAppearance.textShadow =
+          OverlayTextShadowConfiguration.clamped($0)
+      }
+    )
+  }
+
+  private var contentPaddingBinding: Binding<CGFloat> {
+    Binding(
+      get: {
+        OverlayContentPaddingConfiguration.clamped(
+          appState.settings.defaultOverlayAppearance.contentPadding)
+      },
+      set: {
+        appState.settings.defaultOverlayAppearance.contentPadding =
+          OverlayContentPaddingConfiguration.clamped($0)
+      }
+    )
+  }
 
   // Binding that bridges Color ↔ hex string in appState
   private var overlayColorBinding: Binding<Color> {
     Binding(
       get: { Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor) },
       set: { newColor in
-        let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? .white
+        let fallbackColor =
+          NSColor(Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor))
+          .usingColorSpace(.sRGB) ?? .white
+        let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? fallbackColor
         let hex = String(
           format: "#%02X%02X%02X",
           Int((ns.redComponent * 255).rounded()),
@@ -626,7 +708,10 @@ private struct NotchTabContent: View {
     Binding(
       get: { Color(hex: appState.settings.defaultOverlayAppearance.textColor) },
       set: { newColor in
-        let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? .black
+        let fallbackColor =
+          NSColor(Color(hex: appState.settings.defaultOverlayAppearance.textColor))
+          .usingColorSpace(.sRGB) ?? .black
+        let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? fallbackColor
         let hex = String(
           format: "#%02X%02X%02X",
           Int((ns.redComponent * 255).rounded()),
@@ -735,26 +820,19 @@ private struct NotchTabContent: View {
         ZStack(alignment: .top) {
           Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor)
             .opacity(appState.settings.defaultOverlayAppearance.opacity)
-          Text("Your teleprompter text appears here")
-            .font(
-              .custom(
-                appState.settings.defaultOverlayAppearance.fontName,
-                size: min(max(appState.settings.defaultOverlayAppearance.fontSize * 0.72, 12), 24)
-              )
-            )
-            .fontWeight(.semibold)
-            .foregroundStyle(Color(hex: appState.settings.defaultOverlayAppearance.textColor))
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 16)
-            .padding(.top, previewTextTopPadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+          OverlayAppearancePreviewText(
+            text: previewSampleText,
+            appearance: appState.settings.defaultOverlayAppearance,
+            width: previewLayout.width,
+            topPadding: previewLayout.topPadding
+          )
         }
-        .frame(width: previewNotchWidth, height: previewNotchHeight)
+        .frame(width: previewLayout.width, height: previewLayout.height)
         .clipShape(NotchWrapShape(hasNotch: previewHasPhysicalNotch))
         .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: 156)
+      .frame(height: previewPanelHeight)
       .clipShape(RoundedRectangle(cornerRadius: 24))
       .padding(.top, 8)
     }
@@ -804,66 +882,8 @@ private struct NotchTabContent: View {
       }
 
       SettingsPanel {
-        SectionTitle(text: "Mood Presets")
-        Text("Apply a complete overlay mood in one move, then keep refining from there.")
-          .font(.custom("CrimsonText-Regular", size: 14))
-          .foregroundStyle(Color("colorText").opacity(0.6))
-          .padding(.top, 2)
-
-        HStack(spacing: 12) {
-          ForEach(moodPresets) { preset in
-            let isActive = appState.settings.defaultOverlayAppearance == preset.appearance
-            Button {
-              appState.settings.defaultOverlayAppearance = preset.appearance
-            } label: {
-              VStack(alignment: .leading, spacing: 10) {
-                ZStack {
-                  Circle()
-                    .fill(Color(hex: preset.appearance.backgroundColor))
-                    .frame(width: 52, height: 52)
-                  Text("Aa")
-                    .font(.custom("IndieFlower", size: 20))
-                    .foregroundStyle(Color(hex: preset.appearance.textColor))
-                }
-
-                Text(preset.name)
-                  .font(.custom("IndieFlower", size: 22))
-                  .foregroundStyle(Color("colorText"))
-
-                Text(
-                  preset.name == "Day"
-                    ? "Sage paper with cream text for daytime contrast."
-                    : "Charcoal glass with warm tan text for low-light focus."
-                )
-                .font(.custom("CrimsonText-Regular", size: 14))
-                .foregroundStyle(Color("colorText").opacity(0.64))
-                .fixedSize(horizontal: false, vertical: true)
-              }
-              .padding(16)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                isActive
-                  ? Color("colorPrimary").opacity(0.12)
-                  : Color("colorBackground").opacity(0.7)
-              )
-              .clipShape(RoundedRectangle(cornerRadius: 18))
-              .overlay(
-                RoundedRectangle(cornerRadius: 18)
-                  .stroke(
-                    isActive ? Color("colorPrimary") : Color("colorText").opacity(0.14),
-                    lineWidth: isActive ? 3 : 2
-                  )
-              )
-            }
-            .buttonStyle(.plain)
-          }
-        }
-        .padding(.top, 14)
-      }
-
-      SettingsPanel {
         SectionTitle(text: "Overlay Font")
-        Text("Pick the typeface after you land on the mood you want in the preview.")
+        Text("Use this as the single place to choose the overlay typeface, including OpenDyslexic.")
           .font(.custom("CrimsonText-Regular", size: 14))
           .foregroundStyle(Color("colorText").opacity(0.6))
           .padding(.top, 2)
@@ -872,59 +892,75 @@ private struct NotchTabContent: View {
       }
 
       SettingsPanel {
-        SectionTitle(text: "Pill Windows")
-        Text("Choose whether free-moving pill overlays are available during a live session.")
+        SectionTitle(text: "Accessibility")
+        Text("Use layout-focused readability controls here without duplicating font choice.")
           .font(.custom("CrimsonText-Regular", size: 14))
           .foregroundStyle(Color("colorText").opacity(0.6))
           .padding(.top, 2)
 
         VStack(alignment: .leading, spacing: 16) {
-          HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Enable Pill Windows")
-                .font(.custom("IndieFlower", size: 22))
-                .foregroundStyle(Color("colorText"))
-              Text("Turn this off to keep live sessions limited to the main overlay.")
-                .font(.custom("CrimsonText-Regular", size: 14))
-                .foregroundStyle(Color("colorText").opacity(0.62))
-            }
-            Spacer(minLength: 12)
-            Toggle("", isOn: $appState.settings.pillsEnabled)
-              .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
-              .labelsHidden()
-              .accessibilityLabel("Enable Pill Windows")
-          }
-
           VStack(alignment: .leading, spacing: 8) {
-            FieldLabel(text: "Maximum Pill Windows")
+            FieldLabel(text: "Text Alignment")
             HStack(spacing: 8) {
-              pillCountButton(count: 1)
-              pillCountButton(count: 2)
-            }
-            .disabled(!appState.settings.pillsEnabled)
-            .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
-
-            Text(
-              appState.settings.pillsEnabled
-                ? "Allow one or two floating pill windows during a live session."
-                : "Enable pill windows to choose how many can appear during a live session."
-            )
-            .font(.custom("CrimsonText-Regular", size: 14))
-            .foregroundStyle(Color("colorText").opacity(0.62))
-          }
-
-          Divider().opacity(0.2)
-
-          VStack(alignment: .leading, spacing: 16) {
-            FieldLabel(text: "Content Mode")
-
-            ForEach(0..<appState.settings.clampedMaxPillCount, id: \.self) { slot in
-              pillContentModeSection(forSlot: slot)
+              alignmentOptionButton(.left, label: "Left")
+              alignmentOptionButton(.center, label: "Center")
+              alignmentOptionButton(.justified, label: "Justified")
             }
           }
-          .disabled(!appState.settings.pillsEnabled)
-          .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
+
+          readabilitySlider(
+            label: "Line Spacing",
+            valueText: "\(Int(lineSpacingBinding.wrappedValue.rounded()))pt",
+            value: lineSpacingBinding,
+            range: OverlayLineSpacingConfiguration
+              .minimum...OverlayLineSpacingConfiguration.maximum,
+            step: 1,
+            minimumText: "\(Int(OverlayLineSpacingConfiguration.minimum))pt",
+            maximumText: "\(Int(OverlayLineSpacingConfiguration.maximum))pt"
+          )
+
+          readabilitySlider(
+            label: "Letter Spacing",
+            valueText: String(format: "%.1fpt", letterSpacingBinding.wrappedValue),
+            value: letterSpacingBinding,
+            range: OverlayLetterSpacingConfiguration
+              .minimum...OverlayLetterSpacingConfiguration.maximum,
+            step: 0.1,
+            minimumText: String(format: "%.1fpt", OverlayLetterSpacingConfiguration.minimum),
+            maximumText: String(format: "%.1fpt", OverlayLetterSpacingConfiguration.maximum)
+          )
+
+          readabilitySlider(
+            label: "Word Spacing",
+            valueText: String(format: "%.1fpt", wordSpacingBinding.wrappedValue),
+            value: wordSpacingBinding,
+            range: OverlayWordSpacingConfiguration
+              .minimum...OverlayWordSpacingConfiguration.maximum,
+            step: 0.5,
+            minimumText: "\(Int(OverlayWordSpacingConfiguration.minimum))pt",
+            maximumText: "\(Int(OverlayWordSpacingConfiguration.maximum))pt"
+          )
+
+          readabilitySlider(
+            label: "Text Shadow",
+            valueText: String(format: "%.1f", textShadowBinding.wrappedValue),
+            value: textShadowBinding,
+            range: OverlayTextShadowConfiguration.minimum...OverlayTextShadowConfiguration.maximum,
+            step: 0.5,
+            minimumText: "Off",
+            maximumText: String(format: "%.1f", OverlayTextShadowConfiguration.maximum)
+          )
+
+          readabilitySlider(
+            label: "Text Padding",
+            valueText: "\(Int(contentPaddingBinding.wrappedValue.rounded()))pt",
+            value: contentPaddingBinding,
+            range: OverlayContentPaddingConfiguration
+              .minimum...OverlayContentPaddingConfiguration.maximum,
+            step: 1,
+            minimumText: "\(Int(OverlayContentPaddingConfiguration.minimum))pt",
+            maximumText: "\(Int(OverlayContentPaddingConfiguration.maximum))pt"
+          )
         }
         .padding(.top, 12)
       }
@@ -932,19 +968,11 @@ private struct NotchTabContent: View {
   }
 
   private var previewNotchWidth: CGFloat {
-    let normalized =
-      (appState.settings.notchWindowWidth - NotchWidthConfiguration.minimumWidth)
-      / (NotchWidthConfiguration.maximumWidth - NotchWidthConfiguration.minimumWidth)
-    let clamped = min(max(normalized, 0), 1)
-    return 240 + (160 * clamped)
+    previewLayout.width
   }
 
   private var previewNotchHeight: CGFloat {
-    let normalized =
-      (appState.settings.notchWindowHeight - NotchHeightConfiguration.minimumHeight)
-      / (NotchHeightConfiguration.maximumHeight - NotchHeightConfiguration.minimumHeight)
-    let clamped = min(max(normalized, 0), 1)
-    return 108 + (48 * clamped)
+    previewLayout.height
   }
 
   private func sliderRow(
@@ -1044,8 +1072,142 @@ private struct NotchTabContent: View {
   private func resetOverlayFeelToDefaults() {
     appState.settings.notchWindowWidth = NotchWidthConfiguration.defaultWidth
     appState.settings.notchWindowHeight = NotchHeightConfiguration.defaultHeight
-    appState.settings.defaultOverlayAppearance.opacity = OverlayAppearance.default.opacity
-    appState.settings.defaultOverlayAppearance.fontSize = OverlayAppearance.default.fontSize
+    appState.settings.defaultOverlayAppearance = .default
+  }
+
+  @ViewBuilder
+  private func alignmentOptionButton(_ alignment: OverlayTextAlignment, label: String) -> some View
+  {
+    let isSelected = appState.settings.defaultOverlayAppearance.textAlignment == alignment
+
+    Button {
+      appState.settings.defaultOverlayAppearance.textAlignment = alignment
+    } label: {
+      Text(label)
+        .font(.custom("CrimsonText-Regular", size: 17))
+        .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(isSelected ? Color("colorPrimary") : Color("colorBackground"))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+          RoundedRectangle(cornerRadius: 12)
+            .stroke(
+              isSelected ? Color("colorPrimary") : Color("colorText").opacity(0.14),
+              lineWidth: isSelected ? 2.5 : 1.5
+            )
+        )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func readabilitySlider(
+    label: String,
+    valueText: String,
+    value: Binding<CGFloat>,
+    range: ClosedRange<CGFloat>,
+    step: CGFloat,
+    minimumText: String,
+    maximumText: String
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline) {
+        FieldLabel(text: label)
+        Spacer()
+        Text(valueText)
+          .font(.custom("CrimsonText-Regular", size: 16))
+          .foregroundStyle(Color("colorPrimary"))
+      }
+
+      Slider(
+        value: value,
+        in: range,
+        step: step
+      )
+      .tint(Color("colorPrimary"))
+
+      HStack {
+        Text(minimumText)
+        Spacer()
+        Text(maximumText)
+      }
+      .font(.custom("CrimsonText-Regular", size: 14))
+      .foregroundStyle(Color("colorText").opacity(0.55))
+    }
+  }
+
+}
+
+// MARK: - Pills Tab
+
+private struct PillsTabContent: View {
+  @EnvironmentObject var appState: AppState
+  @State private var expandedManualPillSlot: Int? = nil
+
+  var body: some View {
+    VStack(spacing: 16) {
+      SettingsPanel {
+        SectionTitle(text: "Pill Windows")
+        Text(
+          "Set up optional free-moving pills here without mixing session structure into The Notch tab."
+        )
+        .font(.custom("CrimsonText-Regular", size: 14))
+        .foregroundStyle(Color("colorText").opacity(0.6))
+        .padding(.top, 2)
+
+        VStack(alignment: .leading, spacing: 16) {
+          HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Enable Pill Windows")
+                .font(.custom("IndieFlower", size: 22))
+                .foregroundStyle(Color("colorText"))
+              Text(
+                "Turn this off to ignore pills entirely and keep sessions centered on notch only."
+              )
+              .font(.custom("CrimsonText-Regular", size: 14))
+              .foregroundStyle(Color("colorText").opacity(0.62))
+            }
+            Spacer(minLength: 12)
+            Toggle("", isOn: $appState.settings.pillsEnabled)
+              .toggleStyle(.switch)
+              .tint(Color("colorPrimary"))
+              .labelsHidden()
+              .accessibilityLabel("Enable Pill Windows")
+          }
+
+          VStack(alignment: .leading, spacing: 8) {
+            FieldLabel(text: "Maximum Pill Windows")
+            HStack(spacing: 8) {
+              pillCountButton(count: 1)
+              pillCountButton(count: 2)
+            }
+            .disabled(!appState.settings.pillsEnabled)
+            .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
+
+            Text(
+              appState.settings.pillsEnabled
+                ? "Allow one or two floating pill windows during a live session."
+                : "Enable pill windows to choose how many can appear during a live session."
+            )
+            .font(.custom("CrimsonText-Regular", size: 14))
+            .foregroundStyle(Color("colorText").opacity(0.62))
+          }
+
+          Divider().opacity(0.2)
+
+          VStack(alignment: .leading, spacing: 16) {
+            FieldLabel(text: "Content Mode")
+
+            ForEach(0..<appState.settings.clampedMaxPillCount, id: \.self) { slot in
+              pillContentModeSection(forSlot: slot)
+            }
+          }
+          .disabled(!appState.settings.pillsEnabled)
+          .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
+        }
+        .padding(.top, 12)
+      }
+    }
   }
 
   @ViewBuilder
@@ -1159,8 +1321,8 @@ private struct NotchTabContent: View {
 
       Text(
         mode == .voiceSync
-          ? "Pill \(slot + 1) follows the notch and stays in sync with the shared session scroll."
-          : "Pill \(slot + 1) displays its selected script and scrolls manually."
+          ? "Pill \(slot + 1) follows notch and stays in sync with shared session scroll."
+          : "Pill \(slot + 1) displays selected script and scrolls manually."
       )
       .font(.custom("CrimsonText-Regular", size: 14))
       .foregroundStyle(Color("colorText").opacity(0.62))
@@ -1280,22 +1442,8 @@ private struct SystemTabContent: View {
 
   var body: some View {
     VStack(spacing: 16) {
-
       SettingsPanel {
-        SectionTitle(text: "Keyboard Shortcuts")
-        VStack(spacing: 8) {
-          shortcutRow("Toggle Notch", $appState.settings.shortcutToggleNotch)
-          shortcutRow("Toggle Pill", $appState.settings.shortcutTogglePill)
-          shortcutRow("Space to Pause", $appState.settings.shortcutToggleVoiceSync)
-          shortcutRow("Scroll Up", $appState.settings.shortcutScrollUp)
-          shortcutRow("Scroll Down", $appState.settings.shortcutScrollDown)
-          shortcutRow("End Session", $appState.settings.shortcutEndSession)
-        }
-        .padding(.top, 12)
-      }
-
-      SettingsPanel {
-        SectionTitle(text: "Session Countdown")
+        SectionTitle(text: "Before your Session")
         VStack(alignment: .leading, spacing: 12) {
           HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
@@ -1344,57 +1492,54 @@ private struct SystemTabContent: View {
               .font(.custom("CrimsonText-Regular", size: 16))
               .foregroundStyle(Color("colorText").opacity(0.62))
           }
-        }
-        .padding(.top, 14)
-      }
+          Divider().opacity(0.2).padding(.vertical, 2)
 
-      SettingsPanel {
-        SectionTitle(text: "Manual Scroll & Voice Pace")
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Auto-scroll speed (WPM)")
-                .font(.custom("CrimsonText-Regular", size: 18))
-                .foregroundStyle(Color("colorText"))
-              Text("Sets the base speed for Manual scroll when Voice-Sync is off.")
+          VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+              VStack(alignment: .leading, spacing: 4) {
+                Text("Scroll speed (pt/s)")
+                  .font(.custom("CrimsonText-Regular", size: 18))
+                  .foregroundStyle(Color("colorText"))
+                Text(
+                  "Sets the physical scroll speed before you begin and still drives Manual mode when Voice-Sync is off."
+                )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
+              }
+              Spacer()
+              Text("\(Int(autoScrollWPMSliderBinding.wrappedValue.rounded())) pt/s")
+                .font(.custom("CrimsonText-Regular", size: 18))
+                .foregroundStyle(Color("colorPrimary"))
             }
-            Spacer()
-            Text("\(Int(autoScrollWPMSliderBinding.wrappedValue.rounded())) WPM")
-              .font(.custom("CrimsonText-Regular", size: 18))
-              .foregroundStyle(Color("colorPrimary"))
-          }
 
-          Slider(
-            value: autoScrollWPMSliderBinding,
-            in: ManualScrollConfiguration.minimumWPM...ManualScrollConfiguration.maximumWPM,
-            step: 1
-          )
-          .tint(Color("colorPrimary"))
+            Slider(
+              value: autoScrollWPMSliderBinding,
+              in: ManualScrollConfiguration.minimumWPM...ManualScrollConfiguration.maximumWPM,
+              step: 1
+            )
+            .tint(Color("colorPrimary"))
 
-          HStack {
-            Text("\(Int(ManualScrollConfiguration.minimumWPM)) WPM")
-            Spacer()
-            Text("\(Int(ManualScrollConfiguration.maximumWPM)) WPM")
+            HStack {
+              Text("\(Int(ManualScrollConfiguration.minimumWPM)) pt/s")
+              Spacer()
+              Text("\(Int(ManualScrollConfiguration.maximumWPM)) pt/s")
+            }
+            .font(.custom("CrimsonText-Regular", size: 14))
+            .foregroundStyle(Color("colorText").opacity(0.55))
           }
-          .font(.custom("CrimsonText-Regular", size: 14))
-          .foregroundStyle(Color("colorText").opacity(0.55))
         }
         .padding(.top, 14)
       }
 
       SettingsPanel {
-        SectionTitle(text: "Voice Tracking")
+        SectionTitle(text: "During your Session")
         VStack(alignment: .leading, spacing: 16) {
-
-          // Toggle first
           HStack {
             VStack(alignment: .leading, spacing: 2) {
-              Text("Enable voice-activated scrolling")
+              Text("Voice-activated tracking")
                 .font(.custom("CrimsonText-Regular", size: 18))
                 .foregroundStyle(Color("colorText"))
-              Text("Automatically scroll based on speech detection")
+              Text("Moves only when human speech is recognized and keeps script anchored smoothly.")
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
             }
@@ -1412,7 +1557,7 @@ private struct SystemTabContent: View {
                   .font(.custom("CrimsonText-Regular", size: 18))
                   .foregroundStyle(Color("colorText"))
                 Text(
-                  "Moves with speech, uses your configured WPM as a base, adds a faster voice-follow pace, and keeps the script anchored smoothly."
+                  "Moves with speech, uses your configured points-per-second speed as a base, and keeps the script anchored smoothly."
                 )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
@@ -1467,6 +1612,91 @@ private struct SystemTabContent: View {
           }
           .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.5)
           .animation(.easeInOut(duration: 0.2), value: appState.settings.voiceSyncEnabled)
+
+          Divider().opacity(0.2)
+
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Spoken-word highlighting")
+                .font(.custom("CrimsonText-Regular", size: 18))
+                .foregroundStyle(Color("colorText"))
+              Text(
+                "Visual only. Dims spoken words and marks current word without changing scroll behavior."
+              )
+              .font(.custom("CrimsonText-Regular", size: 14))
+              .foregroundStyle(Color("colorText").opacity(0.6))
+            }
+            Spacer()
+            Toggle("", isOn: $appState.settings.spokenWordHighlightingEnabled)
+              .toggleStyle(.switch)
+              .tint(Color("colorPrimary"))
+              .labelsHidden()
+          }
+
+          Divider().opacity(0.2)
+
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Pause on mouse hover")
+                .font(.custom("CrimsonText-Regular", size: 18))
+                .foregroundStyle(Color("colorText"))
+              Text(
+                "Pauses notch scrolling while pointer stays over overlay. Pill windows ignore this setting."
+              )
+              .font(.custom("CrimsonText-Regular", size: 14))
+              .foregroundStyle(Color("colorText").opacity(0.6))
+            }
+            Spacer()
+            Toggle("", isOn: $appState.settings.pauseOnHoverEnabled)
+              .toggleStyle(.switch)
+              .tint(Color("colorPrimary"))
+              .labelsHidden()
+          }
+        }
+        .padding(.top, 14)
+      }
+
+      SettingsPanel {
+        SectionTitle(text: "Controls")
+        VStack(spacing: 8) {
+          shortcutRow("Toggle Notch", $appState.settings.shortcutToggleNotch)
+          shortcutRow("Toggle Pill", $appState.settings.shortcutTogglePill)
+          shortcutRow("Space to Pause", $appState.settings.shortcutToggleVoiceSync)
+          shortcutRow("Scroll Up", $appState.settings.shortcutScrollUp)
+          shortcutRow("Scroll Down", $appState.settings.shortcutScrollDown)
+          shortcutRow("End Session", $appState.settings.shortcutEndSession)
+        }
+        .padding(.top, 12)
+      }
+
+      SettingsPanel {
+        SectionTitle(text: "Privacy")
+        VStack(alignment: .leading, spacing: 16) {
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Hide overlays from screen sharing")
+                .font(.custom("CrimsonText-Regular", size: 18))
+                .foregroundStyle(Color("colorText"))
+              Text(
+                "Turn this off if you want notch or pill overlay to appear in screenshots, recordings, or video calls."
+              )
+              .font(.custom("CrimsonText-Regular", size: 14))
+              .foregroundStyle(Color("colorText").opacity(0.6))
+            }
+            Spacer()
+            Toggle("", isOn: $appState.settings.screenCaptureExclusionEnabled)
+              .toggleStyle(.switch)
+              .tint(Color("colorPrimary"))
+              .labelsHidden()
+          }
+
+          Text(
+            appState.settings.screenCaptureExclusionEnabled
+              ? "On by default. Aira asks macOS to exclude overlay windows from capture streams."
+              : "Off. Overlay windows remain visible to screen capture apps by choice, so stealth warnings stay suppressed."
+          )
+          .font(.custom("CrimsonText-Regular", size: 14))
+          .foregroundStyle(Color("colorText").opacity(0.62))
         }
         .padding(.top, 14)
       }

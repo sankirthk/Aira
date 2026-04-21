@@ -1,56 +1,72 @@
 import Combine
 import Foundation
-import Sparkle
 
 @MainActor
-final class AppUpdaterController: NSObject, ObservableObject {
+final class AppUpdaterController: ObservableObject {
+  typealias UpdaterFactory =
+    @MainActor (AppDistributionChannel, AppUpdaterConfiguration, Bundle)
+    -> any AppUpdating
+
+  @Published private(set) var showsCheckForUpdates = false
   @Published private(set) var canCheckForUpdates = false
 
   let configuration: AppUpdaterConfiguration
+  let distributionChannel: AppDistributionChannel
 
-  private let updater: SPUUpdater?
-  private let userDriver: AiraSparkleUserDriver?
+  private let updater: any AppUpdating
   private var canCheckObservation: AnyCancellable?
 
-  init(bundle: Bundle = .main) {
+  init(
+    bundle: Bundle = .main,
+    distributionChannel: AppDistributionChannel? = nil,
+    updaterFactory: UpdaterFactory? = nil
+  ) {
     let configuration = AppUpdaterConfiguration.from(bundle: bundle)
+    let resolvedDistributionChannel =
+      distributionChannel ?? AppDistributionChannel.from(bundle: bundle)
     self.configuration = configuration
-
-    guard configuration.isConfigured else {
-      self.updater = nil
-      self.userDriver = nil
-      super.init()
-      return
-    }
-
-    let userDriver = AiraSparkleUserDriver(hostBundle: bundle)
-    let updater = SPUUpdater(
-      hostBundle: bundle,
-      applicationBundle: bundle,
-      userDriver: userDriver,
-      delegate: nil
+    self.distributionChannel = resolvedDistributionChannel
+    self.updater = (updaterFactory ?? Self.makeUpdater)(
+      resolvedDistributionChannel,
+      configuration,
+      bundle
     )
 
-    self.updater = updater
-    self.userDriver = userDriver
-    super.init()
-
-    do {
-      try updater.start()
-    } catch {
-      NSLog("Sparkle updater failed to start: %@", error.localizedDescription)
-      return
-    }
-
+    showsCheckForUpdates = updater.supportsCheckForUpdatesCommand
     canCheckForUpdates = updater.canCheckForUpdates
-    canCheckObservation = updater.publisher(for: \.canCheckForUpdates)
-      .receive(on: RunLoop.main)
+    canCheckObservation = updater.canCheckForUpdatesPublisher
       .sink { [weak self] canCheckForUpdates in
         self?.canCheckForUpdates = canCheckForUpdates
       }
   }
 
   func checkForUpdates() {
-    updater?.checkForUpdates()
+    updater.checkForUpdates()
+  }
+
+  private static func makeUpdater(
+    distributionChannel: AppDistributionChannel,
+    configuration: AppUpdaterConfiguration,
+    bundle: Bundle
+  ) -> any AppUpdating {
+    switch distributionChannel {
+    case .appStore:
+      return NoOpAppUpdater()
+    case .direct:
+      guard configuration.isConfigured else {
+        return NoOpAppUpdater()
+      }
+
+      #if canImport(Sparkle)
+        do {
+          return try SparkleAppUpdater(bundle: bundle)
+        } catch {
+          NSLog("Sparkle updater failed to start: %@", error.localizedDescription)
+          return NoOpAppUpdater()
+        }
+      #else
+        return NoOpAppUpdater()
+      #endif
+    }
   }
 }

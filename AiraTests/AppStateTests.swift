@@ -596,6 +596,7 @@ struct AppStateTests {
       ),
       countdownDuration: 7,
       voiceSyncEnabled: false,
+      pauseOnHoverEnabled: false,
       speechSensitivity: .low,
       appearanceMode: .dark,
       managerTypography: .large,
@@ -636,10 +637,19 @@ struct AppStateTests {
 
     appState.settings.defaultOverlayAppearance.fontSize = 28
     appState.settings.defaultOverlayAppearance.textColor = "#D4B483"
+    appState.settings.defaultOverlayAppearance.fontName = "OpenDyslexic-Regular"
+    appState.settings.defaultOverlayAppearance.textAlignment = .justified
+    appState.settings.defaultOverlayAppearance.lineSpacing = 13
+    appState.settings.defaultOverlayAppearance.letterSpacing = 1.3
+    appState.settings.defaultOverlayAppearance.wordSpacing = 5
+    appState.settings.defaultOverlayAppearance.textShadow = 2.5
+    appState.settings.defaultOverlayAppearance.contentPadding = 24
     appState.settings.countdownDuration = 0
     appState.settings.voiceSyncEnabled = false
+    appState.settings.pauseOnHoverEnabled = false
     appState.settings.speechSensitivity = .high
     appState.settings.autoScrollWPM = 170
+    appState.settings.screenCaptureExclusionEnabled = false
     appState.settings.appearanceMode = .light
     appState.settings.managerTypography = .small
     appState.settings.pillsEnabled = true
@@ -653,6 +663,28 @@ struct AppStateTests {
 
     let persisted = try settingsStore.load()
     #expect(persisted == appState.settings)
+  }
+
+  @Test func settingsMutationsNormalizeBeforePersistence() throws {
+    let (scriptStore, scriptDir) = try makeStore()
+    let (collectionStore, collectionDir) = try makeCollectionStore()
+    let (settingsStore, defaults, suiteName) = makeSettingsStore()
+    defer {
+      cleanup(scriptDir)
+      cleanup(collectionDir)
+      cleanupSettings(defaults, suiteName: suiteName)
+    }
+
+    let appState = AppState(
+      scriptStore: scriptStore,
+      collectionStore: collectionStore,
+      settingsStore: settingsStore
+    )
+
+    appState.settings.autoScrollWPM = 170
+
+    #expect(appState.settings.autoScrollWPM == ManualScrollConfiguration.maximumWPM)
+    #expect(try settingsStore.load().autoScrollWPM == ManualScrollConfiguration.maximumWPM)
   }
 
   @Test func initWithCorruptSettingsFallsBackToDefaultsAndPublishesError() throws {

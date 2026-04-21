@@ -4,6 +4,7 @@ struct OverlayAppearancePopover: View {
   @Binding var appearance: OverlayAppearance
   let defaultAppearance: OverlayAppearance
   let windowTitle: String
+  private let previewText = "Preview text shows font, spacing, and alignment."
 
   var body: some View {
     VStack(alignment: .center, spacing: 16) {
@@ -13,14 +14,15 @@ struct OverlayAppearancePopover: View {
       // Mini live preview
       RoundedRectangle(cornerRadius: 6)
         .fill(Color(hex: appearance.backgroundColor).opacity(appearance.opacity))
-        .frame(height: 32)
+        .frame(height: 56)
         .overlay(
-          Text("Sample script text")
-            .font(.custom(appearance.fontName, size: min(appearance.fontSize * 0.6, 13)))
-            .foregroundStyle(Color(hex: appearance.textColor))
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: .infinity, alignment: .center)
+          OverlayAppearancePreviewText(
+            text: previewText,
+            appearance: appearance,
+            width: 224
+          )
         )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
 
       // Opacity
       VStack(alignment: .center, spacing: 4) {
@@ -39,10 +41,15 @@ struct OverlayAppearancePopover: View {
       // Font picker
       VStack(alignment: .center, spacing: 4) {
         Text("Font").font(.caption).foregroundStyle(.secondary)
-        HStack(spacing: 8) {
-          fontOptionButton(title: "Crimson", fontName: "CrimsonText-Regular")
-          fontOptionButton(title: "Manrope", fontName: "Manrope-Bold")
-          fontOptionButton(title: "Inter", fontName: "Inter-Regular")
+        VStack(spacing: 8) {
+          HStack(spacing: 8) {
+            fontOptionButton(title: "Crimson", fontName: "CrimsonText-Regular")
+            fontOptionButton(title: "Manrope", fontName: "Manrope-Bold")
+          }
+          HStack(spacing: 8) {
+            fontOptionButton(title: "Inter", fontName: "Inter-Regular")
+            fontOptionButton(title: "OpenDyslexic", fontName: "OpenDyslexic-Regular")
+          }
         }
         .frame(maxWidth: .infinity)
       }

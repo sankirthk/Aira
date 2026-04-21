@@ -33,6 +33,10 @@ struct AiraApp: App {
           applyAppAppearance()
           installMenuBarController()
         }
+        .task(id: appState.settings.screenCaptureExclusionEnabled) {
+          overlayController.updateScreenCaptureExclusion(
+            enabled: appState.settings.screenCaptureExclusionEnabled)
+        }
         .task {
           installMenuBarController()
         }
@@ -40,13 +44,15 @@ struct AiraApp: App {
     .windowStyle(.titleBar)
     .windowResizability(.contentMinSize)
     .commands {
-      CommandGroup(after: .appInfo) {
-        Button("Check for Updates…") {
-          appUpdaterController.checkForUpdates()
-        }
-        .disabled(appUpdaterController.canCheckForUpdates == false)
+      if appUpdaterController.showsCheckForUpdates {
+        CommandGroup(after: .appInfo) {
+          Button("Check for Updates…") {
+            appUpdaterController.checkForUpdates()
+          }
+          .disabled(appUpdaterController.canCheckForUpdates == false)
 
-        Divider()
+          Divider()
+        }
       }
 
       CommandGroup(replacing: .newItem) {

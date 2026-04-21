@@ -6,6 +6,60 @@ import Testing
 @testable import Aira
 
 struct NotchWindowControllerTests {
+  @MainActor @Test func sessionPlayheadCoordinatorTracksSessionStartedState() {
+    let coordinator = SessionPlayheadCoordinator()
+
+    coordinator.beginSession()
+    #expect(coordinator.isSessionStarted == false)
+
+    coordinator.markSessionStarted()
+    #expect(coordinator.isSessionStarted == true)
+
+    coordinator.endSession()
+    #expect(coordinator.isSessionStarted == false)
+  }
+
+  @Test func prompterRestorePolicyUsesSharedStartedStateForManualSessions() {
+    #expect(
+      PrompterSessionRestorePolicy.shouldRestoreRunningSession(
+        sharedSessionStarted: false,
+        voiceSyncState: .idle
+      ) == false
+    )
+    #expect(
+      PrompterSessionRestorePolicy.shouldRestoreRunningSession(
+        sharedSessionStarted: true,
+        voiceSyncState: .idle
+      ) == true
+    )
+    #expect(
+      PrompterSessionRestorePolicy.shouldRestoreRunningSession(
+        sharedSessionStarted: false,
+        voiceSyncState: .running
+      ) == true
+    )
+  }
+
+  @MainActor @Test func notchControllerAcceptsLiveSessionBehaviorUpdates() {
+    let controller = NotchWindowController()
+
+    controller.updateSessionBehavior(
+      voiceSyncEnabled: false,
+      spokenWordHighlightingEnabled: true,
+      pauseOnHoverEnabled: false
+    )
+
+    let mirror = Mirror(reflecting: controller)
+    #expect(mirror.descendant("voiceSyncEnabled") as? Bool == false)
+    #expect(mirror.descendant("spokenWordHighlightingEnabled") as? Bool == true)
+    #expect(mirror.descendant("pauseOnHoverEnabled") as? Bool == false)
+  }
+
+  @Test func notchDefaultWidthUsesNarrowerLaunchValue() {
+    #expect(NotchWidthConfiguration.defaultWidth == 360)
+    #expect(AppSettings().notchWindowWidth == NotchWidthConfiguration.defaultWidth)
+  }
+
   @MainActor @Test func notchWidthSettingsClampDuringInitAndDecode() throws {
     let initialized = AppSettings(notchWindowWidth: 999, notchWindowHeight: 999)
     #expect(initialized.notchWindowWidth == NotchWidthConfiguration.maximumWidth)
@@ -79,7 +133,7 @@ struct NotchWindowControllerTests {
 
     #expect(resized.midX == screenFrame.midX)
     #expect(resized.maxY == screenFrame.maxY)
-    #expect(resized.width == 460)
+    #expect(resized.width == 430)
     #expect(resized.height == startFrame.height + 24)
   }
 
@@ -149,24 +203,88 @@ struct NotchWindowControllerTests {
       in: rect, notchSize: CGSize(width: notchWidth, height: notchHeight))
     let sideOverscan = NotchOverlayGeometry.sideOverscan(for: notchWidth)
     let cutoutDepth = NotchOverlayGeometry.cutoutDepth(for: notchHeight)
+    let leftSideWallCompensation = NotchOverlayGeometry.leftSideWallSeamCompensation(
+      in: rect, notchWidth: notchWidth)
+    let rightSideWallCompensation = NotchOverlayGeometry.rightSideWallSeamCompensation(
+      notchWidth: notchWidth)
     let physicalLeftWall = rect.midX - notchWidth / 2
     let physicalRightWall = rect.midX + notchWidth / 2
     let roundedCornerSampleY = max(cutoutDepth - 6, 1)
+    let verticalWallSampleY = max(cutoutDepth * 0.3, 1)
     let topOpeningSampleY: CGFloat = 1
     let centerX = rect.midX
 
     #expect(NotchOverlayGeometry.minimumSideOverscan == 0)
     #expect(NotchOverlayGeometry.maximumSideOverscan == 0)
     #expect(sideOverscan == 0)
+    #expect(leftSideWallCompensation == 1.0)
+    #expect(rightSideWallCompensation == 0.5)
     #expect(
-      path.contains(CGPoint(x: physicalLeftWall - 1, y: topOpeningSampleY), eoFill: false) == false)
+      path.contains(
+        CGPoint(x: physicalLeftWall + leftSideWallCompensation + 0.25, y: topOpeningSampleY),
+        eoFill: false)
+        == false
+    )
     #expect(
-      path.contains(CGPoint(x: physicalRightWall + 1, y: topOpeningSampleY), eoFill: false) == false
+      path.contains(
+        CGPoint(x: physicalRightWall - rightSideWallCompensation - 0.25, y: topOpeningSampleY),
+        eoFill: false
+      ) == false
     )
     #expect(path.contains(CGPoint(x: centerX, y: topOpeningSampleY), eoFill: false) == false)
+    #expect(
+      path.contains(
+        CGPoint(
+          x: physicalLeftWall + leftSideWallCompensation * 0.5, y: verticalWallSampleY),
+        eoFill: false)
+    )
+    #expect(
+      path.contains(
+        CGPoint(
+          x: physicalRightWall - rightSideWallCompensation * 0.5, y: verticalWallSampleY),
+        eoFill: false)
+    )
     #expect(path.contains(CGPoint(x: physicalLeftWall + 1, y: roundedCornerSampleY), eoFill: false))
     #expect(
       path.contains(CGPoint(x: physicalRightWall - 1, y: roundedCornerSampleY), eoFill: false))
     #expect(path.contains(CGPoint(x: centerX, y: cutoutDepth + 1), eoFill: false))
+  }
+
+  @Test func notchCutoutUsesExtraLeftSeamCompensationForEvenWidthPanels() {
+    let rect = CGRect(x: 0, y: 0, width: 400, height: 160)
+    let notchWidth: CGFloat = 120
+    let path = NotchOverlayGeometry.overlayPath(
+      in: rect, notchSize: CGSize(width: notchWidth, height: 34))
+    let leftSideWallCompensation = NotchOverlayGeometry.leftSideWallSeamCompensation(
+      in: rect, notchWidth: notchWidth)
+    let rightSideWallCompensation = NotchOverlayGeometry.rightSideWallSeamCompensation(
+      notchWidth: notchWidth)
+    let physicalLeftWall = rect.midX - notchWidth / 2
+    let physicalRightWall = rect.midX + notchWidth / 2
+    let verticalWallSampleY: CGFloat = 10
+    let topOpeningSampleY: CGFloat = 1
+
+    #expect(NotchOverlayGeometry.sideOverscan(for: notchWidth) == 0)
+    #expect(leftSideWallCompensation == 1.0)
+    #expect(rightSideWallCompensation == 0.5)
+    #expect(
+      path.contains(CGPoint(x: physicalLeftWall + 0.75, y: verticalWallSampleY), eoFill: false))
+    #expect(
+      path.contains(CGPoint(x: physicalLeftWall + 1.25, y: topOpeningSampleY), eoFill: false)
+        == false
+    )
+    #expect(
+      path.contains(CGPoint(x: physicalRightWall - 0.75, y: topOpeningSampleY), eoFill: false)
+        == false
+    )
+  }
+
+  @Test func notchOverlayKeepsFlatTopOutsideCutout() {
+    let rect = CGRect(x: 0, y: 0, width: 400, height: 160)
+    let path = NotchOverlayGeometry.overlayPath(
+      in: rect, notchSize: CGSize(width: 120, height: 34))
+
+    #expect(path.contains(CGPoint(x: 1, y: 1), eoFill: false))
+    #expect(path.contains(CGPoint(x: rect.maxX - 1, y: 1), eoFill: false))
   }
 }

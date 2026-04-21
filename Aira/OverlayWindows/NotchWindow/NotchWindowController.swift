@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-class NotchWindowController {
+class NotchWindowController: NSObject, NSWindowDelegate {
   private var panel: NSPanel?
+  private var hostingView: NSHostingView<NotchContentView>?
   private(set) var scriptID: UUID?
   var currentAppearance: OverlayAppearance = .default
   private var defaultAppearance: OverlayAppearance = .default
@@ -11,6 +12,8 @@ class NotchWindowController {
   private var currentScript: Script?
   private var countdownDuration: Int = 0
   private var voiceSyncEnabled: Bool = true
+  private var spokenWordHighlightingEnabled: Bool = false
+  private var pauseOnHoverEnabled: Bool = true
   private var autoScrollWPM: Double = 0
   private var playheadCoordinator: SessionPlayheadCoordinator?
   private var scrollCoordinator: SessionScrollCoordinator?
@@ -18,9 +21,22 @@ class NotchWindowController {
   private var voiceSync: VoiceSyncEngine?
   private var audioMonitor: AudioLevelMonitor?
   private var onEndSession: (() -> Void)?
+  private var screenCaptureExclusionEnabled: Bool = true
+  private var canUndock: Bool = true
+  private var isUndocked: Bool = false
+  private var isUndockedFullScreen: Bool = false
+  private var lastUndockedFrame: CGRect?
+  private var restoredFrameAfterFullScreen: CGRect?
+  private let undockedMinimumSize = CGSize(width: 360, height: 120)
   @MainActor
   var isStealthEnabled: Bool {
-    panel?.sharingType == NSWindow.SharingType.none
+    guard let panel else {
+      return OverlayStealthConfiguration.treatsConfiguredStateAsStealthSatisfied(
+        screenCaptureExclusionEnabled: screenCaptureExclusionEnabled)
+    }
+    return panel.sharingType
+      == OverlayStealthConfiguration.configuredSharingType(
+        screenCaptureExclusionEnabled: screenCaptureExclusionEnabled)
   }
 
   @MainActor
@@ -28,42 +44,53 @@ class NotchWindowController {
     script: Script, appearance: OverlayAppearance, notchWindowWidth: Double,
     notchWindowHeight: Double,
     countdownDuration: Int,
-    voiceSyncEnabled: Bool = true, autoScrollWPM: Double = 0,
+    voiceSyncEnabled: Bool = true, spokenWordHighlightingEnabled: Bool = false,
+    pauseOnHoverEnabled: Bool = true, autoScrollWPM: Double = 0,
+    screenCaptureExclusionEnabled: Bool = true,
     playheadCoordinator: SessionPlayheadCoordinator,
     scrollCoordinator: SessionScrollCoordinator,
     voiceSyncMode: VoiceSyncMode = .voice,
     voiceSync: VoiceSyncEngine, audioMonitor: AudioLevelMonitor,
+    canUndock: Bool = true,
     onEndSession: @escaping () -> Void
   ) {
     currentAppearance = appearance
     currentScript = script
     defaultAppearance = .default
     scriptID = script.id
-    defaultWidth = NotchWidthConfiguration.defaultWidth
-    defaultHeight = NotchHeightConfiguration.defaultHeight
+    defaultWidth = NotchWidthConfiguration.clampedWidth(notchWindowWidth)
+    defaultHeight = NotchHeightConfiguration.clampedHeight(notchWindowHeight)
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
+    self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
+    self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
     self.playheadCoordinator = playheadCoordinator
     self.scrollCoordinator = scrollCoordinator
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.canUndock = canUndock
+    self.isUndocked = false
+    self.isUndockedFullScreen = false
+    self.lastUndockedFrame = nil
+    self.restoredFrameAfterFullScreen = nil
     self.onEndSession = onEndSession
 
     let screen = builtInScreen
     let notchSize = Self.notchSize(for: screen)
     let notchHeight = notchSize.height
 
-    let panel = NSPanel(
+    let panel = OverlayScrollForwardingPanel(
       contentRect: .zero,
-      styleMask: [.borderless, .nonactivatingPanel],
+      styleMask: [.borderless, .nonactivatingPanel, .resizable],
       backing: .buffered,
       defer: false
     )
 
-    // Stealth — exclude from all screen capture streams (REQ-005)
-    panel.sharingType = .none
+    panel.sharingType = OverlayStealthConfiguration.configuredSharingType(
+      screenCaptureExclusionEnabled: screenCaptureExclusionEnabled)
 
     panel.isFloatingPanel = true
     panel.level = .screenSaver
@@ -71,8 +98,11 @@ class NotchWindowController {
     panel.backgroundColor = .clear
     panel.hasShadow = false
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    panel.delegate = self
 
-    panel.contentView = NSHostingView(rootView: makeContentView(for: script, notchSize: notchSize))
+    let hostingView = NSHostingView(rootView: makeContentView(for: script, notchSize: notchSize))
+    panel.contentView = hostingView
+    updateWindowInteractionState(for: panel)
 
     positionUnderNotch(
       panel: panel,
@@ -85,29 +115,67 @@ class NotchWindowController {
 
     panel.orderFrontRegardless()
     self.panel = panel
+    self.hostingView = hostingView
 
     // Verification is handled by OverlayWindowController so the manager can show a warning banner.
   }
 
   @MainActor
   func close() {
+    panel?.contentView = nil
+    panel?.orderOut(nil)
     panel?.close()
     panel = nil
+    hostingView = nil
     currentScript = nil
     scriptID = nil
     resizeStartFrame = nil
     currentAppearance = .default
     defaultAppearance = .default
+    canUndock = true
+    isUndocked = false
+    isUndockedFullScreen = false
+    lastUndockedFrame = nil
+    restoredFrameAfterFullScreen = nil
   }
 
   @MainActor
   func updateScript(_ script: Script) {
     currentScript = script
     scriptID = script.id
-    guard let panel else { return }
-    let screen = panel.screen ?? builtInScreen
-    let notchSize = Self.notchSize(for: screen)
-    panel.contentView = NSHostingView(rootView: makeContentView(for: script, notchSize: notchSize))
+    refreshContentView()
+  }
+
+  @MainActor
+  func updateScreenCaptureExclusion(enabled: Bool) {
+    screenCaptureExclusionEnabled = enabled
+    panel?.sharingType = OverlayStealthConfiguration.configuredSharingType(
+      screenCaptureExclusionEnabled: enabled)
+  }
+
+  @MainActor
+  func setCanUndock(_ canUndock: Bool) {
+    guard self.canUndock != canUndock else { return }
+    self.canUndock = canUndock
+    refreshContentView()
+  }
+
+  @MainActor
+  func updateSpokenWordHighlighting(enabled: Bool) {
+    spokenWordHighlightingEnabled = enabled
+    refreshContentView()
+  }
+
+  @MainActor
+  func updateSessionBehavior(
+    voiceSyncEnabled: Bool,
+    spokenWordHighlightingEnabled: Bool,
+    pauseOnHoverEnabled: Bool
+  ) {
+    self.voiceSyncEnabled = voiceSyncEnabled
+    self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.pauseOnHoverEnabled = pauseOnHoverEnabled
+    refreshContentView()
   }
 
   /// Returns the built-in display. Never uses `NSScreen.main`, which tracks the
@@ -246,7 +314,7 @@ class NotchWindowController {
     var height = startFrame.height
 
     if edge.affectsWidth {
-      let delta = edge.widthMultiplier * translation.width * 2
+      let delta = edge.widthMultiplier * translation.width
       width = min(max(minimumWidth, startFrame.width + delta), maximumWidth)
     }
 
@@ -268,15 +336,29 @@ class NotchWindowController {
       appearance: currentAppearance,
       countdownDuration: countdownDuration,
       voiceSyncEnabled: voiceSyncEnabled,
+      spokenWordHighlightingEnabled: spokenWordHighlightingEnabled,
+      pauseOnHoverEnabled: pauseOnHoverEnabled,
       autoScrollWPM: autoScrollWPM,
       playheadCoordinator: playheadCoordinator ?? SessionPlayheadCoordinator(),
       scrollCoordinator: scrollCoordinator ?? SessionScrollCoordinator(),
       reportsPrimaryMetrics: true,
+      isDocked: !isUndocked,
+      canUndock: canUndock,
+      isFullScreen: isUndockedFullScreen,
       notchSize: notchSize,
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync ?? VoiceSyncEngine(),
       audioMonitor: audioMonitor ?? AudioLevelMonitor(),
       defaultAppearance: defaultAppearance,
+      onDockToggle: { [weak self] in
+        self?.toggleDocking()
+      },
+      onFullscreenToggle: { [weak self] in
+        self?.toggleUndockedFullScreen()
+      },
+      onPauseToggle: { [weak self] in
+        self?.voiceSync?.togglePause()
+      },
       onEndSession: { [weak self] in
         self?.onEndSession?()
       },
@@ -285,6 +367,9 @@ class NotchWindowController {
       },
       onResize: { [weak self] edge, translation in
         self?.resize(edge: edge, translation: translation)
+      },
+      onFloatingResize: { [weak self] edge, translation in
+        self?.resizeUndocked(edge: edge, translation: translation)
       },
       onResizeEnd: { [weak self] in
         self?.endResize()
@@ -302,6 +387,21 @@ class NotchWindowController {
       return
     }
     let frame = panel.frame
+
+    if isUndocked {
+      let minimumHeight = max(CGFloat(120), appearance.fontSize * 4.2 + 24)
+      let clampedHeight = max(frame.height, minimumHeight)
+      let clampedFrame = CGRect(
+        x: frame.minX,
+        y: frame.maxY - clampedHeight,
+        width: frame.width,
+        height: clampedHeight
+      )
+      lastUndockedFrame = clampedFrame
+      panel.setFrame(clampedFrame, display: true)
+      return
+    }
+
     let clampedHeight = max(
       frame.height,
       Self.minimumPanelHeight(notchHeight: screen.safeAreaInsets.top, appearance: appearance))
@@ -333,7 +433,7 @@ class NotchWindowController {
 
   @MainActor
   private func resize(edge: NotchResizeEdge, translation: CGSize) {
-    guard let panel else { return }
+    guard let panel, !isUndocked else { return }
     let screen = panel.screen ?? builtInScreen
     let frame = resizeStartFrame ?? panel.frame
     if resizeStartFrame == nil {
@@ -353,6 +453,205 @@ class NotchWindowController {
   @MainActor
   private func endResize() {
     resizeStartFrame = nil
+  }
+
+  @MainActor
+  private func toggleDocking() {
+    guard let panel else { return }
+
+    if isUndocked {
+      if isUndockedFullScreen {
+        let restoredFrame = restoredFrameAfterFullScreen ?? lastUndockedFrame ?? panel.frame
+        lastUndockedFrame = restoredFrame
+        restoredFrameAfterFullScreen = nil
+        isUndockedFullScreen = false
+      }
+      updateWindowInteractionState(for: panel, isUndocked: false, isUndockedFullScreen: false)
+      let screen = builtInScreen
+      let targetFrame = Self.defaultPanelFrame(
+        screenFrame: screen.frame,
+        notchHeight: screen.safeAreaInsets.top,
+        appearance: currentAppearance,
+        preferredWidth: defaultWidth,
+        preferredHeight: defaultHeight
+      )
+      NSAnimationContext.runAnimationGroup(
+        { context in
+          context.duration = 0.22
+          context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+          panel.animator().setFrame(targetFrame, display: true)
+        },
+        completionHandler: { [weak self] in
+          guard let self else { return }
+          Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isUndocked = false
+            panel.hasShadow = false
+            self.refreshContentView()
+          }
+        }
+      )
+      return
+    }
+
+    guard canUndock else { return }
+    isUndocked = true
+    isUndockedFullScreen = false
+    let startFrame = lastUndockedFrame ?? panel.frame
+    panel.hasShadow = true
+    updateWindowInteractionState(for: panel, isUndocked: true, isUndockedFullScreen: false)
+    panel.setFrame(startFrame, display: true, animate: true)
+    refreshContentView()
+  }
+
+  @MainActor
+  private func toggleUndockedFullScreen() {
+    guard let panel, isUndocked else { return }
+    if isUndockedFullScreen {
+      exitUndockedFullScreen(panel)
+      return
+    }
+    guard let screen = panel.screen else { return }
+    enterUndockedFullScreen(panel, on: screen)
+  }
+
+  @MainActor
+  private func enterUndockedFullScreen(_ panel: NSPanel, on screen: NSScreen) {
+    restoredFrameAfterFullScreen = panel.frame
+    lastUndockedFrame = panel.frame
+    isUndockedFullScreen = true
+    panel.hasShadow = false
+    updateWindowInteractionState(for: panel, isUndocked: true, isUndockedFullScreen: true)
+    panel.setFrame(screen.frame, display: true, animate: true)
+    refreshContentView()
+  }
+
+  @MainActor
+  private func exitUndockedFullScreen(_ panel: NSPanel) {
+    let restoredFrame = restoredFrameAfterFullScreen ?? lastUndockedFrame ?? panel.frame
+    restoredFrameAfterFullScreen = nil
+    isUndockedFullScreen = false
+    panel.setFrame(restoredFrame, display: true, animate: true)
+    panel.hasShadow = true
+    updateWindowInteractionState(for: panel, isUndocked: true, isUndockedFullScreen: false)
+    refreshContentView()
+  }
+
+  @MainActor
+  private func refreshContentView() {
+    guard let panel, let currentScript, let hostingView else { return }
+    let screen = panel.screen ?? builtInScreen
+    let notchSize = isUndocked ? .zero : Self.notchSize(for: screen)
+    updateWindowInteractionState(for: panel)
+    hostingView.rootView = makeContentView(for: currentScript, notchSize: notchSize)
+  }
+
+  @MainActor
+  private func updateWindowInteractionState(
+    for panel: NSPanel,
+    isUndocked: Bool? = nil,
+    isUndockedFullScreen: Bool? = nil
+  ) {
+    let resolvedIsUndocked = isUndocked ?? self.isUndocked
+    let resolvedIsUndockedFullScreen = isUndockedFullScreen ?? self.isUndockedFullScreen
+    let canMoveOrResize = resolvedIsUndocked && !resolvedIsUndockedFullScreen
+
+    panel.isMovableByWindowBackground = canMoveOrResize
+    panel.minSize = canMoveOrResize ? undockedMinimumSize : .zero
+    panel.contentMinSize = canMoveOrResize ? undockedMinimumSize : .zero
+    if canMoveOrResize {
+      panel.styleMask.insert(.resizable)
+      let clampedFrame = CGRect(
+        x: panel.frame.minX,
+        y: panel.frame.maxY - max(panel.frame.height, undockedMinimumSize.height),
+        width: max(panel.frame.width, undockedMinimumSize.width),
+        height: max(panel.frame.height, undockedMinimumSize.height)
+      )
+      if clampedFrame.size != panel.frame.size {
+        panel.setFrame(clampedFrame, display: true)
+      }
+    } else {
+      panel.styleMask.remove(.resizable)
+    }
+  }
+
+  @MainActor
+  private func resizeUndocked(edge: FloatingResizeEdge, translation: CGSize) {
+    guard let panel, isUndocked, !isUndockedFullScreen else { return }
+
+    let frame = resizeStartFrame ?? panel.frame
+    if resizeStartFrame == nil {
+      resizeStartFrame = frame
+    }
+
+    var newFrame = frame
+
+    if edge.affectsLeft {
+      let proposedWidth = frame.width - translation.width
+      let clampedWidth = max(undockedMinimumSize.width, proposedWidth)
+      let consumed = frame.width - clampedWidth
+      newFrame.origin.x += consumed
+      newFrame.size.width = clampedWidth
+    }
+
+    if edge.affectsRight {
+      newFrame.size.width = max(undockedMinimumSize.width, frame.width + translation.width)
+    }
+
+    if edge.affectsTop {
+      newFrame.size.height = max(undockedMinimumSize.height, frame.height - translation.height)
+    }
+
+    if edge.affectsBottom {
+      let proposedHeight = frame.height + translation.height
+      let clampedHeight = max(undockedMinimumSize.height, proposedHeight)
+      let consumed = clampedHeight - frame.height
+      newFrame.origin.y -= consumed
+      newFrame.size.height = clampedHeight
+    }
+
+    lastUndockedFrame = newFrame
+    panel.setFrame(newFrame, display: true)
+  }
+
+  @MainActor
+  func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+    guard
+      sender === panel,
+      isUndocked,
+      !isUndockedFullScreen
+    else {
+      return frameSize
+    }
+
+    return NSSize(
+      width: max(frameSize.width, undockedMinimumSize.width),
+      height: max(frameSize.height, undockedMinimumSize.height)
+    )
+  }
+
+  @MainActor
+  func windowDidResize(_ notification: Notification) {
+    guard
+      let panel,
+      notification.object as? NSWindow === panel,
+      isUndocked,
+      !isUndockedFullScreen
+    else {
+      return
+    }
+
+    let clampedFrame = CGRect(
+      x: panel.frame.minX,
+      y: panel.frame.maxY - max(panel.frame.height, undockedMinimumSize.height),
+      width: max(panel.frame.width, undockedMinimumSize.width),
+      height: max(panel.frame.height, undockedMinimumSize.height)
+    )
+
+    if clampedFrame != panel.frame {
+      panel.setFrame(clampedFrame, display: true)
+    }
+    lastUndockedFrame = panel.frame
   }
 }
 
@@ -389,6 +688,53 @@ enum NotchResizeEdge {
       return 1
     case .bottom:
       return 0
+    }
+  }
+}
+
+enum FloatingResizeEdge {
+  case topLeading
+  case top
+  case topTrailing
+  case leading
+  case trailing
+  case bottomLeading
+  case bottom
+  case bottomTrailing
+
+  var affectsLeft: Bool {
+    switch self {
+    case .topLeading, .leading, .bottomLeading:
+      return true
+    default:
+      return false
+    }
+  }
+
+  var affectsRight: Bool {
+    switch self {
+    case .topTrailing, .trailing, .bottomTrailing:
+      return true
+    default:
+      return false
+    }
+  }
+
+  var affectsTop: Bool {
+    switch self {
+    case .topLeading, .top, .topTrailing:
+      return true
+    default:
+      return false
+    }
+  }
+
+  var affectsBottom: Bool {
+    switch self {
+    case .bottomLeading, .bottom, .bottomTrailing:
+      return true
+    default:
+      return false
     }
   }
 }

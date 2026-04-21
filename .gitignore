@@ -54,6 +54,12 @@ Notchapp
 .claude/settings.local.json
 .secrets
 
+graphify-out/
+graphify-watch.sh
 
 frontend/
-CLAUDE.md
+.agents
+.claude
+.codex
+.githooks
+Notchapp/
