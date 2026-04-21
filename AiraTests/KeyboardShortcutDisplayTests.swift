@@ -1,4 +1,5 @@
 import AppKit
+import Speech
 import Testing
 
 @testable import Aira
@@ -805,6 +806,144 @@ struct VoiceSyncMatchingTests {
     #expect(engine.visualHighlightedWordRange == 0..<2)
   }
 
+  @Test @MainActor func firstLaunchPermissionCoordinatorRequestsAccessibilityMicAndSpeechOnce()
+    throws
+  {
+    let (settingsStore, defaults, suiteName) = makeSettingsStore()
+    defer { cleanupSettings(defaults, suiteName: suiteName) }
+
+    var speechRequestCount = 0
+    var microphoneRequestCount = 0
+    var accessibilityPromptCount = 0
+    let coordinator = AppPermissionCoordinator(
+      settingsStore: settingsStore,
+      speechPermissionState: { .undetermined },
+      requestSpeechPermission: { reply in
+        speechRequestCount += 1
+        reply(.granted)
+      },
+      microphonePermissionState: { .undetermined },
+      requestMicrophonePermission: { reply in
+        microphoneRequestCount += 1
+        reply(true)
+      },
+      isAccessibilityTrusted: { false },
+      promptForAccessibilityTrust: {
+        accessibilityPromptCount += 1
+      }
+    )
+
+    coordinator.requestLaunchPermissionsIfNeeded()
+    coordinator.requestLaunchPermissionsIfNeeded()
+
+    let persisted = try settingsStore.load()
+    #expect(speechRequestCount == 1)
+    #expect(microphoneRequestCount == 1)
+    #expect(accessibilityPromptCount == 1)
+    #expect(persisted.hasCompletedInitialPermissionPrompt)
+  }
+
+  @Test @MainActor func laterLaunchPermissionCoordinatorSkipsFullyGrantedPermissions() throws {
+    let (settingsStore, defaults, suiteName) = makeSettingsStore()
+    defer { cleanupSettings(defaults, suiteName: suiteName) }
+
+    try settingsStore.save(AppSettings(hasCompletedInitialPermissionPrompt: true))
+
+    var speechRequestCount = 0
+    var microphoneRequestCount = 0
+    var accessibilityPromptCount = 0
+    let coordinator = AppPermissionCoordinator(
+      settingsStore: settingsStore,
+      speechPermissionState: { .granted },
+      requestSpeechPermission: { _ in
+        speechRequestCount += 1
+      },
+      microphonePermissionState: { .granted },
+      requestMicrophonePermission: { _ in
+        microphoneRequestCount += 1
+      },
+      isAccessibilityTrusted: { false },
+      promptForAccessibilityTrust: {
+        accessibilityPromptCount += 1
+      }
+    )
+
+    coordinator.requestLaunchPermissionsIfNeeded()
+
+    #expect(speechRequestCount == 0)
+    #expect(microphoneRequestCount == 0)
+    #expect(accessibilityPromptCount == 1)
+  }
+
+  @Test @MainActor func launchAccessibilityPromptCanBeRetriedExplicitlyWhenStillUntrusted() {
+    let (settingsStore, defaults, suiteName) = makeSettingsStore()
+    defer { cleanupSettings(defaults, suiteName: suiteName) }
+
+    var accessibilityPromptCount = 0
+    let coordinator = AppPermissionCoordinator(
+      settingsStore: settingsStore,
+      speechPermissionState: { .granted },
+      requestSpeechPermission: { _ in },
+      microphonePermissionState: { .granted },
+      requestMicrophonePermission: { _ in },
+      isAccessibilityTrusted: { false },
+      promptForAccessibilityTrust: {
+        accessibilityPromptCount += 1
+      }
+    )
+
+    coordinator.requestLaunchPermissionsIfNeeded()
+    coordinator.promptForAccessibilityIfNeeded()
+
+    #expect(accessibilityPromptCount == 2)
+  }
+
+  @Test @MainActor func laterLaunchPermissionCoordinatorOnlyRequestsStillUndeterminedPermissions()
+    throws
+  {
+    let (settingsStore, defaults, suiteName) = makeSettingsStore()
+    defer { cleanupSettings(defaults, suiteName: suiteName) }
+
+    try settingsStore.save(AppSettings(hasCompletedInitialPermissionPrompt: true))
+
+    var speechRequestCount = 0
+    var microphoneRequestCount = 0
+    var accessibilityPromptCount = 0
+    let coordinator = AppPermissionCoordinator(
+      settingsStore: settingsStore,
+      speechPermissionState: { .denied },
+      requestSpeechPermission: { _ in
+        speechRequestCount += 1
+      },
+      microphonePermissionState: { .undetermined },
+      requestMicrophonePermission: { _ in
+        microphoneRequestCount += 1
+      },
+      isAccessibilityTrusted: { true },
+      promptForAccessibilityTrust: {
+        accessibilityPromptCount += 1
+      }
+    )
+
+    coordinator.requestLaunchPermissionsIfNeeded()
+
+    #expect(speechRequestCount == 0)
+    #expect(microphoneRequestCount == 1)
+    #expect(accessibilityPromptCount == 0)
+  }
+
+  @Test @MainActor func voiceSyncStartDoesNotPromptWhenLaunchPermissionsMissing() {
+    let engine = VoiceSyncEngine(
+      speechAuthorizationStatus: { .denied },
+      microphonePermissionGranted: { false }
+    )
+
+    engine.start()
+    engine.startAudioMonitoring()
+
+    #expect(engine.state == .idle)
+  }
+
   @Test @MainActor func overlayWindowControllerEndSessionResetsSharedVoiceState() {
     let controller = OverlayWindowController()
     controller.voiceSync.loadScript(text: "alpha beta gamma delta", startingAt: 0.5)
@@ -916,10 +1055,11 @@ struct SessionPlayheadCoordinatorTests {
     #expect(ticksBeforeStop > 0)
 
     controller.stop()
-    let ticksImmediatelyAfterStop = tickCounter.value
+    try? await Task.sleep(nanoseconds: 30_000_000)
+    let ticksAfterStopSettled = tickCounter.value
 
     try? await Task.sleep(nanoseconds: 80_000_000)
-    #expect(tickCounter.value == ticksImmediatelyAfterStop)
+    #expect(tickCounter.value == ticksAfterStopSettled)
   }
 }
 

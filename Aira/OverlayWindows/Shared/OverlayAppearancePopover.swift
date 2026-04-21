@@ -34,7 +34,10 @@ struct OverlayAppearancePopover: View {
       // Font size
       VStack(alignment: .center, spacing: 4) {
         Text("Font Size").font(.caption).foregroundStyle(.secondary)
-        Slider(value: $appearance.fontSize, in: 14...32)
+        Slider(
+          value: $appearance.fontSize,
+          in: OverlayFontSizeConfiguration.minimum...OverlayFontSizeConfiguration.maximum
+        )
       }
       .frame(maxWidth: .infinity, alignment: .center)
 

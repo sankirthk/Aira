@@ -11,7 +11,7 @@ private enum SettingsTab: CaseIterable, Hashable {
     case .appearance: return "Appearance"
     case .notch: return "The Notch"
     case .pills: return "Pills"
-    case .system: return "System"
+    case .system: return "Session"
     }
   }
 }
@@ -384,18 +384,19 @@ private struct SystemFontPicker: View {
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Color("colorText").opacity(0.55))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color("colorBackground"))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(
+          RoundedRectangle(cornerRadius: 14)
+            .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+        )
       }
       .buttonStyle(.plain)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .contentShape(Rectangle())
-      .padding(.horizontal, 14)
-      .padding(.vertical, 12)
-      .background(Color("colorBackground"))
-      .clipShape(RoundedRectangle(cornerRadius: 14))
-      .overlay(
-        RoundedRectangle(cornerRadius: 14)
-          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-      )
 
       if isExpanded {
         ScrollView {
@@ -606,13 +607,16 @@ private struct NotchTabContent: View {
     ("Charcoal", "#2B2B2B"),
     ("Warm Tan", "#D4A574"),
   ]
-  private var previewHasPhysicalNotch: Bool { NotchWindowController.builtInDisplayHasPhysicalNotch }
+  private var previewNotchSize: CGSize {
+    NotchWindowController.notchSize(for: NotchWindowController.preferredBuiltInScreen())
+  }
+  private var previewHasPhysicalNotch: Bool { previewNotchSize != .zero }
   private var previewLayout: NotchPreviewLayout.ResolvedLayout {
     NotchPreviewLayout.resolve(
       text: previewSampleText,
       preferredWidth: appState.settings.notchWindowWidth,
       preferredHeight: appState.settings.notchWindowHeight,
-      hasPhysicalNotch: previewHasPhysicalNotch,
+      notchSize: previewNotchSize,
       appearance: appState.settings.defaultOverlayAppearance
     )
   }
@@ -828,7 +832,12 @@ private struct NotchTabContent: View {
           )
         }
         .frame(width: previewLayout.width, height: previewLayout.height)
-        .clipShape(NotchWrapShape(hasNotch: previewHasPhysicalNotch))
+        .clipShape(
+          NotchWrapShape(
+            hasNotch: previewHasPhysicalNotch,
+            notchSize: previewLayout.notchSize
+          )
+        )
         .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
       }
       .frame(maxWidth: .infinity)
@@ -862,7 +871,7 @@ private struct NotchTabContent: View {
             "Font Size",
             "\(Int(appState.settings.defaultOverlayAppearance.fontSize))pt",
             $appState.settings.defaultOverlayAppearance.fontSize,
-            14...32)
+            OverlayFontSizeConfiguration.minimum...OverlayFontSizeConfiguration.maximum)
 
           HStack {
             Spacer()
@@ -1370,33 +1379,67 @@ private struct PillsTabContent: View {
 /// Outer corners: 5pt radius top, 10pt radius bottom
 private struct NotchWrapShape: Shape {
   let hasNotch: Bool
+  let notchSize: CGSize
 
   func path(in rect: CGRect) -> Path {
     guard hasNotch else {
       return NotchOverlayGeometry.fallbackPath(in: rect)
     }
 
-    let sx = rect.width / 250.0
-    let sy = rect.height / 110.0
-    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }
+    let topRadius = min(10, rect.height * 0.09)
+    let bottomRadius = min(14, rect.height * 0.13)
+    let cutoutWidth = min(notchSize.width, rect.width - (topRadius * 4))
+    let cutoutDepth = min(notchSize.height, rect.height - (bottomRadius * 2) - 8)
+    let innerRadius = min(12, cutoutDepth * 0.55)
+    let leftCutoutEdge = rect.midX - cutoutWidth / 2
+    let rightCutoutEdge = rect.midX + cutoutWidth / 2
+    let top = rect.minY
+    let bottom = rect.maxY
+    let left = rect.minX
+    let right = rect.maxX
+
     var p = Path()
-    p.move(to: pt(10, 30))
-    p.addLine(to: pt(10, 10))
-    p.addQuadCurve(to: pt(15, 5), control: pt(10, 5))  // top-left corner
-    p.addLine(to: pt(65, 5))
-    p.addLine(to: pt(65, 16))
-    p.addQuadCurve(to: pt(69, 27), control: pt(65, 23))  // notch inner-left upper
-    p.addQuadCurve(to: pt(79, 30), control: pt(72, 30))  // notch inner-left lower
-    p.addLine(to: pt(171, 30))
-    p.addQuadCurve(to: pt(181, 27), control: pt(178, 30))  // notch inner-right lower
-    p.addQuadCurve(to: pt(185, 16), control: pt(185, 23))  // notch inner-right upper
-    p.addLine(to: pt(185, 5))
-    p.addLine(to: pt(235, 5))
-    p.addQuadCurve(to: pt(240, 10), control: pt(240, 5))  // top-right corner
-    p.addLine(to: pt(240, 95))
-    p.addQuadCurve(to: pt(230, 105), control: pt(240, 105))  // bottom-right corner
-    p.addLine(to: pt(20, 105))
-    p.addQuadCurve(to: pt(10, 95), control: pt(10, 105))  // bottom-left corner
+    p.move(to: CGPoint(x: left + topRadius, y: top))
+    p.addLine(to: CGPoint(x: leftCutoutEdge - innerRadius, y: top))
+    p.addQuadCurve(
+      to: CGPoint(x: leftCutoutEdge, y: top + innerRadius),
+      control: CGPoint(x: leftCutoutEdge, y: top)
+    )
+    p.addLine(to: CGPoint(x: leftCutoutEdge, y: top + cutoutDepth - innerRadius))
+    p.addQuadCurve(
+      to: CGPoint(x: leftCutoutEdge + innerRadius, y: top + cutoutDepth),
+      control: CGPoint(x: leftCutoutEdge, y: top + cutoutDepth)
+    )
+    p.addLine(to: CGPoint(x: rightCutoutEdge - innerRadius, y: top + cutoutDepth))
+    p.addQuadCurve(
+      to: CGPoint(x: rightCutoutEdge, y: top + cutoutDepth - innerRadius),
+      control: CGPoint(x: rightCutoutEdge, y: top + cutoutDepth)
+    )
+    p.addLine(to: CGPoint(x: rightCutoutEdge, y: top + innerRadius))
+    p.addQuadCurve(
+      to: CGPoint(x: rightCutoutEdge + innerRadius, y: top),
+      control: CGPoint(x: rightCutoutEdge, y: top)
+    )
+    p.addLine(to: CGPoint(x: right - topRadius, y: top))
+    p.addQuadCurve(
+      to: CGPoint(x: right, y: top + topRadius),
+      control: CGPoint(x: right, y: top)
+    )
+    p.addLine(to: CGPoint(x: right, y: bottom - bottomRadius))
+    p.addQuadCurve(
+      to: CGPoint(x: right - bottomRadius, y: bottom),
+      control: CGPoint(x: right, y: bottom)
+    )
+    p.addLine(to: CGPoint(x: left + bottomRadius, y: bottom))
+    p.addQuadCurve(
+      to: CGPoint(x: left, y: bottom - bottomRadius),
+      control: CGPoint(x: left, y: bottom)
+    )
+    p.addLine(to: CGPoint(x: left, y: top + topRadius))
+    p.addQuadCurve(
+      to: CGPoint(x: left + topRadius, y: top),
+      control: CGPoint(x: left, y: top)
+    )
     p.closeSubpath()
     return p
   }
