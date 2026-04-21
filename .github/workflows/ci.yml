@@ -33,3 +33,12 @@ jobs:
 
       - name: Lint
         run: swift-format lint --recursive Aira AiraTests
+
+      - name: Build Direct App
+        run: xcodebuild -project Aira.xcodeproj -scheme Aira -destination "platform=macOS" build
+
+      - name: Test Direct App
+        run: xcodebuild -project Aira.xcodeproj -scheme Aira -destination "platform=macOS" test
+
+      - name: Build App Store Variant
+        run: xcodebuild -project Aira.xcodeproj -scheme AiraAppStore -configuration AppStoreRelease -destination "platform=macOS" build

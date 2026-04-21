@@ -69,3 +69,20 @@ struct DocumentLibraryImportLogic {
     return nil
   }
 }
+
+struct DocumentLibraryMoveScriptLogic {
+  static func updatedCollectionIDs(
+    existingCollectionIDs: [UUID],
+    adding collectionID: UUID
+  ) -> [UUID] {
+    guard !existingCollectionIDs.contains(collectionID) else {
+      return existingCollectionIDs
+    }
+
+    return existingCollectionIDs + [collectionID]
+  }
+
+  static func parsedScriptID(from payload: String) -> UUID? {
+    UUID(uuidString: payload.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+}

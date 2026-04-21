@@ -233,6 +233,7 @@ Open tradeoffs:
 - Progress projection is currently line-anchor based with interpolation, not true word-anchor projection.
 - Dense scripts and sparse scripts can still feel different if line metrics are not fine-grained enough.
 - Voice sync and manual scroll now share more logic than before, but they are not fully unified under one driver yet.
+- Overlay text layout ownership is split across renderer, height measurement, and line-metric extraction instead of one canonical snapshot. That split is now a real source of scroll regressions after readability renderer changes.
 
 If future work is needed, the next likely refinement is moving from line-level anchors to finer word- or segment-level anchors for projection.
 
@@ -256,8 +257,133 @@ The following code should be refactored during the playhead-engine migration:
 
 - [Aira/Aira/OverlayWindows/Shared/PrompterTextMetrics.swift](/Users/sankirthkalahasti/Documents/Projects/Aira/Aira/OverlayWindows/Shared/PrompterTextMetrics.swift)
   - line metrics may remain, but the mapping role may shrink if word-anchor LUTs are introduced
+- [Aira/Aira/App/OverlayStyledTextView.swift](/Users/sankirthkalahasti/Documents/Projects/Aira/Aira/App/OverlayStyledTextView.swift)
+  - current renderer knows final TextKit layout, but that layout is not yet exported as canonical scroll geometry
+- [Aira/Aira/Models/OverlayAppearance.swift](/Users/sankirthkalahasti/Documents/Projects/Aira/Aira/Models/OverlayAppearance.swift)
+  - text-style helpers currently build measurement inputs in multiple places instead of producing one reusable snapshot
 - [Aira/Aira/ManagerWindow/ManagerWindowView.swift](/Users/sankirthkalahasti/Documents/Projects/Aira/Aira/ManagerWindow/ManagerWindowView.swift)
   - keyboard shortcuts should target playhead actions, not ad hoc session scroll channels
+
+## Layout Snapshot Refactor Plan
+
+The next scroll refactor should not add another timing patch around `contentHeight`.
+
+It should introduce one canonical overlay layout snapshot.
+
+### New source of truth
+
+For any given:
+
+- normalized script body
+- `OverlayAppearance`
+- available text width
+
+the system should produce one immutable snapshot containing:
+
+- rendered attributed text
+- total laid-out text height
+- `LineMetric` list
+- `pointsPerWord`
+- any extra anchor/projection lookup tables needed later
+
+### Why this matters
+
+Current overlay path computes related layout data in separate places:
+
+1. renderer layout in `OverlayStyledTextView`
+2. total height in `OverlayTextStyle.measuredHeight(...)`
+3. line metrics in `PrompterTextMetrics.calculateLines(...)`
+
+Those paths can drift in timing or implementation detail.
+
+Scroll then consumes stale or partially updated geometry.
+
+That is exactly wrong for a playhead system, which needs geometry to be:
+
+- canonical
+- deterministic
+- recomputed only on explicit layout inputs
+
+### Target flow
+
+1. Normalize script body once.
+2. Build one TextKit-backed layout snapshot.
+3. Render overlay from that snapshot.
+4. Configure manual driver, playhead projection, and voice anchor math from that same snapshot.
+5. Rebind scroll state whenever snapshot changes.
+
+Snapshot recomputes only when:
+
+- script body changes
+- readability/alignment appearance changes
+- available text width changes
+
+Snapshot does not recompute on:
+
+- per-frame scroll ticks
+- pause/resume
+- hover state changes
+- playhead progress changes
+
+Implementation note:
+
+- `PrompterContentView` no longer relies on a SwiftUI `PreferenceKey` height reported from the AppKit text subtree to know scrollable range.
+- Scrollable range is now computed from `OverlayTextLayoutSnapshot.textHeight` plus known start-marker, top inset, and trailing readable padding values.
+- Line anchors are shifted by the same leading inset so playhead and voice-sync math use the same coordinate system as rendered content.
+
+### Phase plan
+
+#### Phase 1 — Snapshot type
+
+Introduce dedicated snapshot type for overlay layout.
+
+It should own:
+
+- normalized display string
+- attributed text
+- height
+- line metrics
+- points per word
+
+#### Phase 2 — Shared builder
+
+Create one builder path that takes `script.body + appearance + width` and returns snapshot.
+
+This builder should replace separate public calls to:
+
+- `OverlayTextStyle.measuredHeight(...)`
+- `PrompterTextMetrics.calculateLines(...)`
+- renderer-local ad hoc layout assumptions
+
+#### Phase 3 — Renderer wiring
+
+Make `OverlayStyledTextView` consume snapshot output instead of rebuilding text layout decisions internally from raw string plus appearance.
+
+#### Phase 4 — Scroll wiring
+
+Make `PrompterContentView` consume snapshot as authoritative geometry.
+
+Use snapshot fields for:
+
+- `contentHeight`
+- `lineMetrics`
+- `pointsPerWord`
+- playhead/manual driver configuration
+- voice anchor mapping
+
+#### Phase 5 — Cleanup
+
+Delete dead split-measurement paths and any safety logic that only exists because layout ownership is fragmented.
+
+### Success criteria
+
+Refactor is complete when:
+
+- renderer and scroll share same layout geometry
+- appearance changes cannot leave scroll range stale
+- long scripts still avoid per-frame text rebuilds
+- manual and voice scroll both operate from same post-layout snapshot
+- notch, synced pill, and manual pill sessions all pass regression coverage
 - [Aira/Aira/Models/AppSettings.swift](/Users/sankirthkalahasti/Documents/Projects/Aira/Aira/Models/AppSettings.swift)
   - naming may need cleanup if "voice sync mode" expands into a more general session scroll model
 

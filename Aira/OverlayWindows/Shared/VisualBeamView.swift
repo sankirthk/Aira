@@ -2,9 +2,14 @@ import SwiftUI
 
 struct VisualBeamView: View {
   let level: Float  // 0.0–1.0 from AudioLevelMonitor
+  let barColor: Color
 
   private let barCount = 8
-  private let barColor = Color("colorPrimary")
+
+  init(level: Float, barColor: Color = Color("colorPrimary")) {
+    self.level = level
+    self.barColor = barColor
+  }
 
   var body: some View {
     HStack(spacing: 3) {

@@ -106,6 +106,42 @@ struct CollectionSidebarLogicTests {
     #expect(count == 1)
   }
 
+  @Test func moveScriptLogicAddsCollectionWithoutDroppingExistingMemberships() {
+    let first = UUID()
+    let second = UUID()
+
+    let updated = DocumentLibraryMoveScriptLogic.updatedCollectionIDs(
+      existingCollectionIDs: [first],
+      adding: second
+    )
+
+    #expect(updated == [first, second])
+  }
+
+  @Test func moveScriptLogicDoesNotDuplicateExistingMembership() {
+    let first = UUID()
+
+    let updated = DocumentLibraryMoveScriptLogic.updatedCollectionIDs(
+      existingCollectionIDs: [first],
+      adding: first
+    )
+
+    #expect(updated == [first])
+  }
+
+  @Test func moveScriptLogicParsesValidDraggedScriptID() {
+    let scriptID = UUID()
+
+    #expect(
+      DocumentLibraryMoveScriptLogic.parsedScriptID(from: " \(scriptID.uuidString) ")
+        == scriptID
+    )
+  }
+
+  @Test func moveScriptLogicRejectsInvalidDraggedScriptPayload() {
+    #expect(DocumentLibraryMoveScriptLogic.parsedScriptID(from: "not-a-uuid") == nil)
+  }
+
   @Test func recentScriptsAreOrderedByLastEditedDescending() {
     let older = ScriptMeta(
       id: UUID(),

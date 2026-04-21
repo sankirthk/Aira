@@ -51,12 +51,13 @@ These tokens define the visual language. All colors, type scales, and spacing va
 | UI labels, controls | Inter | Regular (400), Medium (500) | Button labels, settings fields, metadata |
 | Decorative headings | Indie Flower | Regular | Empty states, section intro copy — used sparingly |
 
-**Bundled fonts.** Google Fonts are not available natively in a macOS app. Manrope, Inter, Crimson Text, and Indie Flower are bundled as custom font resources in the app bundle. SF Pro is available as a system fallback only; it is not used as a primary design choice.
+**Bundled fonts.** Google Fonts are not available natively in a macOS app. Manrope, Inter, Crimson Text, Indie Flower, and OpenDyslexic are bundled as custom font resources in the app bundle. SF Pro is available as a system fallback only; it is not used as a primary design choice.
 
-**Overlay font options.** The user can select the font for prompter display from three bundled options (REQ-038):
+**Overlay font options.** The user chooses the prompter typeface from the single Overlay Font picker in Settings > The Notch (REQ-038, REQ-022a). The bundled options include:
 - **Crimson Text** (default) — warm, humanist serif; easiest for long-form reading
 - **Manrope** — clean geometric sans; better for short dense content (notes, outlines)
 - **Inter** — neutral system-adjacent sans; highest familiarity for quick scanning
+- **OpenDyslexic** — dyslexia-friendly sans with heavier weighted bases for improved letter differentiation
 
 **Type scale** (base 16pt):
 
@@ -156,6 +157,7 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Script card grid: 3 columns, responsive (drops to 2 at narrow widths)
 - **Import drop zone**: a subtle dashed border area at the top of the grid with an Indie Flower label "Drop a .txt file to import". Visible at all times, not just on drag-hover. On drag-hover: border becomes solid sage green, background tints lightly.
 - Empty state below grid if no scripts exist
+- Entering `Scripts` or returning from editor must render current library contents immediately; document grid must not appear blank until user opens a recent script or otherwise forces a second navigation pass
 
 **Sort/filter bar — selection mode controls:**
 - Left side: **Select All checkbox** (always visible). Unchecked by default. Three states: unchecked (none selected), mixed/dash (some selected), checked (all selected). Clicking unchecked → selects all visible scripts and enters selection mode. Clicking checked or mixed → deselects all and exits selection mode.
@@ -176,6 +178,7 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Last edited timestamp (Inter Regular, 13pt, Slate Blue)
 - Estimated duration (Inter Regular, 13pt, Slate Blue) — derived from word count at ~130 WPM
 - Collection tags (small Inter pills in sage green, if the script belongs to any collection)
+- Hover utility action: **Add to Collection** button shown to the left of the star toggle. Uses `folder.badge.plus` in terracotta, reserves layout space so hover reveal does not shift other utility buttons, and opens the same collection-membership manager used by the context menu.
 - Starred toggle (top-right corner of card, filled/outline star)
 - Primary action: **Edit** button
 - Secondary action: **Cast to Notch** button
@@ -183,10 +186,16 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Destructive action: **Delete** button (with confirmation)
 - Right-click context menu on card: Edit, Duplicate, Add to Collection…, Cast to Notch, Delete
 
-**Add to Collection popover** (from right-click):
+**Add to Collection manager** (from right-click or hover button):
 - List of existing collections with checkboxes (a script can be in multiple)
 - "+ New Collection" option at the bottom
 - Applies immediately; no save button needed
+
+**Collection drag-and-drop:**
+- Script cards are draggable from the Document Library.
+- Dropping a script card onto a collection row in the sidebar adds that script to the target collection without removing any existing collection memberships.
+- Dropping onto a collection the script already belongs to is a no-op.
+- Dragging to collections is available alongside the hover button and context-menu entry; all three paths operate on the same underlying membership state.
 
 **Empty state:**
 - Illustration (SVG, hand-drawn style — pencil/page motif)
@@ -245,7 +254,7 @@ The full-screen authoring experience within the content area.
 
 ### Screen 4: Settings
 
-A three-tab modal sheet (SwiftUI `.sheet` / AppKit panel), accessible from the sidebar Settings link.
+A four-tab modal sheet (SwiftUI `.sheet` / AppKit panel), accessible from the sidebar Settings link.
 
 **Tabs:**
 
@@ -254,39 +263,46 @@ A three-tab modal sheet (SwiftUI `.sheet` / AppKit panel), accessible from the s
 - Manager App font selector: dropdown with Crimson Text (default), Manrope, Inter
 - Text size: segmented control with S / M / L options (maps to 16pt / 20pt / 26pt in the prompter)
 
-#### Tab 2: Overlays
-This tab sets the **global defaults** that apply when any new overlay window (Notch or Pill) is first created. Per-window overrides are applied directly on the overlay window via right-click (see Screen 8).
+#### Tab 2: The Notch
+This tab sets the **shared overlay appearance defaults** plus notch-only sizing controls. Per-window overrides are applied directly on the overlay window via hover chrome / per-window controls (see Screen 8).
 
 - Live preview — a miniature rendering of the overlay appearance at the top of the tab
+- Live preview auto-expands within its preview canvas when readability controls need more room, so sample text stays fully visible instead of clipping into the notch cutout
 - **Text color**: 4 preset swatches (Cream, White, Charcoal, Warm Tan) + custom color picker
 - **Background color**: 5 preset swatches (Sage #849688, Clay #C98B7A, Ink #2B2B2B, Slate #6B8E99, Warm Tan #D4A574) + custom color picker. Default: Sage Green (#849688).
 - **Opacity slider**: 20–100%, default 75%. Controls background opacity; text is always fully opaque.
-- **Font selector**: Crimson Text (default) / Manrope / Inter — three bundled options
+- **Font selector**: Crimson Text (default) / Manrope / Inter / OpenDyslexic — four bundled options
 - **Font size**: slider 14pt–32pt, default 20pt
+- **Accessibility**: grouped readability controls for text alignment (`Left` / `Center` / `Justified`), line spacing, letter spacing, word spacing, text shadow, and inner text padding
 - **Width** (Notch only): slider 400–800pt, default 600pt
-- **Countdown duration**: stepper control (0–10 seconds, default 3)
-- **Mood Presets**: a row of preset swatches at the bottom of the tab. Clicking a preset applies all appearance settings at once. At launch: "Day" (Sage Green bg, Cream text) and "Night" (Charcoal bg, Warm Tan text). Each preset is a circular swatch + Inter label. Sage green ring indicates the active preset.
+- **Height** (Notch only): notch body height slider
 
-**Pill Windows section** (below Mood Presets, within the Overlays tab):
+#### Tab 3: Pills
+- Pill setup lives here instead of under The Notch because pill count, mode, and script assignment are structural session choices, not appearance.
 - **Enable Pill Windows** toggle. Off by default. When off, the controls below are disabled/dimmed.
 - **Number of Pills**: segmented control with options 1 and 2. Enabled only when the toggle is on. Defaults to 1 on first enable.
-- Note text below the count selector: "Pill windows inherit the appearance settings above. Customise each pill in-session via right-click." — shown in `CrimsonText-Regular` 14pt, muted.
+- **Per-pill mode**: each enabled pill can be `Sync` or `Manual`; manual mode exposes script selection.
+- Note text below the count selector: "Pill windows inherit appearance settings from The Notch tab. Customise each pill in-session via right-click." — shown in `CrimsonText-Regular` 14pt, muted.
 
-#### Tab 3: System
-- Keyboard shortcuts: 6 editable shortcut rows
+#### Tab 4: System
+- **Before your session**
+  - Countdown duration: stepper control (0–10 seconds, default 3)
+  - Scroll speed: points-per-second slider with live value label, shown as `NNN pt/s`
+- **During your session**
+  - Voice-activated scroll: toggle (on by default)
+  - Spoken-word highlighting: toggle (off by default, visual only, does not alter scroll behavior)
+  - Speech sensitivity: slider (Low / Medium / High), disabled when voice tracking is off
+  - Pause on mouse hover: toggle (on by default)
+- **Controls**
+  - Keyboard shortcuts: 6 editable shortcut rows
   - Toggle Notch Overlay (default: ⌘⇧N)
   - Toggle Pill Window (default: ⌘⇧P)
   - **Pause / Resume Voice-Sync** (default: ⌘⇧Space) — new in v1
   - Scroll Up (default: ↑ or ⌘↑)
   - Scroll Down (default: ↓ or ⌘↓)
   - End Session (default: ⌘W or Escape)
-- Voice panel:
-  - Support text: "Moves only when human speech is recognized, uses your configured WPM, and keeps the script anchored smoothly."
-- Manual Scroll & Voice Pace panel:
-  - WPM slider with live value label, shown as `NNN WPM`
-  - Range: `100...300 WPM`
-  - Default: `135 WPM`
-  - Support text: "Sets the speed for Manual scroll and Cinematic Voice-Sync."
+- **Privacy**
+  - Screen sharing visibility toggle
 - Scroll Up / Scroll Down shortcuts nudge the text by one rendered line per press, not by a large page jump.
 
 #### Settings modal visual parity update
@@ -306,9 +322,7 @@ This tab sets the **global defaults** that apply when any new overlay window (No
 - Script cards use a slightly larger gap between the outer solid border and inner dashed border than the previous implementation.
 - The Pill Windows enable control uses the same switch dimensions and sage-green tint treatment as the Voice Tracking toggle.
 - The Sidebar Scripts navigation item uses a document icon with scribble lines, distinct from the New Script plus icon.
-- Speech sensitivity: slider (Low / Medium / High), affects VAD threshold
-- Voice-activated scroll: toggle (on by default)
-- While Voice-Sync is active, the currently spoken word is emphasized inline using bold weight and a slightly larger size rather than a colored highlight box.
+- While Voice-Sync is active, the currently spoken word or short matched phrase is highlighted inline inside the visible reading window using high-contrast emphasis that remains legible against the current overlay appearance.
 
 **No Intelligence tab in v1.** The AI/API Key settings tab is deferred. It does not appear in the Settings sheet.
 
@@ -319,10 +333,10 @@ This tab sets the **global defaults** that apply when any new overlay window (No
 The primary prompter surface. Fixed in position, anchored beneath the camera notch.
 
 **Window characteristics:**
-- `NSPanel` subclass, always-on-top, excluded from screen capture (`sharingType = .none`)
+- `NSPanel` subclass, always-on-top, excluded from screen capture (`sharingType = .none`) by default. Preferences > System includes a user-controlled "Hide overlays from screen sharing" toggle; when off, overlays intentionally remain shareable for screenshots, recordings, and video calls without changing overlay layout/behavior.
 - No title bar, no traffic lights, no visible chrome
 - Positioned: horizontally centered on the built-in display, top edge touching the bottom of the notch
-- The runtime notch cutout matches the measured hardware width exactly; the live cutout does not add left/right overscan beyond the physical notch walls
+- The runtime notch cutout keeps left/right overscan at zero relative to the measured notch width. A small sub-point inward seam compensation is allowed on the rendered inner walls to eliminate visible raster slivers without reopening the widened-cutout behavior, and the left/right compensation may differ slightly when needed to avoid even-width raster gaps.
 - Width: user-configured (400–800pt range), default 600pt (from global defaults)
 - Height: auto-calculated to show approximately 2–3 lines of script text
 
@@ -337,7 +351,15 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - Overlay rendering does not preserve every manual line break from the editor verbatim
 - Single line breaks inside a paragraph are normalized into flowing wrapped text
 - Blank-line paragraph breaks remain visible as paragraph spacing
-- Spoken-word tracking does not visibly bold or enlarge the current word
+- Spoken-word tracking visibly highlights the current spoken word or matched phrase inline
+- When spoken-word highlighting is enabled, clicking a visible word in the notch or pill overlay reseeds the spoken-word highlight/search anchor to that word without changing the current scroll position
+- Spoken-word highlighting is visual only and is clipped to the currently visible overlay word window so off-screen spoken ranges cannot trigger large redraws or influence scroll pacing
+- Regression note: do not feed whole spoken-prefix ranges into live overlay rendering for classic/manual mode. Large off-screen dull-prefix redraws made classic scroll look jerky and slower even though scroll math itself was unchanged.
+- Session-mode switches must fully reset voice-session state. Ending a voice-driven session and later starting a classic/manual session must not inherit any prior recognition callbacks, speech-activity flags, scroll offsets, or voice-mode rendering behavior; a fresh post-quit launch and a post-voice mode switch must behave identically.
+- Overlay wheel input must accept intentional manual scrolling without amplifying one physical wheel gesture into multiple scroll mutations. When app is active, global scroll monitors must not double-apply same gesture already delivered through local/AppKit paths, and repeated back-and-forth wheel input in classic/manual highlight-only sessions must never yank script to top or random offset.
+- Notch-specific classic/highlight-only guard: when spoken-word highlighting is used in classic/manual notch sessions, wheel gestures over the notch overlay must not mutate script position at all. This guard is notch-only. Manual pill windows continue to accept wheel scrolling, manual pill mode does not render spoken-word highlighting, and manual pill wheel input must still work when the pill is a nonactivating panel by forwarding scroll-wheel events through the pill window's direct AppKit event path before duplicate-collapse logic.
+- Pill chrome must reflect actual live behavior, not only stored pill mode. A pill in Sync mode with voice-driven scrolling enabled may show voice chrome, but a pill in Sync mode while presenter is using classic/manual scrolling must not show waveform chrome or reserve a bottom audio lane; it should instead show a sync badge in top-left so users can tell it is shared-position sync, not manual and not voice-driven.
+- Active overlay sessions must also react to live System-tab session-setting changes (`Voice-activated scroll`, `Spoken-word highlighting`, `Pause on mouse hover`) by rebuilding the overlay content with the new behavior immediately, and overlay close must detach the hosted SwiftUI/AppKit content before the panel is destroyed so stale monitors or display-link work cannot leak into the next session.
 
 **Corner audio indicator:**
 - Rendered as 3 animated sound-wave arcs emerging from a top corner of the notch cutout
@@ -358,17 +380,28 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - When cursor enters the window: scroll pauses, cursor changes to a hand icon with a pause indicator
 - When cursor exits: scroll resumes from the exact paused position
 - No visual change to the overlay content during pause — the pause state is communicated solely through cursor change
+- Hover chrome appears only while hovered: top-left `Undock` + `Fullscreen`, top-right `Pause` + `Close`. In this pass the buttons are present visually only; behavior wiring can follow later.
+- Scope: hover-to-pause applies to the Notch Window only. Pill Windows keep hover chrome but never pause on hover.
 
 **Background appearance (per-window, inherits global defaults):**
 - Default: background color at 75% opacity (user-adjustable per-window)
 - `backdropFilter: blur(8px)` to separate from desktop content
 - No top border (flush merge with the notch's bottom edge)
+- Top edge stays flat outside the notch cutout and meets the screen flush without outward flare geometry
 - Bottom corners: 16pt radius
 
-**Right-click context menu on the Notch Window:**
-- **Appearance…** — opens the Overlay Appearance Popover (Screen 8) for this window
-- **Reset to Defaults** — resets this window's appearance to current global defaults
-- **End Session** — equivalent to pressing Escape
+**Hover chrome on the Notch Window:**
+- Left-side button undocks the notch only when no pill windows are active
+- Once undocked, the button becomes a dock action and a fullscreen action appears beside it
+- Right-side buttons expose pause/resume and close affordances
+- The close button ends the active presenter session for the notch, matching Escape / prior end-session action
+
+**Notch sizing during session:**
+- Runtime Notch overlay does not expose drag-resize handles or a context-menu size reset.
+- Width and height changes for the Notch are made only in Preferences > The Notch and apply when the next session starts.
+- Exception: when the notch is undocked, it becomes a free-moving rounded rectangle overlay with pill-style resize handles, no notch cutout, and optional borderless fullscreen on its current display.
+- In undocked mode, the corner-wave notch ornament is removed and the shared bottom `VisualBeam` waveform is shown in its own reserved strip below the scrolling text so the script never scrolls behind the indicator.
+- Undocking, redocking, or toggling undocked fullscreen must preserve one live voice-scroll driver only; replacing the notch content view must not leave background motion tasks running after the prior view disappears, and closing a session must fully release that motion state before next session starts.
 
 ---
 
@@ -382,8 +415,9 @@ A free-moving overlay window that can operate in Sync mode (follows the same scr
 - Can be moved to secondary monitors
 - Multiple Pill Windows can be open simultaneously
 - Each Pill Window operates independently — closing one does not affect others or the Notch Window
-- Same stealth behavior as Notch Window: excluded from screen capture
+- Same stealth behavior as Notch Window: excluded from screen capture by default, with the same user-controlled System-tab toggle available when overlays should remain shareable
 - All four corners are rounded (16pt radius)
+- Hover chrome appears in top-right while hovered: `Swap`, `Fullscreen`, `Close`
 
 **Content mode indicator:**
 - A small badge in the top-left corner of the pill (3pt inside the window edge)
@@ -394,6 +428,8 @@ A free-moving overlay window that can operate in Sync mode (follows the same scr
 **Content anatomy:**
 - **Sync mode**: identical to Notch Window — same script, same scroll position, same pause state, same VisualBeam. Multiple Sync pills all track the same cursor position.
 - **Manual mode**: the assigned script's text + cue annotations + a VisualBeam (still reflects microphone level for awareness, but does not drive scroll). Scroll is driven by user input only.
+- Mouse wheel / trackpad scrolling on a Manual-mode pill remains available whenever the pointer is over the pill.
+- The global **Pause on mouse hover** setting does not apply to pill windows. Hovering a pill must never pause motion or block wheel / trackpad scrolling.
 
 **Assigned script label (Manual mode only):**
 - A small Inter label at the bottom edge of the pill showing the script title in Slate Blue
@@ -403,12 +439,12 @@ A free-moving overlay window that can operate in Sync mode (follows the same scr
 
 **Dragging:** The entire window body is the drag handle. No title bar or handle strip is shown.
 
-**Right-click context menu on any Pill Window:**
-- **Switch to Sync Mode** / **Switch to Manual Mode** (toggles)
-- **Assign Script…** (Manual mode only) — opens the script picker popover
-- **Appearance…** — opens the Overlay Appearance Popover (Screen 8) for this window
-- **Reset to Defaults** — resets this window's appearance to current global defaults
-- **Close Pill** — closes this pill window only
+**Hover chrome on any Pill Window:**
+- Right-edge controls expose swap, fullscreen, and close affordances on hover
+- Swap button is shown only for manual pills with an active notch and uses same script-exchange action previously exposed through pill controls
+- Fullscreen button is enabled only when pill is on a secondary display; on built-in/main display it remains visible but disabled
+- Pill fullscreen uses a borderless fill/restore treatment on the secondary display rather than entering a titled native fullscreen space, so exiting returns cleanly to the prior pill frame without adding a title bar
+- The close button closes only that pill window
 
 ---
 
@@ -438,7 +474,7 @@ Shown when the user creates a new Pill Window — either from the "Go Live" sess
 
 ### Screen 8: Overlay Appearance Popover
 
-A per-window appearance override panel. Accessed via right-click on any overlay window → "Appearance…".
+A per-window appearance override panel. Accessed from overlay-local controls when appearance actions are exposed.
 
 **Layout:** A floating popover (240pt wide) anchored near the cursor position, with an arrow pointing at the overlay window. Uses the Manager App's surface color.
 
@@ -460,6 +496,8 @@ Changes apply live as the user adjusts controls — no confirm step required.
 ### Screen 9: Update Prompt
 
 A compact Aira-branded update popup shown when Sparkle finds a newer version or finishes downloading one.
+
+This screen exists only in direct-distribution builds. Mac App Store builds do not show updater UI because App Store delivery owns update discovery and installation.
 
 **Purpose:**
 - Replaces Sparkle's stock "update found" and "ready to install" prompts
@@ -501,6 +539,7 @@ A compact Aira-branded update popup shown when Sparkle finds a newer version or 
 **Scope:**
 - Only the decision prompts are custom in v1
 - Download progress, extraction progress, and updater errors may continue using Sparkle's standard UI until a later polish pass
+- Mac App Store builds omit this screen entirely and do not expose a `Check for Updates…` command
 
 ---
 
@@ -534,7 +573,6 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | `CueButton` | Pill-shaped `RoundedRectangle` button. Cream fill, terracotta border, Inter label. Click inserts annotation at cursor. | REQ-016 |
 | `VisualBeam` | Row of 8 animated `RoundedRectangle` bars, sage green, heights driven by microphone RMS level. Used by Pill overlays and any embedded-audio indicator surfaces. | REQ-004 |
 | `CountdownOverlay` | Full-overlay with large Manrope numeral centered. Background and text colors respect the window's current `OverlayAppearance`. Fades between counts. Skipped if duration is 0. | REQ-012, REQ-013 |
-| `MoodPreset` | Circular color swatch + Inter label. Selection indicated by sage green ring. Applies full appearance bundle. | REQ-024 |
 | `OverlayWindow` | Shared layout shell for Notch and Pill windows. No title bar, no chrome. Hosts script text, cue labels, countdown, and the appropriate audio indicator for that overlay style. | REQ-005, REQ-006, REQ-008, REQ-009 |
 | `ContentModeIndicator` | Small badge (waveform icon for Sync, hand icon for Manual) in top-left corner of Pill windows. Visible on hover only. | REQ-034 |
 | `CueAnnotation` | Small pill-shaped inline label in terracotta, rendered within script text flow. Distinct from plain text. | REQ-016, REQ-018 |
@@ -563,10 +601,10 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | Drag .txt file over Document Library | Import drop zone activates | Dashed border → solid sage green border, light tint fill |
 | Drop .txt file | New script created, opens in editor | Smooth navigation to editor with imported content |
 | Script Duplicate action | Copy created immediately | Library refreshes; new card appears with "Copy of [title]" |
-| Right-click on overlay window | Context menu for per-window controls | Native macOS context menu |
+| Hover overlay action controls | Per-window close / future overlay actions | Hover-only chrome inside overlay window |
 | Overlay Appearance Popover open | Per-window appearance controls visible | Live preview strip updates in real-time as controls change |
-| Sparkle update found | Small branded update prompt appears instead of the stock Sparkle alert | Version badge visible; `Update Now` / `Cancel` actions use Aira button styling |
-| Sparkle update ready to install | Same branded prompt style reused for install step | Primary action changes to `Install & Relaunch` |
+| Sparkle update found (direct build only) | Small branded update prompt appears instead of the stock Sparkle alert | Version badge visible; `Update Now` / `Cancel` actions use Aira button styling |
+| Sparkle update ready to install (direct build only) | Same branded prompt style reused for install step | Primary action changes to `Install & Relaunch` |
 | Pill content mode switch (Sync ↔ Manual) | Pill immediately switches source | ContentModeIndicator badge changes icon |
 | Assign Script to Manual Pill | Script picker popover | Dropdown list of scripts, search field |
 | Sidebar collapsed | Navigation icons only | Tooltip on hover reveals label |
@@ -581,6 +619,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 
 - All color choices meet WCAG AA contrast ratio for body text (4.5:1 minimum) against their backgrounds. The custom background color picker in Settings does not prevent users from choosing low-contrast combinations, but the live preview in the Overlay Appearance Popover makes the result immediately visible.
 - Font sizes are user-adjustable through Settings (S/M/L and font size slider in Overlays tab)
+- Overlay readability controls separate font choice from layout tuning: the single Overlay Font picker includes OpenDyslexic, while Accessibility covers alignment, spacing, text shadow, and inner padding
 - Interactive controls are keyboard-navigable following standard macOS tab order
 - Overlay windows do not trap keyboard focus — the user's main window remains active during a presenter session
 - The VisualBeam provides audio feedback via visual animation; it is not the sole indicator of session state
@@ -617,13 +656,13 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-021 Window Size Adjustment | Pill Window drag-to-resize; Notch Window width slider in Settings > Overlays |
 | REQ-022 Text Size Adjustment | Settings > Overlays > font size slider; OverlayAppearancePopover per-window |
 | REQ-023 Custom Text Colors | Settings > Overlays > text color presets + custom picker; per-window via OverlayAppearancePopover |
-| REQ-024 Mood Presets | MoodPreset row in Settings > Overlays; includes text color, background color, opacity |
+| REQ-024 Mood Presets | Removed from Preferences. Overlay appearance is configured directly through the individual controls in Settings > The Notch. |
 | REQ-025 Local-First Architecture | No sync UI, no account UI, no upload affordances |
 | REQ-026 No Telemetry | No analytics consent dialogs, no reporting UI |
 | REQ-027 No Account Required | No sign-in screen, no profile UI |
 | REQ-028 Free Distribution | No paywall UI, no subscription prompts |
 | REQ-029 Signed And Notarized | No UI impact — build/distribution concern |
-| REQ-030 Distribution Channels | Screen 9 Update Prompt plus GitHub Releases / Sparkle distribution surfaces |
+| REQ-030 Distribution Channels | Direct build uses Screen 9 Update Prompt plus GitHub Releases / Sparkle surfaces; Mac App Store build omits in-app updater surfaces |
 | REQ-031 Closed-Source Policy | No UI impact — repository concern |
 | REQ-032 Live Answer Mode | Experimental — opt-in toggle in Settings (labeled "Experimental"), disabled by default |
 | REQ-033 Experimental Transparency | Plain-language disclosure modal shown before first activation of Live Answer Mode |

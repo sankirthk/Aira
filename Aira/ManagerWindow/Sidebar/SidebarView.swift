@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
   @EnvironmentObject var appState: AppState
@@ -9,6 +10,7 @@ struct SidebarView: View {
   var onOpenSettings: () -> Void
   var onNewScript: () -> Void
   var onOpenScript: (UUID) -> Void
+  var onMoveScriptToCollection: (UUID, UUID) -> Void
 
   @State private var collectionsExpanded: Bool = false
   @State private var starredExpanded: Bool = false
@@ -17,6 +19,7 @@ struct SidebarView: View {
   @State private var newCollectionName: String = ""
   @State private var editingCollectionID: UUID? = nil
   @State private var editingCollectionName: String = ""
+  @State private var collectionDropTargetID: UUID? = nil
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
@@ -201,7 +204,11 @@ struct SidebarView: View {
             .padding(.trailing, 16)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isActive ? Color.white.opacity(0.15) : Color.clear)
+            .background(
+              collectionDropTargetID == collection.id
+                ? Color.white.opacity(0.22)
+                : (isActive ? Color.white.opacity(0.15) : Color.clear)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .contextMenu {
               Button("Rename") {
@@ -213,6 +220,12 @@ struct SidebarView: View {
               Button("Delete", role: .destructive) {
                 pendingDeleteCollection = collection
               }
+            }
+            .onDrop(
+              of: [UTType.plainText],
+              isTargeted: collectionDropBinding(for: collection.id)
+            ) { providers in
+              handleScriptDrop(providers: providers, onto: collection.id)
             }
           }
         }
@@ -361,6 +374,51 @@ struct SidebarView: View {
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 8)
+  }
+
+  private func collectionDropBinding(for collectionID: UUID) -> Binding<Bool> {
+    Binding(
+      get: { collectionDropTargetID == collectionID },
+      set: { isTargeted in
+        collectionDropTargetID = isTargeted ? collectionID : nil
+      }
+    )
+  }
+
+  private func handleScriptDrop(providers: [NSItemProvider], onto collectionID: UUID) -> Bool {
+    guard
+      let provider = providers.first(where: {
+        $0.hasItemConformingToTypeIdentifier(UTType.plainText.identifier)
+      })
+    else {
+      return false
+    }
+
+    provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { item, error in
+      guard error == nil else { return }
+
+      let payload: String?
+      if let text = item as? String {
+        payload = text
+      } else if let data = item as? Data {
+        payload = String(data: data, encoding: .utf8)
+      } else if let text = item as? NSString {
+        payload = text as String
+      } else {
+        payload = nil
+      }
+
+      guard
+        let payload,
+        let scriptID = DocumentLibraryMoveScriptLogic.parsedScriptID(from: payload)
+      else { return }
+
+      Task { @MainActor in
+        onMoveScriptToCollection(scriptID, collectionID)
+      }
+    }
+
+    return true
   }
 
   @ViewBuilder

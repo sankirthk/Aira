@@ -59,13 +59,17 @@ enum AppWindowCoordinator {
     closeAllTransientMenuBarWindows(in: application)
     managerWindow(in: application)?.orderOut(nil)
     application.setActivationPolicy(.accessory)
-    if let finder = NSWorkspace.shared.runningApplications
-      .first(where: { $0.bundleIdentifier == "com.apple.finder" })
-    {
-      if #available(macOS 14.0, *) {
-        finder.activate()
-      } else {
-        finder.activate(options: .activateIgnoringOtherApps)
+    // Activate Finder asynchronously so the cross-process activation
+    // does not block the main thread while overlay windows are being created.
+    DispatchQueue.main.async {
+      if let finder = NSWorkspace.shared.runningApplications
+        .first(where: { $0.bundleIdentifier == "com.apple.finder" })
+      {
+        if #available(macOS 14.0, *) {
+          finder.activate()
+        } else {
+          finder.activate(options: .activateIgnoringOtherApps)
+        }
       }
     }
   }
@@ -112,6 +116,16 @@ enum AppWindowCoordinator {
 
     window.orderFrontRegardless()
     window.makeKeyAndOrderFront(nil)
+
+    // Force the hosting view to re-layout after the orderOut/orderFront
+    // round-trip.  Without this, NSHostingView may skip its first layout
+    // pass due to reentrant-layout guards in SwiftUI, leaving the content
+    // area blank until the user resizes or switches tabs.
+    if let hostingView = window.contentView {
+      hostingView.needsLayout = true
+      hostingView.needsDisplay = true
+    }
+
     activateApp(application)
   }
 

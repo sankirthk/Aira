@@ -5,6 +5,8 @@ enum NotchOverlayGeometry {
   static let minimumSideOverscan: CGFloat = 0.0
   static let proportionalSideOverscan: CGFloat = 0.05
   static let maximumSideOverscan: CGFloat = 0.0
+  static let sideWallSeamCompensation: CGFloat = 0.5
+  static let evenWidthLeftWallSeamCompensation: CGFloat = 1.0
 
   static func fallbackPath(in rect: CGRect) -> Path {
     var path = Path()
@@ -37,6 +39,18 @@ enum NotchOverlayGeometry {
     min(max(minimumSideOverscan, notchWidth * proportionalSideOverscan), maximumSideOverscan)
   }
 
+  static func leftSideWallSeamCompensation(in rect: CGRect, notchWidth: CGFloat) -> CGFloat {
+    let physicalLeftWall = rect.midX - notchWidth / 2
+    let baseCompensation =
+      physicalLeftWall == physicalLeftWall.rounded()
+      ? evenWidthLeftWallSeamCompensation : sideWallSeamCompensation
+    return min(baseCompensation, notchWidth * 0.5)
+  }
+
+  static func rightSideWallSeamCompensation(notchWidth: CGFloat) -> CGFloat {
+    min(sideWallSeamCompensation, notchWidth * 0.5)
+  }
+
   static func overlayPath(in rect: CGRect, notchSize: CGSize) -> Path {
     let nW = notchSize.width
     let nH = notchSize.height
@@ -46,12 +60,14 @@ enum NotchOverlayGeometry {
     }
 
     let cutoutDepth = cutoutDepth(for: nH)
-    let ir: CGFloat = cutoutDepth * 0.5
+    let ir: CGFloat = cutoutDepth * 0.3
     let outerRadius: CGFloat = outerCornerRadius
 
     let sideOverscan = sideOverscan(for: nW)
-    let nL = rect.midX - nW / 2 - sideOverscan
-    let nR = rect.midX + nW / 2 + sideOverscan
+    let leftSideWallCompensation = leftSideWallSeamCompensation(in: rect, notchWidth: nW)
+    let rightSideWallCompensation = rightSideWallSeamCompensation(notchWidth: nW)
+    let nL = rect.midX - nW / 2 - sideOverscan + leftSideWallCompensation
+    let nR = rect.midX + nW / 2 + sideOverscan - rightSideWallCompensation
 
     var path = Path()
     path.move(to: CGPoint(x: 0, y: 0))
@@ -104,34 +120,52 @@ struct NotchContentView: View {
   let defaultAppearance: OverlayAppearance
   let countdownDuration: Int
   let voiceSyncEnabled: Bool
+  let spokenWordHighlightingEnabled: Bool
+  let pauseOnHoverEnabled: Bool
   let autoScrollWPM: Double
   let playheadCoordinator: SessionPlayheadCoordinator
   let scrollCoordinator: SessionScrollCoordinator
   let reportsPrimaryMetrics: Bool
+  let isDocked: Bool
+  let canUndock: Bool
+  let isFullScreen: Bool
   let notchSize: CGSize  // physical notch dimensions in screen points
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
+  let onDockToggle: () -> Void
+  let onFullscreenToggle: () -> Void
+  let onPauseToggle: () -> Void
   let onEndSession: () -> Void
   let onAppearanceChange: (OverlayAppearance) -> Void
   let onResize: (NotchResizeEdge, CGSize) -> Void
+  let onFloatingResize: (FloatingResizeEdge, CGSize) -> Void
   let onResizeEnd: () -> Void
   let onResetDefaultSize: () -> Void
 
   @State private var currentAppearance: OverlayAppearance
   @State private var showAppearancePopover: Bool = false
+  @State private var showHoverControls: Bool = false
 
   init(
     script: Script, appearance: OverlayAppearance, countdownDuration: Int,
-    voiceSyncEnabled: Bool = true, autoScrollWPM: Double = 0,
+    voiceSyncEnabled: Bool = true, spokenWordHighlightingEnabled: Bool = false,
+    pauseOnHoverEnabled: Bool = true, autoScrollWPM: Double = 0,
     playheadCoordinator: SessionPlayheadCoordinator,
     scrollCoordinator: SessionScrollCoordinator, reportsPrimaryMetrics: Bool = true,
+    isDocked: Bool = true,
+    canUndock: Bool = true,
+    isFullScreen: Bool = false,
     notchSize: CGSize, voiceSyncMode: VoiceSyncMode = .voice, voiceSync: VoiceSyncEngine,
     audioMonitor: AudioLevelMonitor,
     defaultAppearance: OverlayAppearance? = nil,
+    onDockToggle: @escaping () -> Void = {},
+    onFullscreenToggle: @escaping () -> Void = {},
+    onPauseToggle: @escaping () -> Void = {},
     onEndSession: @escaping () -> Void,
     onAppearanceChange: @escaping (OverlayAppearance) -> Void = { _ in },
     onResize: @escaping (NotchResizeEdge, CGSize) -> Void = { _, _ in },
+    onFloatingResize: @escaping (FloatingResizeEdge, CGSize) -> Void = { _, _ in },
     onResizeEnd: @escaping () -> Void = {},
     onResetDefaultSize: @escaping () -> Void = {}
   ) {
@@ -140,17 +174,26 @@ struct NotchContentView: View {
     self.defaultAppearance = defaultAppearance ?? appearance
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
+    self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
     self.playheadCoordinator = playheadCoordinator
     self.scrollCoordinator = scrollCoordinator
     self.reportsPrimaryMetrics = reportsPrimaryMetrics
+    self.isDocked = isDocked
+    self.canUndock = canUndock
+    self.isFullScreen = isFullScreen
     self.notchSize = notchSize
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.onDockToggle = onDockToggle
+    self.onFullscreenToggle = onFullscreenToggle
+    self.onPauseToggle = onPauseToggle
     self.onEndSession = onEndSession
     self.onAppearanceChange = onAppearanceChange
     self.onResize = onResize
+    self.onFloatingResize = onFloatingResize
     self.onResizeEnd = onResizeEnd
     self.onResetDefaultSize = onResetDefaultSize
     _currentAppearance = State(initialValue: appearance)
@@ -163,43 +206,87 @@ struct NotchContentView: View {
           script: script,
           appearance: currentAppearance,
           countdownDuration: countdownDuration,
-          topContentInset: notchSize.height,
+          topContentInset: isDocked ? notchSize.height : 0,
+          allowsOverlayWheelInput: OverlayWheelInputPolicy.allowsOverlayWheelInput(
+            isNotchWindow: true,
+            voiceSyncEnabled: voiceSyncEnabled,
+            spokenWordHighlightingEnabled: spokenWordHighlightingEnabled
+          ),
+          usesOverlayWheelDeduplication:
+            OverlayWheelDeduplicationPolicy.usesEventDeduplication(
+              isNotchWindow: true,
+              voiceSyncEnabled: voiceSyncEnabled,
+              spokenWordHighlightingEnabled: spokenWordHighlightingEnabled
+            ),
+          usesStrictActiveAppWheelSourceRouting:
+            OverlayWheelRoutingPolicy.usesStrictActiveAppWheelSourceRouting(
+              isNotchWindow: true,
+              voiceSyncEnabled: voiceSyncEnabled,
+              spokenWordHighlightingEnabled: spokenWordHighlightingEnabled
+            ),
           voiceSyncEnabled: voiceSyncEnabled,
+          spokenWordHighlightingEnabled: spokenWordHighlightingEnabled,
+          pauseOnHoverEnabled: pauseOnHoverEnabled,
           autoScrollWPM: autoScrollWPM,
           playheadCoordinator: playheadCoordinator,
           scrollCoordinator: scrollCoordinator,
           reportsPrimaryMetrics: reportsPrimaryMetrics,
           scrollPresentation: .bottomEntry,
-          showsEmbeddedAudioIndicator: false,
+          showsEmbeddedAudioIndicator: !isDocked
+            && (voiceSyncEnabled || spokenWordHighlightingEnabled),
+          embeddedAudioIndicatorUsesReservedLane: !isDocked
+            && (voiceSyncEnabled || spokenWordHighlightingEnabled),
           syncsSessionScroll: true,
-          textExitFadeHeight: NotchTextFadeGeometry.fadeHeight(
-            availableHeight: max(geometry.size.height - notchSize.height, 0),
-            notchHeight: notchSize.height
-          ),
+          textExitFadeHeight: isDocked
+            ? NotchTextFadeGeometry.fadeHeight(
+              availableHeight: max(geometry.size.height - notchSize.height, 0),
+              notchHeight: notchSize.height
+            )
+            : 0,
           voiceSyncMode: voiceSyncMode,
           voiceSync: voiceSync,
           audioMonitor: audioMonitor
         )
-        .clipShape(NotchOverlayShape(notchSize: notchSize))
+        .clipShape(
+          isDocked
+            ? AnyNotchShape.notch(notchSize: notchSize)
+            : AnyNotchShape.roundedRectangle
+        )
 
-        if notchSize.width > 0, notchSize.height > 0 {
+        if isDocked, notchSize.width > 0, notchSize.height > 0,
+          voiceSyncEnabled || spokenWordHighlightingEnabled
+        {
           NotchCornerWaveIndicators(
             level: audioMonitor.level,
             containerWidth: geometry.size.width,
-            notchSize: notchSize
+            notchSize: notchSize,
+            strokeColor: Color(hex: currentAppearance.textColor)
           )
           .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
           .allowsHitTesting(false)
         }
 
-        NotchResizeHandles(onResize: onResize, onResizeEnd: onResizeEnd)
+        if !isDocked && !isFullScreen {
+          FloatingResizeHandles(onResize: onFloatingResize, onResizeEnd: onResizeEnd)
+        }
+
+        NotchHoverChrome(
+          isVisible: showHoverControls,
+          isDocked: isDocked,
+          canUndock: canUndock,
+          isFullScreen: isFullScreen,
+          showsMicrophoneToggle: voiceSyncEnabled,
+          onDockToggle: onDockToggle,
+          onFullscreenToggle: onFullscreenToggle,
+          isPaused: voiceSync.isPausedByUser,
+          onPauseToggle: onPauseToggle,
+          onEndSession: onEndSession
+        )
       }
-      .contextMenu {
-        Button("Appearance…") { showAppearancePopover = true }
-        Button("Reset to Defaults") { currentAppearance = defaultAppearance }
-        Button("Reset to Default Size") { onResetDefaultSize() }
-        Divider()
-        Button("End Session") { onEndSession() }
+      .onHover { hovered in
+        withAnimation(.easeInOut(duration: 0.15)) {
+          showHoverControls = hovered
+        }
       }
       .popover(isPresented: $showAppearancePopover) {
         OverlayAppearancePopover(
@@ -214,6 +301,100 @@ struct NotchContentView: View {
       .onChange(of: currentAppearance) { _, newAppearance in
         onAppearanceChange(newAppearance)
       }
+    }
+  }
+}
+
+private struct NotchHoverChrome: View {
+  let isVisible: Bool
+  let isDocked: Bool
+  let canUndock: Bool
+  let isFullScreen: Bool
+  let showsMicrophoneToggle: Bool
+  let onDockToggle: () -> Void
+  let onFullscreenToggle: () -> Void
+  let isPaused: Bool
+  let onPauseToggle: () -> Void
+  let onEndSession: () -> Void
+
+  var body: some View {
+    HStack(alignment: .top) {
+      HStack(spacing: 4) {
+        overlayButton(
+          help: isDocked ? "Undock Notch Window" : "Dock Notch Window",
+          action: onDockToggle,
+          isEnabled: isDocked ? canUndock : true
+        ) {
+          OverlayDockArrowIcon(pointsDown: isDocked)
+        }
+
+        if !isDocked {
+          overlayButton(
+            help: isFullScreen ? "Exit Fullscreen" : "Fullscreen Notch Window",
+            action: onFullscreenToggle
+          ) {
+            OverlayFullscreenIcon()
+          }
+        }
+      }
+
+      Spacer()
+
+      HStack(spacing: 4) {
+        overlayButton(
+          help: showsMicrophoneToggle
+            ? (isPaused ? "Turn Microphone On" : "Turn Microphone Off")
+            : (isPaused ? "Resume Session" : "Pause Session"),
+          action: onPauseToggle
+        ) {
+          if showsMicrophoneToggle {
+            OverlayVoiceMicIcon(isMuted: isPaused)
+          } else {
+            if isPaused {
+              OverlayResumeIcon()
+            } else {
+              OverlayPauseIcon()
+            }
+          }
+        }
+
+        overlayButton(help: "Close Notch Window", action: onEndSession) {
+          OverlayCloseIcon()
+        }
+      }
+    }
+    .padding(.horizontal, 6)
+    .padding(.top, 4)
+    .opacity(isVisible ? 1 : 0)
+    .allowsHitTesting(isVisible)
+  }
+
+  @ViewBuilder
+  private func overlayButton<Label: View>(
+    help: String,
+    action: (() -> Void)? = nil,
+    isEnabled: Bool = true,
+    @ViewBuilder label: () -> Label
+  ) -> some View {
+    Button(action: { action?() }) {
+      label()
+    }
+    .buttonStyle(OverlayChromeIconButtonStyle())
+    .disabled(!isEnabled)
+    .help(action == nil ? "\(help) (not wired yet)" : help)
+  }
+}
+
+private enum AnyNotchShape: Shape {
+  case notch(notchSize: CGSize)
+  case roundedRectangle
+
+  func path(in rect: CGRect) -> Path {
+    switch self {
+    case .notch(let notchSize):
+      return NotchOverlayShape(notchSize: notchSize).path(in: rect)
+    case .roundedRectangle:
+      return RoundedRectangle(cornerRadius: 16).path(in: rect)
     }
   }
 }
@@ -273,6 +454,7 @@ private struct NotchCornerWaveIndicators: View {
   let level: Float
   let containerWidth: CGFloat
   let notchSize: CGSize
+  let strokeColor: Color
 
   var body: some View {
     let gap: CGFloat = 8
@@ -281,13 +463,13 @@ private struct NotchCornerWaveIndicators: View {
     let notchTrailingX = (containerWidth / 2) + (notchSize.width / 2)
 
     ZStack(alignment: .topLeading) {
-      NotchCornerArcWave(level: level, side: .left)
+      NotchCornerArcWave(level: level, side: .left, strokeColor: strokeColor)
         .offset(
           x: notchLeadingX - gap - NotchCornerArcWave.size.width,
           y: baselineY
         )
 
-      NotchCornerArcWave(level: level, side: .right)
+      NotchCornerArcWave(level: level, side: .right, strokeColor: strokeColor)
         .offset(
           x: notchTrailingX + gap,
           y: baselineY
@@ -305,10 +487,10 @@ private struct NotchCornerArcWave: View {
   static let size = CGSize(width: 48, height: 36)
   let level: Float
   let side: Side
+  let strokeColor: Color
 
   var body: some View {
     Canvas { context, size in
-      let strokeColor = Color("colorPrimary")
       let origin = CGPoint(
         x: side == .left ? size.width - 6 : 6,
         y: 6
@@ -331,6 +513,161 @@ private struct NotchCornerArcWave: View {
     }
     .frame(width: Self.size.width, height: Self.size.height)
     .animation(.easeInOut(duration: 0.1), value: level)
+  }
+}
+
+private struct OverlayVoiceMicIcon: View {
+  let isMuted: Bool
+
+  var body: some View {
+    ZStack {
+      Canvas { context, size in
+        let strokeColor = NSColor(Color("colorText"))
+        let signalColor = NSColor(Color("colorSecondary"))
+
+        func stroke(
+          _ path: Path,
+          color: NSColor,
+          width: CGFloat,
+          opacity: CGFloat = 1,
+          dash: [CGFloat] = []
+        ) {
+          context.stroke(
+            path,
+            with: .color(Color(nsColor: color).opacity(opacity)),
+            style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round, dash: dash)
+          )
+        }
+
+        let outerLeft = Path { path in
+          path.move(to: CGPoint(x: 3, y: 12))
+          path.addQuadCurve(to: CGPoint(x: 6, y: 5), control: CGPoint(x: 3, y: 7))
+        }
+        let outerRight = Path { path in
+          path.move(to: CGPoint(x: 21, y: 12))
+          path.addQuadCurve(to: CGPoint(x: 18, y: 5), control: CGPoint(x: 21, y: 7))
+        }
+        let midLeft = Path { path in
+          path.move(to: CGPoint(x: 6, y: 12))
+          path.addQuadCurve(to: CGPoint(x: 8, y: 7), control: CGPoint(x: 6, y: 8))
+        }
+        let midRight = Path { path in
+          path.move(to: CGPoint(x: 18, y: 12))
+          path.addQuadCurve(to: CGPoint(x: 16, y: 7), control: CGPoint(x: 18, y: 8))
+        }
+        let innerLeft = Path { path in
+          path.move(to: CGPoint(x: 8, y: 12))
+          path.addQuadCurve(to: CGPoint(x: 9.5, y: 9), control: CGPoint(x: 8, y: 9.5))
+        }
+        let innerRight = Path { path in
+          path.move(to: CGPoint(x: 16, y: 12))
+          path.addQuadCurve(to: CGPoint(x: 14.5, y: 9), control: CGPoint(x: 16, y: 9.5))
+        }
+
+        stroke(outerLeft, color: signalColor, width: 1.6, opacity: 0.2, dash: [2.2, 1.8])
+        stroke(outerRight, color: signalColor, width: 1.6, opacity: 0.2, dash: [2.2, 1.8])
+        stroke(midLeft, color: signalColor, width: 1.6, opacity: 0.35, dash: [1.8, 1.4])
+        stroke(midRight, color: signalColor, width: 1.6, opacity: 0.35, dash: [1.8, 1.4])
+        stroke(innerLeft, color: signalColor, width: 1.6, opacity: 0.5, dash: [1.6, 1.1])
+        stroke(innerRight, color: signalColor, width: 1.6, opacity: 0.5, dash: [1.6, 1.1])
+
+        let body = Path(roundedRect: CGRect(x: 9, y: 5, width: 6, height: 8), cornerRadius: 3)
+        context.fill(body, with: .color(Color(nsColor: signalColor).opacity(0.9)))
+        stroke(body, color: signalColor, width: 1.2)
+
+        let grill = [
+          Path(CGRect(x: 10.2, y: 6.7, width: 3.6, height: 0.1)),
+          Path(CGRect(x: 10.2, y: 8.5, width: 3.6, height: 0.1)),
+          Path(CGRect(x: 10.2, y: 10.3, width: 3.6, height: 0.1)),
+        ]
+        for line in grill {
+          stroke(line, color: .white, width: 1, opacity: 0.35)
+        }
+
+        let holder = Path { path in
+          path.move(to: CGPoint(x: 8, y: 13))
+          path.addQuadCurve(to: CGPoint(x: 10, y: 15), control: CGPoint(x: 8, y: 15))
+          path.move(to: CGPoint(x: 16, y: 13))
+          path.addQuadCurve(to: CGPoint(x: 14, y: 15), control: CGPoint(x: 16, y: 15))
+          path.move(to: CGPoint(x: 12, y: 13))
+          path.addLine(to: CGPoint(x: 12, y: 17))
+          path.addQuadCurve(to: CGPoint(x: 9.5, y: 19), control: CGPoint(x: 12, y: 19))
+          path.addLine(to: CGPoint(x: 14.5, y: 19))
+        }
+        stroke(holder, color: strokeColor, width: 1.6)
+
+        if isMuted {
+          let slash = Path { path in
+            path.move(to: CGPoint(x: 5, y: 20))
+            path.addLine(to: CGPoint(x: 19, y: 4))
+          }
+          stroke(slash, color: strokeColor, width: 2.2)
+        }
+      }
+      .frame(width: 24, height: 24)
+    }
+  }
+}
+
+private struct FloatingResizeHandles: View {
+  let onResize: (FloatingResizeEdge, CGSize) -> Void
+  let onResizeEnd: () -> Void
+
+  private let handleThickness: CGFloat = 12
+  private let cornerSize: CGFloat = 18
+
+  var body: some View {
+    GeometryReader { geometry in
+      ZStack {
+        resizeHandle(.topLeading)
+          .frame(width: cornerSize, height: cornerSize)
+          .position(x: cornerSize / 2, y: cornerSize / 2)
+        resizeHandle(.top)
+          .frame(maxWidth: .infinity)
+          .frame(height: handleThickness)
+          .position(x: geometry.size.width / 2, y: handleThickness / 2)
+        resizeHandle(.topTrailing)
+          .frame(width: cornerSize, height: cornerSize)
+          .position(x: geometry.size.width - cornerSize / 2, y: cornerSize / 2)
+
+        resizeHandle(.leading)
+          .frame(width: handleThickness)
+          .frame(maxHeight: .infinity)
+          .position(x: handleThickness / 2, y: geometry.size.height / 2)
+        resizeHandle(.trailing)
+          .frame(width: handleThickness)
+          .frame(maxHeight: .infinity)
+          .position(x: geometry.size.width - handleThickness / 2, y: geometry.size.height / 2)
+
+        resizeHandle(.bottomLeading)
+          .frame(width: cornerSize, height: cornerSize)
+          .position(x: cornerSize / 2, y: geometry.size.height - cornerSize / 2)
+        resizeHandle(.bottom)
+          .frame(maxWidth: .infinity)
+          .frame(height: handleThickness)
+          .position(x: geometry.size.width / 2, y: geometry.size.height - handleThickness / 2)
+        resizeHandle(.bottomTrailing)
+          .frame(width: cornerSize, height: cornerSize)
+          .position(
+            x: geometry.size.width - cornerSize / 2, y: geometry.size.height - cornerSize / 2)
+      }
+    }
+    .allowsHitTesting(true)
+  }
+
+  @ViewBuilder
+  private func resizeHandle(_ edge: FloatingResizeEdge) -> some View {
+    Color.clear
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onChanged { value in
+            onResize(edge, value.translation)
+          }
+          .onEnded { _ in
+            onResizeEnd()
+          }
+      )
   }
 }
 

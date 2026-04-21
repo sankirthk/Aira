@@ -32,15 +32,23 @@ struct SettingsStoreTests {
         textColor: "#111111",
         backgroundColor: "#ABCDEF",
         opacity: 0.62,
-        fontName: "Manrope-Bold",
-        fontSize: 24
+        fontName: "OpenDyslexic-Regular",
+        fontSize: 24,
+        textAlignment: .justified,
+        lineSpacing: 12,
+        letterSpacing: 1.2,
+        wordSpacing: 4,
+        textShadow: 3,
+        contentPadding: 22
       ),
       notchWindowWidth: 420,
       notchWindowHeight: 210,
       countdownDuration: 5,
       voiceSyncEnabled: false,
+      pauseOnHoverEnabled: false,
       speechSensitivity: .high,
       autoScrollWPM: 150,
+      screenCaptureExclusionEnabled: false,
       appearanceMode: .dark,
       managerTypography: .large,
       liveAnswerDisclosureAccepted: true,
@@ -71,14 +79,22 @@ struct SettingsStoreTests {
         backgroundColor: "#EEEEEE",
         opacity: 0.88,
         fontName: "IndieFlower",
-        fontSize: 18
+        fontSize: 18,
+        textAlignment: .justified,
+        lineSpacing: 10,
+        letterSpacing: 0.8,
+        wordSpacing: 3,
+        textShadow: 2,
+        contentPadding: 20
       ),
       notchWindowWidth: 440,
       notchWindowHeight: 220,
       countdownDuration: 0,
       voiceSyncEnabled: true,
+      pauseOnHoverEnabled: false,
       speechSensitivity: .low,
       autoScrollWPM: 120,
+      screenCaptureExclusionEnabled: false,
       appearanceMode: .light,
       managerTypography: .small,
       liveAnswerDisclosureAccepted: false,
@@ -101,6 +117,28 @@ struct SettingsStoreTests {
     let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
     #expect(decoded == settings)
+
+    let appearanceData = try JSONEncoder().encode(settings.defaultOverlayAppearance)
+    let decodedAppearance = try JSONDecoder().decode(OverlayAppearance.self, from: appearanceData)
+    #expect(decodedAppearance == settings.defaultOverlayAppearance)
+
+    let legacyAppearanceJSON = """
+      {
+        "textColor": "#FFFFFF",
+        "backgroundColor": "#000000",
+        "opacity": 0.75,
+        "fontName": "CrimsonText-Regular",
+        "fontSize": 20
+      }
+      """.data(using: .utf8)!
+    let legacyAppearance = try JSONDecoder().decode(
+      OverlayAppearance.self, from: legacyAppearanceJSON)
+    #expect(legacyAppearance.textAlignment == .left)
+    #expect(legacyAppearance.lineSpacing == OverlayLineSpacingConfiguration.default)
+    #expect(legacyAppearance.letterSpacing == OverlayLetterSpacingConfiguration.default)
+    #expect(legacyAppearance.wordSpacing == OverlayWordSpacingConfiguration.default)
+    #expect(legacyAppearance.textShadow == OverlayTextShadowConfiguration.default)
+    #expect(legacyAppearance.contentPadding == OverlayContentPaddingConfiguration.default)
   }
 
   @MainActor @Test func legacyVoiceModesDecodeAsUnifiedVoice() throws {
@@ -195,6 +233,26 @@ struct SettingsStoreTests {
     #expect(loaded.pillConfigurations.count == PillWindowConfiguration.maximumSlotCount)
   }
 
+  @Test func screenCaptureExclusionSettingPersistsAcrossStoreReinitialization() throws {
+    let suiteName = "AiraSettingsTests.capture.\\(UUID().uuidString)"
+    let defaults1 = UserDefaults(suiteName: suiteName)!
+    defaults1.removePersistentDomain(forName: suiteName)
+    defer { defaults1.removePersistentDomain(forName: suiteName) }
+
+    let store1 = SettingsStore(defaults: defaults1)
+    var settings = try store1.load()
+    settings.screenCaptureExclusionEnabled = false
+    settings.pauseOnHoverEnabled = false
+    try store1.save(settings)
+
+    let defaults2 = UserDefaults(suiteName: suiteName)!
+    let store2 = SettingsStore(defaults: defaults2)
+    let loaded = try store2.load()
+
+    #expect(loaded.screenCaptureExclusionEnabled == false)
+    #expect(loaded.pauseOnHoverEnabled == false)
+  }
+
   @MainActor @Test func maxPillCountIsNormalizedDuringInitAndDecode() throws {
     let initialized = AppSettings(maxPillCount: 9)
     #expect(initialized.maxPillCount == 2)
@@ -285,6 +343,7 @@ struct SettingsStoreTests {
 
     #expect(defaults.countdownDuration == 3)
     #expect(defaults.voiceSyncEnabled)
+    #expect(defaults.pauseOnHoverEnabled)
     #expect(defaults.speechSensitivity == .medium)
     #expect(defaults.autoScrollWPM == ManualScrollConfiguration.defaultWPM)
     #expect(defaults.appearanceMode == .system)
@@ -295,8 +354,8 @@ struct SettingsStoreTests {
   }
 
   @Test func manualScrollConfigurationClampsSupportedWPMRange() {
-    #expect(ManualScrollConfiguration.clampedWPM(40) == 100)
-    #expect(ManualScrollConfiguration.clampedWPM(135) == 135)
-    #expect(ManualScrollConfiguration.clampedWPM(320) == 300)
+    #expect(ManualScrollConfiguration.clampedWPM(5) == 10)
+    #expect(ManualScrollConfiguration.clampedWPM(50) == 50)
+    #expect(ManualScrollConfiguration.clampedWPM(135) == 100)
   }
 }

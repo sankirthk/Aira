@@ -7,34 +7,27 @@ class CinematicScrollController {
 
   private var scrollTask: Task<Void, Never>?
   private var isSpeaking: Bool = false
-  private var autoScrollWPM: Double = 135
+  private var pointsPerSecond: Double = 50
   private var contentHeight: CGFloat = 0
   private var viewportHeight: CGFloat = 0
-  private var fontSize: CGFloat = 20
-  private var pointsPerWord: Double = 0
   private var anchorOffset: CGFloat? = nil
   private var currentScrollOffset: CGFloat = 0
 
   private var lastFrameTime: CFTimeInterval = 0
   private let postSpeechGlideDuration: Double = 0.42
-  private let voiceSpeedMultiplier: Double = 1.18
   private let speakingCatchUpFactorRange: ClosedRange<Double> = 1.0...2.6
   private let glideCatchUpFactorRange: ClosedRange<Double> = 1.0...1.2
   private let postGlideGapSpeedMultiplier: Double = 1.6
   private var remainingPostSpeechGlide: Double = 0
 
   func configure(
-    wpm: Double,
+    pointsPerSecond: Double,
     contentHeight: CGFloat,
-    viewportHeight: CGFloat,
-    fontSize: CGFloat,
-    pointsPerWord: Double
+    viewportHeight: CGFloat
   ) {
-    self.autoScrollWPM = wpm
+    self.pointsPerSecond = pointsPerSecond
     self.contentHeight = contentHeight
     self.viewportHeight = viewportHeight
-    self.fontSize = fontSize
-    self.pointsPerWord = pointsPerWord
   }
 
   func setSpeaking(_ speaking: Bool) {
@@ -67,6 +60,8 @@ class CinematicScrollController {
     scrollTask = nil
     isSpeaking = false
     remainingPostSpeechGlide = 0
+    anchorOffset = nil
+    onScrollTick = nil
   }
 
   private var anchorDriftPixels: Double {
@@ -109,12 +104,7 @@ class CinematicScrollController {
     let maxOffset = max(contentHeight - viewportHeight, 0)
     guard maxOffset > 0 else { return }
 
-    let calibratedPointsPerWord =
-      pointsPerWord > 0
-      ? pointsPerWord
-      : Double(PrompterScrollMath.lineHeight(fontSize: fontSize)) / 8.0
-    var pixelAdvancePerSecond =
-      ((autoScrollWPM * voiceSpeedMultiplier) / 60.0) * calibratedPointsPerWord
+    var pixelAdvancePerSecond = pointsPerSecond
 
     if !isSpeaking {
       if remainingPostSpeechGlide > 0 {
@@ -129,8 +119,7 @@ class CinematicScrollController {
         // If there is no gap, tick() will stop the task below.
         let drift = anchorDriftPixels
         if drift > 4 {
-          pixelAdvancePerSecond =
-            (autoScrollWPM / 60.0) * calibratedPointsPerWord * postGlideGapSpeedMultiplier
+          pixelAdvancePerSecond = pointsPerSecond * postGlideGapSpeedMultiplier
         } else {
           pixelAdvancePerSecond = 0
         }

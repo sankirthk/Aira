@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct ScriptCardView: View {
-  @EnvironmentObject var appState: AppState
   @Environment(\.managerFontScale) private var managerFontScale
   let meta: ScriptMeta
   let isSelected: Bool
@@ -13,8 +12,7 @@ struct ScriptCardView: View {
   var onCast: () -> Void
   var onDelete: () -> Void
   var onDuplicate: () -> Void
-  var isInCollection: (UUID) -> Bool
-  var onSetCollectionMemberships: ([UUID]) -> Void
+  var onManageCollections: () -> Void
   var onToggleStarred: () -> Void
   var onToggleSelection: () -> Void
   var onCardTap: () -> Void
@@ -130,6 +128,9 @@ struct ScriptCardView: View {
     .onHover { isHovering in
       isHovered = isHovering
     }
+    .onDrag {
+      NSItemProvider(object: meta.id.uuidString as NSString)
+    }
   }
 
   @ViewBuilder
@@ -139,37 +140,7 @@ struct ScriptCardView: View {
         .disabled(!editingIsAvailable)
       Button(meta.starred ? "Unstar" : "Star") { onToggleStarred() }
       Button("Duplicate") { onDuplicate() }
-      Menu("Add to Collection") {
-        ForEach(appState.collections) { collection in
-          Button {
-            var nextCollectionIDs = Set(
-              appState.collections
-                .filter { isInCollection($0.id) }
-                .map(\.id)
-            )
-
-            if nextCollectionIDs.contains(collection.id) {
-              nextCollectionIDs.remove(collection.id)
-            } else {
-              nextCollectionIDs.insert(collection.id)
-            }
-
-            onSetCollectionMemberships(
-              nextCollectionIDs.sorted {
-                $0.uuidString < $1.uuidString
-              })
-          } label: {
-            HStack {
-              Text(collection.name)
-              Spacer()
-              if isInCollection(collection.id) {
-                Image(systemName: "checkmark")
-              }
-            }
-          }
-        }
-      }
-      .disabled(appState.collections.isEmpty)
+      Button("Add to Collection…") { onManageCollections() }
       Button("Cast to Notch") { onCast() }
       if deletionIsAvailable {
         Divider()
@@ -218,6 +189,17 @@ struct ScriptCardView: View {
   private var cardUtilityButtons: some View {
     HStack(spacing: 8) {
       Button {
+        onManageCollections()
+      } label: {
+        Image(systemName: "folder.badge.plus")
+          .font(.system(size: 14))
+          .foregroundStyle(Color("colorSecondary"))
+      }
+      .buttonStyle(.plain)
+      .opacity(isHovered && !showsSelectionControls ? 1 : 0)
+      .allowsHitTesting(isHovered && !showsSelectionControls)
+
+      Button {
         onToggleStarred()
       } label: {
         Image(systemName: meta.starred ? "star.fill" : "star")
@@ -235,7 +217,7 @@ struct ScriptCardView: View {
       }
       .buttonStyle(.plain)
     }
-    .frame(width: 44, alignment: .trailing)
+    .frame(width: 66, alignment: .trailing)
     .opacity((showsSelectionControls || !deletionIsAvailable) ? 0 : 1)
     .allowsHitTesting(!showsSelectionControls && deletionIsAvailable)
   }

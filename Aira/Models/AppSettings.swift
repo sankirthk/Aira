@@ -1,9 +1,9 @@
 import Foundation
 
 enum ManualScrollConfiguration {
-  static let minimumWPM: Double = 100
-  static let maximumWPM: Double = 300
-  static let defaultWPM: Double = 135
+  static let minimumWPM: Double = 10
+  static let maximumWPM: Double = 100
+  static let defaultWPM: Double = 50
 
   static func clampedWPM(_ value: Double) -> Double {
     min(max(value, minimumWPM), maximumWPM)
@@ -13,7 +13,7 @@ enum ManualScrollConfiguration {
 enum NotchWidthConfiguration {
   static let minimumWidth: Double = 320
   static let maximumWidth: Double = 520
-  static let defaultWidth: Double = 400
+  static let defaultWidth: Double = 360
 
   static func clampedWidth(_ value: Double) -> Double {
     min(max(value, minimumWidth), maximumWidth)
@@ -36,16 +36,27 @@ struct AppSettings: Codable, Equatable {
   var notchWindowHeight: Double = NotchHeightConfiguration.defaultHeight
   var countdownDuration: Int = 3
   var voiceSyncEnabled: Bool = true
+  var spokenWordHighlightingEnabled: Bool = false
+  var pauseOnHoverEnabled: Bool = true
   var voiceSyncMode: VoiceSyncMode = .voice
   var speechSensitivity: SpeechSensitivity = .medium
-  var autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM
+  var autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM {
+    didSet {
+      autoScrollWPM = ManualScrollConfiguration.clampedWPM(autoScrollWPM)
+    }
+  }
+  var screenCaptureExclusionEnabled: Bool = true
   var appearanceMode: AppearanceMode = .system
   var managerTypography: ManagerTypography = .medium
   var liveAnswerDisclosureAccepted: Bool = false
 
   // Pill Windows (REQ-009, REQ-044)
   var pillsEnabled: Bool = false
-  var maxPillCount: Int = 1  // 1 or 2
+  var maxPillCount: Int = 1 {  // 1 or 2
+    didSet {
+      maxPillCount = Self.normalizedMaxPillCount(maxPillCount)
+    }
+  }
   var pillConfigurations: [PillWindowConfiguration] = PillWindowConfiguration.defaultSlots
 
   // Keyboard shortcuts stored as display strings; parsed at session start
@@ -62,9 +73,12 @@ struct AppSettings: Codable, Equatable {
     notchWindowHeight: Double = NotchHeightConfiguration.defaultHeight,
     countdownDuration: Int = 3,
     voiceSyncEnabled: Bool = true,
+    spokenWordHighlightingEnabled: Bool = false,
+    pauseOnHoverEnabled: Bool = true,
     voiceSyncMode: VoiceSyncMode = .voice,
     speechSensitivity: SpeechSensitivity = .medium,
     autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM,
+    screenCaptureExclusionEnabled: Bool = true,
     appearanceMode: AppearanceMode = .system,
     managerTypography: ManagerTypography = .medium,
     liveAnswerDisclosureAccepted: Bool = false,
@@ -83,9 +97,12 @@ struct AppSettings: Codable, Equatable {
     self.notchWindowHeight = NotchHeightConfiguration.clampedHeight(notchWindowHeight)
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
+    self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.voiceSyncMode = voiceSyncMode
     self.speechSensitivity = speechSensitivity
-    self.autoScrollWPM = autoScrollWPM
+    self.autoScrollWPM = ManualScrollConfiguration.clampedWPM(autoScrollWPM)
+    self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
     self.appearanceMode = appearanceMode
     self.managerTypography = managerTypography
     self.liveAnswerDisclosureAccepted = liveAnswerDisclosureAccepted
@@ -147,9 +164,12 @@ struct AppSettings: Codable, Equatable {
     case notchWindowHeight
     case countdownDuration
     case voiceSyncEnabled
+    case spokenWordHighlightingEnabled
+    case pauseOnHoverEnabled
     case voiceSyncMode
     case speechSensitivity
     case autoScrollWPM
+    case screenCaptureExclusionEnabled
     case appearanceMode
     case managerTypography
     case liveAnswerDisclosureAccepted
@@ -180,13 +200,20 @@ struct AppSettings: Codable, Equatable {
     )
     countdownDuration = try container.decodeIfPresent(Int.self, forKey: .countdownDuration) ?? 3
     voiceSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceSyncEnabled) ?? true
+    spokenWordHighlightingEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .spokenWordHighlightingEnabled) ?? false
+    pauseOnHoverEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .pauseOnHoverEnabled) ?? true
     voiceSyncMode =
       try container.decodeIfPresent(VoiceSyncMode.self, forKey: .voiceSyncMode) ?? .voice
     speechSensitivity =
       try container.decodeIfPresent(SpeechSensitivity.self, forKey: .speechSensitivity) ?? .medium
-    autoScrollWPM =
+    autoScrollWPM = ManualScrollConfiguration.clampedWPM(
       try container.decodeIfPresent(Double.self, forKey: .autoScrollWPM)
-      ?? ManualScrollConfiguration.defaultWPM
+        ?? ManualScrollConfiguration.defaultWPM
+    )
+    screenCaptureExclusionEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .screenCaptureExclusionEnabled) ?? true
     appearanceMode =
       try container.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
     managerTypography =
@@ -234,9 +261,12 @@ struct AppSettings: Codable, Equatable {
     try container.encode(notchWindowHeight, forKey: .notchWindowHeight)
     try container.encode(countdownDuration, forKey: .countdownDuration)
     try container.encode(voiceSyncEnabled, forKey: .voiceSyncEnabled)
+    try container.encode(spokenWordHighlightingEnabled, forKey: .spokenWordHighlightingEnabled)
+    try container.encode(pauseOnHoverEnabled, forKey: .pauseOnHoverEnabled)
     try container.encode(voiceSyncMode, forKey: .voiceSyncMode)
     try container.encode(speechSensitivity, forKey: .speechSensitivity)
     try container.encode(autoScrollWPM, forKey: .autoScrollWPM)
+    try container.encode(screenCaptureExclusionEnabled, forKey: .screenCaptureExclusionEnabled)
     try container.encode(appearanceMode, forKey: .appearanceMode)
     try container.encode(managerTypography, forKey: .managerTypography)
     try container.encode(liveAnswerDisclosureAccepted, forKey: .liveAnswerDisclosureAccepted)

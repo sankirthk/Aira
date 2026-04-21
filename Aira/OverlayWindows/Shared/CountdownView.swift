@@ -57,7 +57,7 @@ struct CountdownView: View {
 
   var body: some View {
     Group {
-      if visible {
+      if visible && duration > 0 {
         ZStack {
           Color(hex: appearance.backgroundColor)
             .opacity(appearance.opacity)
@@ -71,18 +71,19 @@ struct CountdownView: View {
       }
     }
     .animation(.easeInOut(duration: 0.2), value: current)
+    .onAppear {
+      if duration <= 0 {
+        visible = false
+        onComplete()
+      }
+    }
     .task {
+      guard duration > 0 else { return }
       await runCountdown()
     }
   }
 
   private func runCountdown() async {
-    if duration <= 0 {
-      visible = false
-      onComplete()
-      return
-    }
-
     current = duration
     overlayOpacity = 1
     visible = true

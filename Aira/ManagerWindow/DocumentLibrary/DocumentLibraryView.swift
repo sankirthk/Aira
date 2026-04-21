@@ -31,6 +31,9 @@ struct DocumentLibraryView: View {
   @State private var bulkSelection = DocumentLibraryBulkSelection()
   @State private var escapeKeyMonitor: Any?
   @State private var isSelectAllHovered: Bool = false
+  @State private var collectionManagerScriptID: UUID? = nil
+  @State private var isCreatingCollectionFromManager = false
+  @State private var newCollectionName = ""
 
   var filteredScripts: [ScriptMeta] {
     DocumentLibraryFilterLogic.filteredScripts(
@@ -58,8 +61,6 @@ struct DocumentLibraryView: View {
     case .collection: return "Scripts in this collection"
     }
   }
-
-  let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
   private var visibleScriptIDs: [UUID] {
     filteredScripts.map(\.id)
@@ -129,54 +130,9 @@ struct DocumentLibraryView: View {
         Spacer()
       } else {
         ScrollView {
-          LazyVGrid(columns: columns, spacing: 16) {
-            ForEach(filteredScripts) { meta in
-              ScriptCardView(
-                meta: meta,
-                isSelected: bulkSelection.selectedScriptIDs.contains(meta.id),
-                showsSelectionControls: !appState.sessionActive && bulkSelection.isSelectionMode,
-                selectionIsAvailable: !appState.sessionActive,
-                editingIsAvailable: DocumentLibrarySessionRules.allowsEditing(
-                  scriptID: meta.id,
-                  activeSessionScriptIDs: appState.activeSessionScriptIDs
-                ),
-                deletionIsAvailable: deletionIsAvailable,
-                onEdit: {
-                  editScript(meta.id)
-                },
-                onCast: {
-                  onCast(meta.id)
-                },
-                onDelete: {
-                  if deletionIsAvailable {
-                    deleteConfirmation = .single(meta)
-                  } else {
-                    libraryErrorMessage = "End the active session before deleting scripts."
-                  }
-                },
-                onDuplicate: {
-                  duplicateScript(meta.id)
-                },
-                isInCollection: { collectionID in
-                  scriptIsInCollection(meta.id, collectionID: collectionID)
-                },
-                onSetCollectionMemberships: { collectionIDs in
-                  setScriptCollections(meta.id, collectionIDs: collectionIDs)
-                },
-                onToggleStarred: {
-                  toggleStarred(meta.id)
-                },
-                onToggleSelection: {
-                  bulkSelection.toggleSingle(meta.id)
-                },
-                onCardTap: {
-                  handleCardTap(for: meta.id)
-                }
-              )
-            }
-          }
-          .padding(.horizontal, 32)
-          .padding(.bottom, 32)
+          scriptGrid
+            .padding(.horizontal, 32)
+            .padding(.bottom, 32)
         }
       }
     }
@@ -200,6 +156,8 @@ struct DocumentLibraryView: View {
     .overlay {
       if let deleteConfirmation {
         deleteConfirmationOverlay(deleteConfirmation)
+      } else if let collectionManagerScriptID {
+        collectionManagerOverlay(scriptID: collectionManagerScriptID)
       }
     }
     .onChange(of: visibleScriptIDs) { _, newVisibleIDs in
@@ -220,6 +178,69 @@ struct DocumentLibraryView: View {
     .onDisappear {
       removeEscapeKeyMonitor()
     }
+
+  }
+
+  private var scriptGrid: some View {
+    let scripts = filteredScripts
+    let rowCount = (scripts.count + 1) / 2
+
+    return VStack(spacing: 16) {
+      ForEach(0..<rowCount, id: \.self) { rowIndex in
+        HStack(spacing: 16) {
+          scriptCard(for: scripts[rowIndex * 2])
+          if rowIndex * 2 + 1 < scripts.count {
+            scriptCard(for: scripts[rowIndex * 2 + 1])
+          } else {
+            Spacer()
+              .frame(maxWidth: .infinity)
+          }
+        }
+      }
+    }
+  }
+
+  private func scriptCard(for meta: ScriptMeta) -> some View {
+    ScriptCardView(
+      meta: meta,
+      isSelected: bulkSelection.selectedScriptIDs.contains(meta.id),
+      showsSelectionControls: !appState.sessionActive && bulkSelection.isSelectionMode,
+      selectionIsAvailable: !appState.sessionActive,
+      editingIsAvailable: DocumentLibrarySessionRules.allowsEditing(
+        scriptID: meta.id,
+        activeSessionScriptIDs: appState.activeSessionScriptIDs
+      ),
+      deletionIsAvailable: deletionIsAvailable,
+      onEdit: {
+        editScript(meta.id)
+      },
+      onCast: {
+        onCast(meta.id)
+      },
+      onDelete: {
+        if deletionIsAvailable {
+          deleteConfirmation = .single(meta)
+        } else {
+          libraryErrorMessage = "End the active session before deleting scripts."
+        }
+      },
+      onDuplicate: {
+        duplicateScript(meta.id)
+      },
+      onManageCollections: {
+        presentCollectionManager(for: meta.id)
+      },
+      onToggleStarred: {
+        toggleStarred(meta.id)
+      },
+      onToggleSelection: {
+        bulkSelection.toggleSingle(meta.id)
+      },
+      onCardTap: {
+        handleCardTap(for: meta.id)
+      }
+    )
+    .frame(maxWidth: .infinity)
   }
 
   private var selectionBar: some View {
@@ -490,6 +511,202 @@ struct DocumentLibraryView: View {
     }
 
     return true
+  }
+
+  private func presentCollectionManager(for scriptID: UUID) {
+    collectionManagerScriptID = scriptID
+    isCreatingCollectionFromManager = false
+    newCollectionName = ""
+  }
+
+  private func dismissCollectionManager() {
+    collectionManagerScriptID = nil
+    isCreatingCollectionFromManager = false
+    newCollectionName = ""
+  }
+
+  private func currentCollectionIDs(for scriptID: UUID) -> [UUID] {
+    do {
+      return try appState.readScript(id: scriptID).collectionIds
+    } catch {
+      return appState.collections
+        .filter { $0.scriptIds.contains(scriptID) }
+        .map(\.id)
+    }
+  }
+
+  private func toggleCollectionMembership(
+    scriptID: UUID,
+    collectionID: UUID
+  ) {
+    let existingCollectionIDs = currentCollectionIDs(for: scriptID)
+    var nextCollectionIDs = Set(existingCollectionIDs)
+
+    if nextCollectionIDs.contains(collectionID) {
+      nextCollectionIDs.remove(collectionID)
+    } else {
+      nextCollectionIDs.insert(collectionID)
+    }
+
+    setScriptCollections(
+      scriptID,
+      collectionIDs: nextCollectionIDs.sorted { $0.uuidString < $1.uuidString }
+    )
+  }
+
+  private func createCollectionFromManager(for scriptID: UUID) {
+    guard let normalizedName = CollectionSidebarLogic.normalizedName(newCollectionName) else {
+      libraryErrorMessage = "Collection names can’t be empty."
+      return
+    }
+
+    do {
+      let collection = try appState.createCollection(name: normalizedName)
+      let nextCollectionIDs = DocumentLibraryMoveScriptLogic.updatedCollectionIDs(
+        existingCollectionIDs: currentCollectionIDs(for: scriptID),
+        adding: collection.id
+      )
+      setScriptCollections(scriptID, collectionIDs: nextCollectionIDs)
+      isCreatingCollectionFromManager = false
+      newCollectionName = ""
+    } catch {
+      libraryErrorMessage = error.localizedDescription
+    }
+  }
+
+  @ViewBuilder
+  private func collectionManagerOverlay(scriptID: UUID) -> some View {
+    let scriptTitle = appState.scripts.first(where: { $0.id == scriptID })?.title ?? "Script"
+
+    ZStack {
+      Color.black.opacity(0.22)
+        .ignoresSafeArea()
+        .onTapGesture {
+          dismissCollectionManager()
+        }
+
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .top) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Add to Collection")
+              .font(.custom("IndieFlower", size: scaled(28)))
+              .foregroundStyle(Color("colorText"))
+
+            Text("Choose collections for \"\(scriptTitle)\".")
+              .font(.custom("CrimsonText-Regular", size: scaled(16)))
+              .foregroundStyle(Color("colorText").opacity(0.72))
+              .fixedSize(horizontal: false, vertical: true)
+          }
+
+          Spacer()
+
+          Button {
+            dismissCollectionManager()
+          } label: {
+            Image(systemName: "xmark")
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundStyle(Color("colorText").opacity(0.7))
+              .frame(width: 26, height: 26)
+              .background(Color("colorSurface"))
+              .clipShape(Circle())
+          }
+          .buttonStyle(.plain)
+        }
+
+        ScrollView {
+          VStack(spacing: 8) {
+            if appState.collections.isEmpty {
+              Text("No collections yet. Create one below.")
+                .font(.custom("CrimsonText-Regular", size: scaled(15)))
+                .foregroundStyle(Color("colorText").opacity(0.62))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 10)
+            } else {
+              ForEach(appState.collections) { collection in
+                let isMember = scriptIsInCollection(scriptID, collectionID: collection.id)
+
+                Button {
+                  toggleCollectionMembership(scriptID: scriptID, collectionID: collection.id)
+                } label: {
+                  HStack(spacing: 10) {
+                    Image(systemName: isMember ? "checkmark.square.fill" : "square")
+                      .font(.system(size: 15, weight: .semibold))
+                      .foregroundStyle(
+                        isMember ? Color("colorPrimary") : Color("colorText").opacity(0.45)
+                      )
+
+                    Text(collection.name)
+                      .font(.custom("CrimsonText-Regular", size: scaled(16)))
+                      .foregroundStyle(Color("colorText"))
+
+                    Spacer()
+                  }
+                  .padding(.horizontal, 14)
+                  .padding(.vertical, 12)
+                  .background(Color("colorSurface").opacity(0.92))
+                  .clipShape(RoundedRectangle(cornerRadius: 14))
+                  .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                      .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
+                  )
+                }
+                .buttonStyle(.plain)
+              }
+            }
+          }
+        }
+        .frame(maxHeight: 220)
+
+        if isCreatingCollectionFromManager {
+          HStack(spacing: 10) {
+            TextField("Collection name", text: $newCollectionName)
+              .textFieldStyle(.plain)
+              .font(.custom("CrimsonText-Regular", size: scaled(16)))
+              .foregroundStyle(Color("colorText"))
+              .padding(.horizontal, 14)
+              .padding(.vertical, 12)
+              .background(Color("colorBackground"))
+              .clipShape(RoundedRectangle(cornerRadius: 14))
+              .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                  .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+              )
+              .onSubmit {
+                createCollectionFromManager(for: scriptID)
+              }
+
+            Button("Add") {
+              createCollectionFromManager(for: scriptID)
+            }
+            .buttonStyle(AiraPrimaryButtonStyle())
+
+            Button("Cancel") {
+              isCreatingCollectionFromManager = false
+              newCollectionName = ""
+            }
+            .buttonStyle(AiraSecondaryButtonStyle())
+          }
+        } else {
+          Button {
+            isCreatingCollectionFromManager = true
+          } label: {
+            Label("New Collection", systemImage: "plus")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(AiraSecondaryButtonStyle())
+        }
+      }
+      .padding(24)
+      .frame(width: 420)
+      .background(Color("colorBackground"))
+      .clipShape(RoundedRectangle(cornerRadius: 24))
+      .overlay(
+        RoundedRectangle(cornerRadius: 24)
+          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+      )
+      .shadow(color: Color.black.opacity(0.12), radius: 24, y: 12)
+      .padding(24)
+    }
   }
 
   private func importScript(from url: URL) {

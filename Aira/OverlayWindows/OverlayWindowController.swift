@@ -1,13 +1,19 @@
+import Combine
 import Foundation
 
 /// Entry point for creating and managing all overlay windows for a session.
 @MainActor
 class OverlayWindowController {
-  weak var appState: AppState?
+  weak var appState: AppState? {
+    didSet {
+      bindAppState()
+    }
+  }
   private var notchController: NotchWindowController?
   private var pillControllers: [PillWindowController] = []
   private let sessionShortcutMonitor = KeyboardShortcutMonitor()
   private let voiceSyncKeyboardMonitor = VoiceSyncKeyboardMonitor()
+  private var settingsCancellable: AnyCancellable?
 
   let voiceSync = VoiceSyncEngine()
   let audioMonitor = AudioLevelMonitor()
@@ -28,6 +34,28 @@ class OverlayWindowController {
 
   init() {
     voiceSync.audioLevelMonitor = audioMonitor
+  }
+
+  private func bindAppState() {
+    settingsCancellable = appState?.$settings
+      .sink { [weak self] settings in
+        self?.notchController?.updateSessionBehavior(
+          voiceSyncEnabled: settings.voiceSyncEnabled,
+          spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
+          pauseOnHoverEnabled: settings.pauseOnHoverEnabled
+        )
+        self?.notchController?.updateSpokenWordHighlighting(
+          enabled: settings.spokenWordHighlightingEnabled)
+        for pillController in self?.pillControllers ?? [] {
+          pillController.updateSessionBehavior(
+            voiceSyncEnabled: settings.voiceSyncEnabled,
+            spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
+            pauseOnHoverEnabled: settings.pauseOnHoverEnabled
+          )
+          pillController.updateSpokenWordHighlighting(
+            enabled: settings.spokenWordHighlightingEnabled)
+        }
+      }
   }
 
   func presentSession(
@@ -52,11 +80,15 @@ class OverlayWindowController {
         ?? NotchHeightConfiguration.defaultHeight,
       countdownDuration: countdownDuration,
       voiceSyncEnabled: voiceSyncEnabled,
+      spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
+      pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
       autoScrollWPM: autoScrollWPM,
+      screenCaptureExclusionEnabled: appState?.settings.screenCaptureExclusionEnabled ?? true,
       playheadCoordinator: playheadCoordinator,
       scrollCoordinator: scrollCoordinator,
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync, audioMonitor: audioMonitor,
+      canUndock: pillModes.isEmpty,
       onEndSession: { [weak self] in
         self?.endSession()
       })
@@ -68,6 +100,8 @@ class OverlayWindowController {
       addPill(
         mode: mode, script: pillScript, appearance: appearance,
         countdownDuration: countdownDuration, voiceSyncEnabled: voiceSyncEnabled,
+        spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
+        pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
         autoScrollWPM: autoScrollWPM, voiceSyncMode: voiceSyncMode)
     }
 
@@ -79,6 +113,8 @@ class OverlayWindowController {
   func addPill(
     mode: PillContentMode, script: Script, appearance: OverlayAppearance,
     countdownDuration: Int, voiceSyncEnabled: Bool = true,
+    spokenWordHighlightingEnabled: Bool = false,
+    pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0, voiceSyncMode: VoiceSyncMode = .voice
   ) {
     if !hasActiveOverlays {
@@ -91,7 +127,10 @@ class OverlayWindowController {
       script: script, appearance: appearance,
       countdownDuration: countdownDuration,
       voiceSyncEnabled: voiceSyncEnabled,
+      spokenWordHighlightingEnabled: spokenWordHighlightingEnabled,
+      pauseOnHoverEnabled: pauseOnHoverEnabled,
       autoScrollWPM: autoScrollWPM,
+      screenCaptureExclusionEnabled: appState?.settings.screenCaptureExclusionEnabled ?? true,
       playheadCoordinator: playheadCoordinator,
       scrollCoordinator: scrollCoordinator,
       reportsPrimaryMetrics: usesPrimaryMetrics,
@@ -108,6 +147,7 @@ class OverlayWindowController {
           self.swapManualPillScriptWithNotch(pill)
         })
     pillControllers.append(pill)
+    notchController?.setCanUndock(false)
     AiraLogger.shared.info(
       "Added pill scriptId=\(script.id.uuidString) mode=\(String(describing: mode))",
       category: "overlay")
@@ -146,6 +186,14 @@ class OverlayWindowController {
     startSessionKeyboardMonitorsIfNeeded()
   }
 
+  func updateScreenCaptureExclusion(enabled: Bool) {
+    notchController?.updateScreenCaptureExclusion(enabled: enabled)
+    for pillController in pillControllers {
+      pillController.updateScreenCaptureExclusion(enabled: enabled)
+    }
+    appState?.stealthWarning = !stealthIsHonored
+  }
+
   private var stealthIsHonored: Bool {
     let notchStealth = notchController?.isStealthEnabled ?? true
     let pillStealth = pillControllers.allSatisfy(\.isStealthEnabled)
@@ -176,6 +224,7 @@ class OverlayWindowController {
     pillControllers.removeAll { $0 === pill }
     AiraLogger.shared.info(
       "Removed pill remainingCount=\(pillControllers.count)", category: "overlay")
+    notchController?.setCanUndock(pillControllers.isEmpty)
     appState?.stealthWarning = !stealthIsHonored
     if hasActiveOverlays {
       syncPresenterSessionState()

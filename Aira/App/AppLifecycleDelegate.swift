@@ -1,7 +1,17 @@
 import AppKit
 
+extension Notification.Name {
+  static let airaApplicationDidFinishLaunching = Notification.Name(
+    "aira.applicationDidFinishLaunching")
+}
+
 final class AppLifecycleDelegate: NSObject, NSApplicationDelegate {
+  static private(set) var hasFinishedLaunching = false
+
   func applicationDidFinishLaunching(_ notification: Notification) {
+    Self.hasFinishedLaunching = true
+    NotificationCenter.default.post(name: .airaApplicationDidFinishLaunching, object: nil)
+
     Task { @MainActor in
       AppPermissionCoordinator.shared.requestLaunchPermissionsIfNeeded()
     }

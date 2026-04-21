@@ -57,14 +57,21 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-019a | `textColor` mutation via `SettingsStore` persists across store re-initialization — REQ-023 | `[x]` |
 | UT-019b | `pillsEnabled` and `maxPillCount` mutations persist across store re-initialization — REQ-044 | `[x]` |
 | UT-019c | `AppSettings.maxPillCount` is normalized to the supported `1...2` range during init and decode — REQ-044 | `[x]` |
+| UT-019k | `AppState.settings.autoScrollWPM` mutations normalize in memory before persistence so the live value and reloaded store value remain identical — REQ-023 | `[x]` |
+| UT-019l | `MenuBarStatusItemController` status item uses template rendering so macOS can switch between black and white automatically — REQ-021 | `[x]` |
+| UT-019m | Menu bar quick-access popover dismisses only for outside interactions, not clicks inside the popover or on the status-item button itself — REQ-021 | `[x]` |
 
-### App Updater (Tasks T-043a, T-043b, T-043c)
+### App Updater (Tasks T-043a, T-043b, T-043c, T-043d, T-043e)
 
 | ID | Test | Status |
 |---|---|---|
-| UT-019d | `AppUpdaterConfiguration` reports configured only when both a valid `SUFeedURL` and a non-empty `SUPublicEDKey` are present | `[w]` |
-| UT-019e | Sparkle sandbox wiring is present: app sandbox entitlement, network/audio entitlements, Sparkle mach-lookup exceptions, and `SUEnableInstallerLauncherService` in `Info.plist` | `[w]` |
+| UT-019d | `AppUpdaterConfiguration` reports configured only when both a valid `SUFeedURL` and a non-empty `SUPublicEDKey` are present | `[x]` |
+| UT-019e | Sparkle sandbox wiring is present: app sandbox entitlement, network/audio entitlements, Sparkle mach-lookup exceptions, and `SUEnableInstallerLauncherService` in `Info.plist` | `[x]` |
 | UT-019f | `AppUpdatePromptContent.updateFound(version:)` and `.readyToInstall(version:)` produce the branded copy and action labels expected by the custom updater popup | `[w]` |
+| UT-019i | App Store entitlements omit Sparkle mach-lookup exceptions and App Store plist/build inputs omit Sparkle `SU*` configuration keys | `[x]` |
+| UT-019j | App updater factory returns Sparkle-backed behavior for direct builds and no-op behavior for App Store builds | `[x]` |
+| UT-019g | `OverlayStealthConfiguration` maps the persisted screen-share exclusion preference to the expected window `sharingType` and stealth-warning behavior | `[x]` |
+| UT-019h | `screenCaptureExclusionEnabled` persists across `SettingsStore` save/load and `AppState` mutations | `[x]` |
 
 ### VoiceSyncEngine (Tasks T-034, T-035, T-036, T-037)
 
@@ -77,16 +84,50 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-024 | Cursor only moves forward: a match found earlier in the script than the current cursor does not move the cursor backward | `[x]` |
 | UT-025 | No match: cursor remains at current position when no overlap is found | `[x]` |
 | UT-026 | Scroll offset calculation: cursor at word N in a 100-word script produces an offset proportional to N/100 | `[x]` |
+| UT-026b | `VoiceSyncEngine.inputTapBufferSize` stays at 128 frames so recognition/highlight updates use lower microphone capture latency without touching scroll math | `[x]` |
+| UT-026c | Classic/highlight-only visual updates publish a prefix dulling range for already spoken words while keeping current spoken word separate for underline-only emphasis | `[x]` |
+| UT-026d | Click-to-reseed keeps scroll offset unchanged while resetting spoken-word visual/search cursors to the clicked overlay word | `[x]` |
+| UT-026e | `CinematicScrollController.stop()` halts further scroll tick callbacks so replaced undocked/fullscreen notch views cannot keep mutating shared playhead state in background | `[x]` |
+| UT-026f | `OverlayWindowController.endSession()` resets shared voice/playhead state so a later classic/manual session cannot inherit prior voice-session scroll or highlight state | `[x]` |
+| UT-026g | Active overlay controllers accept live updates for voice-driven scroll and pause-on-hover flags so session behavior can switch cleanly without relaunching the app | `[x]` |
 
 ### Models (Tasks T-001, T-002, T-003)
 
 | ID | Test | Status |
 |---|---|---|
 | UT-027 | ScriptMeta Codable round-trip | `[ ]` |
-| UT-028 | OverlayAppearance Codable round-trip | `[ ]` |
-| UT-029 | MoodPreset.day and MoodPreset.night produce valid OverlayAppearance values (no nil fields) | `[x]` |
+| UT-028 | OverlayAppearance Codable round-trip, including alignment, spacing, shadow, and padding defaults | `[w]` |
 | UT-030 | AppSettings default countdown + related settings values match the configured defaults | `[x]` |
-| UT-030a | `AppSettings.autoScrollWPM` defaults to 135 and is clamped to the supported `100...300` range by the System-tab binding/helpers | `[x]` |
+| UT-030a | `AppSettings.autoScrollWPM` defaults to 50 and is clamped to the supported `10...100` range by the System-tab binding/helpers | `[x]` |
+| UT-030b | `PrompterScrollMath.lineHeight(fontSize:lineSpacing:)` reflects the configured overlay line spacing and stays positive | `[x]` |
+| UT-030c | Overlay readability settings persist through `SettingsStore` save/load and `AppState` mutations, including justified alignment, tracking, word spacing, text shadow, and padding | `[w]` |
+| UT-030d | Overlay text measurement uses the same TextKit layout path as the AppKit renderer, and readability spacing changes still yield a positive multi-line scrollable height instead of collapsing the prompter range | `[x]` |
+| UT-030e | Manual auto-scroll velocity derives from fixed configured points-per-second instead of document size, so short and long scripts move at the same physical speed | `[x]` |
+| UT-030f | Overlay appearance previews derive width, alignment, padding, and line spacing from the same layout snapshot inputs as live overlay rendering so justified alignment and readability spacing are visible in preview state | `[w]` |
+| UT-030m | Overlay spoken-word highlight updates use temporary TextKit display attributes and do not alter intrinsic height when only the current spoken token changes | `[x]` |
+| UT-030n | Expanding the spoken-word dull prefix across repeated temporary-attribute updates does not alter intrinsic height, covering the incremental prefix-update path used during live classic/voice highlighting | `[x]` |
+| UT-030o | Prompter spoken-word visuals clamp dull-prefix/current-word rendering to the visible word window so off-screen spoken ranges cannot expand overlay redraw scope | `[x]` |
+| UT-030o | Duplicate overlay scroll-wheel deliveries with the same timestamp/delta/phase collapse to one signature so local/global/direct monitor overlap cannot triple-apply a single manual scroll gesture | `[x]` |
+| UT-030p | Overlay scroll monitor routing ignores global wheel-monitor delivery while app is active, but still accepts local delivery when app is active and global delivery when app is inactive | `[x]` |
+| UT-030q | Overlay wheel input remains enabled for both notch and manual-pill overlays, while notch classic/highlight-only sessions still use strict source routing to avoid duplicate monitor delivery | `[x]` |
+| UT-030r | Manual pill mode suppresses spoken-word highlighting even when shared highlight setting is on | `[x]` |
+| UT-030s | Manual pill mode keeps overlay wheel input enabled independently from notch-only highlight guards and hover-pause preference changes | `[x]` |
+| UT-030t | Sync pills in classic/manual presenter mode show sync badge and suppress voice waveform lane, while true voice-sync pills keep voice chrome | `[x]` |
+| UT-030u | Hover-pause state activates only when both pointer is inside overlay and the setting is enabled, so disabling `Pause on mouse hover` cannot disable manual wheel input on Manual-mode pills | `[x]` |
+| UT-030v | Pill windows ignore the hover-pause setting entirely, so floating pill interactions stay live while notch hover-pause remains unchanged | `[x]` |
+| UT-030x | Shared pause semantics stop only automatic motion: synced overlays publish paused state to the shared playhead, while manual pills ignore notch pause state and keep manual wheel behavior independent | `[w]` |
+| UT-030y | Overlay panels own wheel capture directly so notch and pill windows still deliver direct/local/global wheel input even when the SwiftUI-hosted interceptor view is not the active responder | `[w]` |
+| UT-030z | Overlay panel monitoring installs once per effective configuration and raw panel `sendEvent(_:)` observation can confirm whether AppKit routes scroll-wheel events to the overlay before monitor/dedupe logic runs | `[w]` |
+| UT-030aa | Shared session-start restore state survives overlay view rebuilds, so closing a pill cannot make the remaining notch overlay restart from the top just because voice sync is idle during manual/classic sessions | `[x]` |
+| UT-030ab | Notch and pill window controllers reuse their existing `NSHostingView` during content refreshes, so chrome/script updates do not replace the panel `contentView` and unnecessarily tear down the live overlay view hierarchy | `[ ]` |
+| UT-030ac | Repeated overlay layout requests with the same normalized script body, width, and appearance reuse a cached `OverlayTextLayoutSnapshot` result so notch+pill launch does not redo identical initial TextKit layout work | `[x]` |
+| UT-030w | Overlay wheel dedupe drops only cross-source duplicate deliveries and keeps repeated same-source wheel steps live even when AppKit reuses wheel identity fields | `[x]` |
+| UT-030h | Overlay appearance popover preview stays clipped inside its rounded strip even when preview copy or readability settings produce taller text | `[ ]` |
+| UT-030i | `AppSettings.pauseOnHoverEnabled` defaults to `true` and persists through store load/save plus `AppState` mutations | `[x]` |
+| UT-030j | Settings > The Notch default preview copy fits within the default notch preview bounds instead of overlapping the notch cutout | `[x]` |
+| UT-030k | Settings > The Notch preview auto-expands from saved notch dimensions when readability settings need more room, and the sample still fits within the resolved preview bounds | `[x]` |
+| UT-030g | `NotchWidthConfiguration.defaultWidth` stays at the intended narrower default and `NotchWindowController` uses persisted width/height values instead of falling back to the old hardcoded launch width | `[w]` |
+| UT-030t | Manual pill windows keep overlay wheel deduplication enabled so direct/local/global overlay delivery still collapses duplicates instead of bypassing the shared working wheel path | `[x]` |
 
 ### CountdownView Logic (Task T-029)
 
@@ -127,6 +168,11 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-044a | `duplicateScript(id:)` syncs preserved collection memberships back into CollectionStore so collection-filtered views keep showing the copy | `[x]` |
 | UT-044b | `deleteCollection(id:)` removes the deleted collection ID from persisted scripts so script files cannot retain orphaned memberships | `[x]` |
 | UT-044c | `NotchOverlayGeometry.sideOverscan(for:)` remains `0` for physical notch widths, and the runtime cutout stays flush to the measured left/right notch walls | `[x]` |
+| UT-044d | `NotchOverlayGeometry` keeps side overscan at `0` while applying only a sub-point inward seam compensation on the rendered cutout walls | `[x]` |
+| UT-044e | Runtime notch overlay keeps a flat top edge outside the notch cutout while preserving the rounded cutout corners and flat fallback geometry | `[x]` |
+| UT-044f | Even-width notch panels use side-specific seam compensation so the left cutout wall does not leave a raster gap while side overscan stays `0` | `[x]` |
+| UT-044g | Collection-move logic adds a dropped/selected collection ID without removing existing memberships or duplicating an existing membership | `[x]` |
+| UT-044h | Drag payload parsing accepts a valid script UUID string and rejects invalid payloads before sidebar collection-drop handling runs | `[x]` |
 
 ---
 
@@ -142,11 +188,12 @@ Repository automation is tracked here when it materially gates shipping quality.
 | IT-016 | Voice-Sync off session: launching an overlay with a saved non-zero `autoScrollWPM` starts manual auto-scroll in the presented prompter instead of leaving the script stationary | `[ ]` |
 | IT-017 | Session scroll shortcuts: configured up/down shortcuts nudge the active session scroll position regardless of which window has keyboard focus | `[ ]` |
 | IT-018 | System-tab manual scroll speed control persists a changed WPM value through `AppState` and `SettingsStore` | `[x]` |
-| IT-019 | Mouse wheel / trackpad scrolling on an active overlay updates the rendered script position without disabling Voice-Sync state | `[ ]` |
+| IT-019 | Mouse wheel / trackpad scrolling on an active overlay updates the rendered script position without disabling Voice-Sync state, including hover-paused and button-paused notch sessions plus Manual-mode pill windows regardless of the hover-pause setting | `[ ]` |
 | IT-020 | Voice-Sync partial transcription updates advance the cursor in capped forward steps instead of jumping directly to the end of a long spoken window | `[ ]` |
 | IT-029 | When `SUFeedURL` or `SUPublicEDKey` is missing, `AppUpdaterController` fails closed and `Check for Updates…` remains disabled | `[ ]` |
 | IT-030 | When Sparkle reports an available update, Aira shows the custom update popup instead of Sparkle's stock update-found alert | `[ ]` |
 | IT-031 | When Sparkle finishes downloading an update, Aira shows the custom `Install & Relaunch` popup instead of the stock ready-to-install alert | `[ ]` |
+| IT-032 | App Store build launches without Sparkle linkage, hides `Check for Updates…`, and keeps product behavior otherwise identical to the direct build | `[ ]` |
 
 ### Hover Pause (Task T-028)
 
@@ -214,12 +261,20 @@ These are verified by a human tester and noted in this file when confirmed. They
 
 | ID | Test | Status |
 |---|---|---|
+| MT-056 | Direct release workflow from tag produces notarized DMG, Sparkle ZIP, appcast update, public GitHub release, and website metadata update without involving App Store upload steps | `[ ]` |
+| MT-057 | App Store workflow uploads `AppStoreRelease` artifact to App Store Connect, build finishes Apple processing, and uploaded build contains no updater UI or Sparkle config | `[ ]` |
+| MT-058 | Optional review-submission automation, if enabled later, only runs after explicit approval/manual dispatch and never from direct-release tag flow | `[ ]` |
+
+| ID | Test | Status |
+|---|---|---|
 | MT-001 | Overlay is invisible in Zoom screen share on macOS 14+ | `[ ]` |
 | MT-002 | Overlay is invisible in Microsoft Teams screen share on macOS 14+ | `[ ]` |
 | MT-003 | Notch window is correctly positioned on MacBook Pro 14" notch | `[ ]` |
 | MT-004 | Notch window is correctly positioned on MacBook Pro 16" notch | `[ ]` |
 | MT-043 | Runtime notch overlay sits flush against the physical notch with no visible hairline gap at the two lower inner curves | `[ ]` |
 | MT-044 | Runtime notch overlay also sits flush against the vertical inner notch edges with no visible side seams, with live side overscan still clamped to `0.0` | `[ ]` |
+| MT-044b | Runtime notch overlay top shoulders bow outward into the menu-bar edge instead of cutting inward or ending square | `[ ]` |
+| MT-044a | Runtime notch overlay exposes no drag-resize affordance or size-reset menu item during an active session; notch size changes only through Preferences > The Notch | `[ ]` |
 | MT-045 | Appearance tab preview chips keep Light Paper light and Dark Studio dark in both app themes | `[ ]` |
 | MT-046 | System tab manual-scroll copy refers to Manual mode / Voice-Sync-off behavior, and the Speech Sensitivity field label matches the surrounding Crimson Text control styling | `[ ]` |
 | MT-047 | Overlay audio beam uses the shared primary color token and no overlay-local `Color(hex:)` helper remains in the Phase 6 window stack | `[ ]` |
@@ -233,12 +288,17 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-012 | Manager UI audit sweep: button chrome, script editor, document library controls, and sidebar badges use the shared audited color tokens consistently in light and dark mode | `[ ]` |
 | MT-013 | Settings modal top chrome uses themed surface color in both light and dark mode, App Theme swatches are centered, and System-tab control labels/body copy use Crimson Text while section headings stay Indie Flower | `[ ]` |
 | MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, top chrome uses `#484C49`, Light Paper preview stays cream, notch preview uses `#434343`, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |
+| MT-048 | The Notch readability controls update the live preview correctly: Overlay Font remains the only font picker, Accessibility alignment includes `Justified`, spacing controls visibly change line/letter/word density, text shadow improves contrast, and padding changes the inset inside the overlay | `[ ]` |
+| MT-049 | Preferences tabs read `Appearance`, `The Notch`, `Pills`, and `System`; pill setup lives only in `Pills`, and `System` sections appear in Before / During / Controls / Privacy order | `[ ]` |
+| MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
 | MT-016 | Pill Windows toggle matches the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
 | MT-017 | Voice Tracking enable row uses the same plain System panel styling as adjacent controls, without a separate highlighted background container | `[ ]` |
 | MT-018 | During Voice-Sync, the scroll progression no longer skips ahead by large blocks of unseen script, and the overlay does not visibly emphasize the currently spoken word | `[ ]` |
 | MT-019 | Entering selection mode from Select All does not visually shift existing script cards or the selection bar; card actions simply disappear and the trash button appears without layout jitter | `[ ]` |
+| MT-019a | Entering `Scripts` or returning from editor shows current script-card grid immediately and never requires opening a Recent item first to repopulate the library view | `[x]` |
 | MT-020 | Keyboard shortcut rows in Settings > System no longer use a separate highlighted/cream background and match the surrounding panel styling | `[ ]` |
+| UT-075 | `MenuBarStatusItemController` does not permit status-item creation until launch has completed, and it creates at most one item after launch | `[x]` |
 | MT-021 | The Notch Window keeps active text below the notch cutout, unread lines rise upward from lower in the overlay like a teleprompter, and the live voice indicator appears as corner sound waves outside the script text area | `[ ]` |
 | MT-022 | Overlay text shows a downward start marker above the opening line, ignores stray single-line breaks from the editor by flowing paragraphs cleanly, and does not visibly emphasize the currently spoken word | `[ ]` |
 | MT-023 | During the countdown, the overlay shows only the countdown treatment with no script text visible behind it; the script appears only after the countdown finishes | `[ ]` |
@@ -247,16 +307,27 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-026 | Keyboard nudges, wheel scrolling, and WPM auto-scroll no longer fight each other or snap the script back after a fresh session launch, and repeated line nudges do not get overridden by any mirrored offset channel | `[ ]` |
 | MT-027 | The pause keyboard shortcut pauses and resumes the active scrolling mode itself, including manual WPM scroll and voice-driven scroll, without needing to end the session | `[ ]` |
 | MT-028 | In Sync mode, the notch and every synced pill scroll and pause together; only Manual pills can diverge to a different script or offset | `[ ]` |
-| MT-029 | In Sync mode with one or more pills open, manual WPM scroll remains as fast and as smooth as notch-only operation, with the notch acting as the primary driver and synced pills showing the same content position through their own local window pacing rather than inheriting a slower shared rendered offset | `[ ]` |
-| MT-030 | In Sync mode, the primary notch window keeps the same smooth configured WPM pacing it has by itself and does not become jittery from re-projecting shared progress back into its own rendered offset | `[ ]` |
+| MT-050 | Turning Pause on mouse hover off keeps notch sessions scrolling while hovered; turning it on restores notch pause/resume behavior without changing scroll-position continuity, and pill windows remain unaffected in both cases | `[ ]` |
+| MT-054 | Hovering notch and pill overlays reveals action chrome in expected corners: notch shows undock on left plus pause/close on right, pill shows swap/fullscreen/close on right, and non-hover state hides the chrome | `[ ]` |
+| MT-060 | Clicking hover `Swap` on manual pill performs same script exchange as prior pill swap control, updating both manual pill and notch immediately from top of script | `[ ]` |
+| MT-061 | Clicking notch hover `Pause` toggles live session pause/resume, and clicking notch hover `Close` ends active presenter session with same behavior as Escape / prior end-session action | `[ ]` |
+| MT-062 | Pill hover `Fullscreen` is disabled on built-in/main display, becomes enabled after moving pill to a secondary display, and enters/exits macOS fullscreen there without affecting the notch overlay | `[ ]` |
+| MT-063 | When notch session is paused, hover control shows resume glyph from mockup instead of pause bars; when running, it shows pause bars | `[ ]` |
+| MT-064 | Disabled pill fullscreen button on built-in/main display is visibly dimmed and does not look interactive compared with enabled secondary-display state | `[ ]` |
+| MT-065 | Secondary-display pill fullscreen exits cleanly back to prior pill size/position with no frame glitch and no title bar appearing during enter or exit | `[ ]` |
+| MT-066 | Docked notch `Undock` is disabled while any pill window is active, becomes enabled when no pills remain, and undocking turns the notch into a free-moving rounded rectangle with no cutout | `[ ]` |
+| MT-067 | Undocked notch shows `Dock` plus fullscreen controls on the left, can be resized/moved like a pill, and redocking restores the anchored notch presentation on the built-in display | `[ ]` |
+| MT-068 | Undocked notch removes the corner-wave ornament, shows a bottom reserved `VisualBeam` strip, and scrolling text never passes behind that waveform area | `[ ]` |
+| MT-029 | In Sync mode with one or more pills open, manual auto-scroll remains as fast and as smooth as notch-only operation, with the notch acting as the primary driver and synced pills showing the same content position through their own local window pacing rather than inheriting a slower shared rendered offset | `[ ]` |
+| MT-030 | In Sync mode, the primary notch window keeps the same smooth configured point-based pacing it has by itself and does not become jittery from re-projecting shared progress back into its own rendered offset | `[ ]` |
 | MT-031 | Administrative FAQ-style scripts containing repeated `Q)` markers, contact email addresses, and similar non-spoken metadata do not distort notch pacing, content-progress projection, or speech matching | `[ ]` |
-| MT-032 | Scripts with sparse vertical layout such as FAQ sections, headings, and frequent paragraph breaks still move at the configured manual WPM without visually slow or jittery regions in the notch overlay | `[ ]` |
+| MT-032 | Scripts with sparse vertical layout such as FAQ sections, headings, and frequent paragraph breaks still move at the configured manual point-based speed without visually slow or jittery regions in the notch overlay | `[ ]` |
 | MT-033 | Shared playhead refactor regression: manual scroll still works in notch-only, sync notch+pills, and manual pill-only sessions after playhead coordinator introduction | `[ ]` |
 | MT-034 | In Sync mode, differently sized windows show the same content progress while moving at different pixel speeds appropriate to their own geometry | `[ ]` |
 | MT-035 | Pause/resume operates on the shared session playhead, so all Sync overlays pause and resume together while Manual pills remain unaffected | `[ ]` |
-| MT-036 | Long scripts and short scripts presented in the notch at the same configured WPM have consistent perceived manual scroll speed instead of long documents visually crawling | `[ ]` |
+| MT-036 | Long scripts and short scripts presented in the notch at the same configured point-based speed have consistent perceived manual scroll speed instead of long documents visually crawling | `[ ]` |
 | MT-037 | Manual `Sync` sessions no longer exhibit visible lag from the legacy line-index sync path, while voice-driven sync still behaves correctly until the voice refactor lands | `[ ]` |
-| MT-038 | Increasing total document length without materially changing local line density does not reduce the perceived manual scroll speed at the same configured WPM | `[ ]` |
+| MT-038 | Increasing total document length does not reduce the perceived manual scroll speed at the same configured point-based speed | `[ ]` |
 | MT-039 | Long scripts do not introduce visible overlay lag or jitter from per-frame text rebuild cost while manual scrolling is active | `[ ]` |
 | MT-040 | Script Editor cue panel uses shared theme tokens for its sage background and cream foreground so it stays visually consistent across theme audits | `[ ]` |
 | MT-041 | Collections sidebar warning uses the shared warm token instead of an inline hex color, and collections navigation still behaves correctly after the manager window accessor main-actor cleanup | `[ ]` |
@@ -266,8 +337,9 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-050 | A tagged release publishes DMG, ZIP, and `appcast.xml`, and an installed build successfully discovers the update from `https://raw.githubusercontent.com/sankirthk/aira-releases/main/appcast.xml` | `[ ]` |
 | MT-051 | Main-repo CI runs Swift formatting checks, lint-style checks, `xcodebuild build`, and `xcodebuild test` on pull requests and pushes to `main` | `[ ]` |
 | MT-052 | Installed pre-commit hook blocks a commit when formatting, linting, build, or tests fail, and allows the commit when the full local validation path passes | `[ ]` |
+| MT-053 | `scripts/dev/graphify-watch.sh` starts scoped watchers for `Aira` and `docs`, keeps running until interrupted, and prints the docs semantic-refresh reminder when `graphify-out/needs_update` appears | `[ ]` |
 
-### Planned Refactor Coverage (Tasks T-025z ... T-025ag)
+### Planned Refactor Coverage (Tasks T-025z ... T-025ai)
 
 | ID | Test | Status |
 |---|---|---|
@@ -277,5 +349,12 @@ These are verified by a human tester and noted in this file when confirmed. They
 | IT-024 | Sync overlay projection maps shared playhead progress into different local offsets for notch and pill windows with different viewport sizes | `[ ]` |
 | IT-025 | Unified Voice mode updates bounded playhead target progress without directly writing rendered offset state from `VoiceSyncEngine` | `[ ]` |
 | IT-026 | Voice mode advances the same playhead used by manual scroll and moves only when recognized human speech is active, not on raw audio-level noise alone | `[ ]` |
+| IT-029 | Voice spoken-word highlighting only searches the currently visible overlay word window, ignores low-confidence recognition segments, and never jumps backward automatically to already retired words unless the user explicitly clicks a word to reseed | `[ ]` |
+| IT-030 | High-confidence 3-word suffix matches win over 2-word and 1-word matches, and common filler words do not falsely highlight unrelated visible text | `[ ]` |
 | IT-027 | Primary manual playhead velocity is derived from measured rendered text density (`pointsPerWord`, `scrollableRange`, `autoScrollWPM`) rather than a naive `1 / totalSeconds` normalized step, so document length alone does not reduce physical scroll pace | `[x]` |
 | IT-028 | Long-script manual sessions cache rendered overlay text instead of rebuilding the entire presentation during per-frame scroll updates | `[ ]` |
+| IT-032 | One canonical overlay layout snapshot produces rendered attributed text, total content height, line metrics, and `pointsPerWord`, and scroll/playhead state consumes that same snapshot instead of separate measurement paths | `[x]` |
+| IT-033 | Changing alignment, line spacing, letter spacing, word spacing, text shadow, content padding, or font rebinds overlay scroll geometry from the updated layout snapshot and does not leave scroll range at zero/stale values | `[x]` |
+| MT-055 | Scroll regression check after T-025ai: notch voice-sync, notch manual WPM, sync notch+pill, and manual pill sessions all scroll correctly after readability settings changes and long-script content updates | `[ ]` |
+| MT-069 | Voice mode inline highlighting follows spoken words only inside the currently visible overlay window in notch and pill sessions, retires words that scroll off the top, and does not highlight future off-screen words | `[ ]` |
+| MT-070 | System > During Session spoken-word highlighting toggle defaults off, persists across relaunch, and only affects overlay visuals without changing pause, manual scroll, or voice-driven scroll behavior | `[ ]` |

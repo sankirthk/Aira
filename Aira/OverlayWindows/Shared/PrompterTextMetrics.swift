@@ -10,14 +10,12 @@ struct LineMetric: Equatable {
 enum PrompterTextMetrics {
   static func calculateLines(
     text: String,
-    font: NSFont,
+    attributedText: NSAttributedString,
     width: CGFloat
   ) -> [LineMetric] {
     guard !text.isEmpty, width > 0 else { return [] }
 
-    let textStorage = NSTextStorage(string: text)
-    textStorage.addAttribute(
-      .font, value: font, range: NSRange(location: 0, length: text.utf16.count))
+    let textStorage = NSTextStorage(attributedString: attributedText)
 
     let layoutManager = NSLayoutManager()
     let textContainer = NSTextContainer(

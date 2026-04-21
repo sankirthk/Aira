@@ -113,7 +113,7 @@ These rules apply across all of Aira's behavior.
 - Aira requires no user account, login, or registration at any point.
 - All scripts, settings, appearance preferences, and API keys remain on the user's device at all times.
 - Aira collects no analytics, telemetry, usage data, or crash reports that leave the device.
-- No network connection is required to use any core authoring or presenter feature. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
+- No network connection is required to use any core authoring or presenter feature. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). App Store builds do not use Sparkle and therefore must not perform updater traffic. If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
 - Stealth Mode must never fail silently; if the prompter cannot be excluded from screen-share output, the user must be informed before a presenter session begins.
 - Voice-Sync and manual scroll are always independently available; one must never depend on the other being active.
 - The Notch Window and Pill Windows are independent surfaces; the failure or closure of one must not affect the other.
@@ -128,10 +128,11 @@ These rules apply across all of Aira's behavior.
 The app shall advance the script scroll position in real time using a single Voice mode.
 
 Acceptance criteria:
-- **Voice Mode:** The prompter scrolls continuously using the shared playhead. Voice activity keeps motion running, recent recognition results anchor the playhead so the script does not drift far from the spoken position, and the overlay does not require inline spoken-word highlighting.
+- **Voice Mode:** The prompter scrolls continuously using the shared playhead. Voice activity keeps motion running, recent recognition results anchor the playhead so the script does not drift far from the spoken position, and the overlay highlights the currently matched spoken word or short matched phrase inline.
 - Voice-Sync is the default active mode when a presenter session starts.
 - The user can enable or disable Voice mode in Settings.
-- While Voice-Sync is active, the speech matcher publishes the current spoken position to the shared session playhead; the overlay does not visually emphasize the currently spoken word inline.
+- While Voice-Sync is active, the speech matcher publishes the current spoken position to the shared session playhead and visually emphasizes the currently spoken word inline without adding a separate overlay surface.
+- When spoken-word highlighting is enabled, clicking a visible overlay word reseeds the spoken-word highlight/search anchor to that word for subsequent recognition updates without changing the current scroll position.
 
 #### REQ-002: Pause On Silence
 
@@ -149,12 +150,12 @@ The user shall be able to manually control scroll position and speed at any time
 Acceptance criteria:
 - The user can scroll forward or backward during a presenter session using mouse wheel or trackpad gestures on the overlay surface.
 - The user can nudge the script up or down by one rendered line at a time using configurable keyboard shortcuts during a presenter session.
-- The user can adjust manual auto-scroll speed on the fly from Settings > System using a bounded WPM control.
-- Manual auto-scroll speed is configurable from 100 WPM to 300 WPM, with a default of 135 WPM.
+- The user can adjust manual auto-scroll speed on the fly from Settings > System using a bounded points-per-second control.
+- Manual auto-scroll speed is configurable from 10 pt/s to 100 pt/s, with a default of 50 pt/s.
 - Manual auto-scroll is driven by a single display-synced session playhead rather than timer-style per-view loops.
 - Manual wheel, keyboard, and WPM auto-scroll inputs all feed the same session playhead model.
 - In Sync mode, overlays share the same script progress but each overlay projects that progress into its own local geometry and therefore may move at different pixel speeds.
-- In Sync mode, the primary overlay derives shared manual playhead velocity from its own measured rendered line density rather than total document duration so configured WPM remains visually consistent across short and long scripts.
+- In Sync mode, the primary overlay derives shared manual playhead velocity from a fixed configured points-per-second value rather than document size, word count, or rendered line density so short and long scripts move at the same physical speed.
 - Manual override does not permanently disable Voice-Sync; the user can re-engage it.
 
 #### REQ-004: Visual Beam Feedback
@@ -174,6 +175,7 @@ The app shall exclude all Aira windows from the screen-share stream visible to r
 
 Acceptance criteria:
 - When the user shares their screen in Zoom, Microsoft Teams, or equivalent tools, no Aira window appears in the shared output.
+- Screen-share exclusion is enabled by default, but the user may explicitly disable it in Preferences > System when they want overlays to appear in screenshots, recordings, or video calls.
 - This behavior applies to both the Notch Window and all Pill Windows.
 - Stealth Mode is active by default; the user does not need to enable it manually.
 
@@ -232,12 +234,14 @@ Acceptance criteria:
 
 #### REQ-010: Hover-To-Pause
 
-Hovering the cursor over any prompter window shall instantly pause scrolling for that window.
+Hovering the cursor over the Notch Window shall instantly pause scrolling for that window.
 
 Acceptance criteria:
-- Moving the cursor over a prompter window pauses scroll for as long as the cursor remains over it.
+- Hover-pause is controlled by a persisted Settings toggle and defaults to enabled.
+- Spoken-word highlighting is controlled by a persisted Settings toggle in the System > During Session section, defaults to disabled, and affects only visual emphasis rather than scroll behavior.
+- Moving the cursor over the Notch Window pauses scroll for as long as the cursor remains over it.
 - The script position is preserved during the hover pause.
-- Hover-pause applies to both the Notch Window and Pill Windows.
+- Pill Windows ignore the hover-pause setting so floating overlays remain manually scrollable while hovered.
 
 #### REQ-011: Resume After Hover Pause
 
@@ -427,6 +431,18 @@ Acceptance criteria:
 - The change applies immediately to the active prompter display.
 - The chosen size persists across sessions.
 
+#### REQ-022a: Overlay Readability Controls
+
+The app shall provide additional readability controls for overlay text.
+
+Acceptance criteria:
+- Font selection remains in a single Overlay Font control; the Accessibility section does not duplicate font choice.
+- A dyslexia-friendly bundled overlay font option remains available through the Overlay Font picker.
+- The user can choose between left-aligned, center-aligned, and justified overlay text.
+- The user can adjust overlay line spacing within a bounded range and see the preview update immediately.
+- The user can adjust letter spacing, word spacing, text shadow, and inner text padding within bounded ranges and see the preview update immediately.
+- The chosen readability settings persist across sessions and apply to newly launched overlay windows.
+
 #### REQ-023: Custom Text Colors
 
 The user shall be able to choose custom text colors for the prompter display.
@@ -438,11 +454,11 @@ Acceptance criteria:
 
 #### REQ-024: Mood Presets
 
-The app shall provide pre-built appearance presets that bundle text color, background color, opacity, and contrast settings.
+The app shall not provide pre-built appearance preset shortcuts in Preferences. Overlay appearance shall be configured directly through the individual text color, background color, opacity, and contrast controls.
 
 Acceptance criteria:
-- At least two distinct presets are available at launch.
-- Applying a preset updates all associated appearance settings in one action.
+- No preset row or preset cards are shown in Settings > The Notch.
+- Users can still achieve the same visual outcomes through the direct overlay appearance controls.
 - The user can switch between presets without losing the ability to make further manual adjustments.
 
 #### REQ-038: Per-Window Overlay Appearance
@@ -516,13 +532,16 @@ Acceptance criteria:
 
 #### REQ-030: Distribution Channels
 
-The app shall support direct distribution through GitHub Releases for first-time installs and Sparkle for in-app updates of installed copies.
+The app shall support two release paths from one shared codebase: direct distribution and Mac App Store distribution.
 
 Acceptance criteria:
-- A user can download the signed and notarized `.dmg` from the public GitHub Releases page.
-- An installed copy can check a hosted Sparkle `appcast.xml` over HTTPS and install a newer signed update archive in place.
-- The manual-download DMG and the Sparkle update archive represent the same released app version/build.
-- When an update is found, Aira presents an in-app update prompt before Sparkle proceeds with download or install.
+- **Direct distribution:** A user can download signed and notarized install media from the public GitHub Releases page.
+- **Direct distribution:** An installed direct-distribution copy can check a hosted Sparkle `appcast.xml` over HTTPS and install a newer signed update archive in place.
+- **Direct distribution:** The manual-download DMG and the Sparkle update archive represent the same released app version/build.
+- **Direct distribution:** When an update is found, Aira presents an in-app update prompt before Sparkle proceeds with download or install.
+- **App Store distribution:** A Mac App Store build is produced from the same repository and product code, but without Sparkle-linked binaries, Sparkle configuration keys, or Sparkle-specific entitlements.
+- **App Store distribution:** The Mac App Store build exposes no in-app self-update UI and relies on App Store distribution/update mechanics instead.
+- **App Store distribution:** App Store upload/submission automation, if configured, must run through a release path separate from the direct-distribution GitHub Releases + Sparkle publishing flow.
 
 #### REQ-031: Closed-Source Repository Policy
 
