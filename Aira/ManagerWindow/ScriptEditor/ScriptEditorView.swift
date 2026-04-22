@@ -1,6 +1,23 @@
 import AppKit
 import SwiftUI
 
+struct ScriptEditorLaunchMenuAction: Identifiable, Equatable {
+  enum Kind: Equatable {
+    case castToNotch
+    case castWithSatellite
+  }
+
+  let kind: Kind
+  let title: String
+
+  var id: String { title }
+
+  static let defaultItems: [ScriptEditorLaunchMenuAction] = [
+    .init(kind: .castToNotch, title: "Cast to Notch"),
+    .init(kind: .castWithSatellite, title: "Cast with Satellite…"),
+  ]
+}
+
 struct ScriptEditorView: View {
   @EnvironmentObject var appState: AppState
   @Binding var script: Script
@@ -9,6 +26,7 @@ struct ScriptEditorView: View {
   let managerFontScale: CGFloat
   let isReadOnly: Bool
   var onCast: () -> Void
+  var onCastWithSatellite: () -> Void = {}
   var onBack: () -> Void
 
   var wordCount: Int {
@@ -69,15 +87,34 @@ struct ScriptEditorView: View {
         .disabled(isReadOnly)
         .opacity(isReadOnly ? 0.55 : 1)
 
-        Button {
-          onCast()
-        } label: {
-          HStack(spacing: 8) {
-            AiraIcon(type: .notch, size: 18, color: .white, animated: false)
-            Text("Cast to Notch")
+        HStack(spacing: 8) {
+          Button {
+            onCast()
+          } label: {
+            HStack(spacing: 8) {
+              AiraIcon(type: .notch, size: 18, color: .white, animated: false)
+              Text("Cast to Notch")
+            }
           }
+          .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .secondary))
+
+          Menu {
+            ForEach(ScriptEditorLaunchMenuAction.defaultItems) { action in
+              Button(action.title) {
+                handleLaunchMenuAction(action.kind)
+              }
+            }
+          } label: {
+            Image(systemName: "chevron.down")
+              .font(.system(size: 12, weight: .semibold))
+              .frame(width: 18, height: 18)
+          }
+          .menuStyle(.borderlessButton)
+          .fixedSize()
         }
         .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .secondary))
+        .disabled(isReadOnly)
+        .opacity(isReadOnly ? 0.55 : 1)
       }
       .padding(16)
       .background(Color("colorPrimary"))
@@ -178,6 +215,15 @@ struct ScriptEditorView: View {
     )
     script.body = result.text
     selectedRange = result.selectedRange
+  }
+
+  private func handleLaunchMenuAction(_ action: ScriptEditorLaunchMenuAction.Kind) {
+    switch action {
+    case .castToNotch:
+      onCast()
+    case .castWithSatellite:
+      onCastWithSatellite()
+    }
   }
 }
 

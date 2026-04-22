@@ -303,7 +303,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049 | Preferences tabs read `Appearance`, `The Notch`, `Pills`, and `System`; pill setup lives only in `Pills`, and `System` sections appear in Before / During / Controls / Privacy order | `[ ]` |
 | MT-049a | Preferences tabs read `Appearance`, `The Notch`, `Satellite`, and `System`; Satellite tab contains `Satellite count` plus appearance/readability controls only and no content-mode or script-assignment controls | `[ ]` |
 | MT-049a-a | Leaving Satellite tab untouched still allows Satellite launch; unconfigured Satellite renders with Notch defaults until user customizes that slot | `[ ]` |
-| MT-049b | Script Editor shows split launch control `[ Cast to Notch ] [ chevron ]`, and primary `Cast to Notch` never launches Satellite unexpectedly | `[ ]` |
+| MT-049b | Script Editor shows split launch control `[ Cast to Notch ] [ chevron ]`, and primary `Cast to Notch` never launches Satellite unexpectedly | `[x]` |
 | MT-049c | Chevron dropdown offers `Cast to Notch` and `Cast with Satellite…`, and launch panel shows per-Satellite `Mirror current script` / `Choose script…` controls | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
