@@ -5,6 +5,14 @@ import Testing
 
 struct ScriptEditorSessionLogicTests {
 
+  @Test func launchMenuItemsExposeSplitButtonChoicesInOrder() {
+    #expect(
+      ScriptEditorLaunchMenuAction.defaultItems.map(\.title) == [
+        "Cast to Notch",
+        "Cast with Satellite…",
+      ])
+  }
+
   @Test func emptyUntitledDraftIsDiscardedOnDismiss() {
     let draft = Script(
       id: UUID(),

@@ -319,6 +319,10 @@ Acceptance criteria:
 - The user can edit an existing script from within the app.
 - Multiple scripts can be stored and named independently.
 - Auto-save on dismiss: when the user navigates away from the editor without explicitly saving, the app saves automatically if the draft has meaningful content (as defined above). No dirty indicator is shown — auto-save makes it unnecessary.
+- The editor toolbar exposes a split-button launch control: primary `Cast to Notch` plus adjacent dropdown.
+- Pressing the primary `Cast to Notch` action is deterministic and never launches Satellite windows.
+- Opening the dropdown exposes `Cast to Notch` and `Cast with Satellite…`.
+- Choosing `Cast with Satellite…` opens a launch panel listing each enabled Satellite and its content assignment controls.
 
 #### REQ-015: Local Script Storage
 

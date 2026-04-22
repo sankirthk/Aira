@@ -226,7 +226,15 @@ The full-screen authoring experience within the content area.
 - Script title input (Manrope Bold, editable inline, 20pt)
 - Word count + estimated duration (Slate Blue, right-aligned)
 - **Save** button (sage green, with hand-drawn save icon)
-- **Cast to Notch** button (terracotta)
+- **Split launch control**: `[ Cast to Notch ] [ chevron ]`
+
+**Launch behavior:**
+- Primary button press on `Cast to Notch` launches only the Notch Window with the current editor script.
+- Chevron dropdown entries:
+  - `Cast to Notch`
+  - `Cast with Satellite…`
+- Choosing `Cast with Satellite…` opens one compact launch panel for all enabled Satellites.
+- Each enabled Satellite chooses independently between `Mirror current script` and `Choose script…`.
 
 **Main text area:**
 - Full-height, no visible border — blends with content area background

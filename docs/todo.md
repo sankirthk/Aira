@@ -236,6 +236,8 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 
 ## Deferred — Post-v1
 
+- [x] **T-047d.1** Script Editor split-button shell: add non-functional split launch control `[ Cast to Notch ] [ chevron ]` with dropdown items `Cast to Notch` and `Cast with Satellite…`. No Satellite launch behavior change yet. Completed in worktree `feature/t-047d-1-split-launch` with focused launch-menu logic test coverage.
+
 These tasks are documented for future reference. Do not implement in v1.
 
 - [ ] AI Report-to-Natural Converter — REQ-017, REQ-018, REQ-019, REQ-020
