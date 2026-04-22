@@ -62,4 +62,6 @@ frontend/
 .claude
 .codex
 .githooks
+worktrees/
 Notchapp/
+Aira-Public

@@ -46,6 +46,20 @@
 
     ---
 
+    ## Git Worktree Workflow
+
+    For all feature work going forward:
+
+    1. Create a **separate git worktree** for the feature before making implementation changes.
+    2. Do **not** implement features directly in the main working tree. Keep the main tree clean.
+    3. Treat each feature worktree as the isolated workspace for its docs, code changes, and tests.
+    4. Run the relevant tests inside that feature worktree before considering the work ready.
+    5. Only after the required tests pass should the worktree changes be merged back to the target branch.
+
+    This is the default workflow unless a task explicitly says otherwise.
+
+    ---
+
     ## Review Tracking Rule
 
     Every time a review is provided:

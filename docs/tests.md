@@ -189,6 +189,11 @@ Repository automation is tracked here when it materially gates shipping quality.
 | ID | Test | Status |
 |---|---|---|
 | IT-001 | Cast to Notch: calling `OverlayWindowController.presentSession(script:appearance:countdownDuration:)` results in a visible NSPanel and VoiceSyncEngine in `.running` state after countdown | `[x]` |
+| IT-001a | `Cast to Notch` launches notch only and does not create any Satellite windows even when Preferences `Satellite count` is 1 or 2 | `[ ]` |
+| IT-001b | Chevron dropdown `Cast with Satellite…` opens one panel for enabled Satellites, and Satellites set to `Mirror current script` launch against current editor script/shared playhead | `[ ]` |
+| IT-001b-a | If a Satellite slot has no custom appearance/readability config, mirrored Satellite initially uses Notch defaults instead of requiring separate Satellite setup | `[ ]` |
+| IT-001c | `Cast with Satellite…` presents one per-Satellite launch panel before launch and launches each `Choose script…` Satellite with its explicitly assigned script | `[ ]` |
+| IT-001d | When one of two Satellite assignment slots is left empty, launch proceeds for valid targets only and shows lightweight feedback describing skipped Satellite count | `[ ]` |
 | IT-002 | Session end: calling `OverlayWindowController.endSession()` stops VoiceSyncEngine, releases AVAudioEngine, and closes all panels | `[ ]` |
 | IT-003 | Microphone released: after `endSession()`, AVAudioEngine is no longer running (isRunning == false) | `[ ]` |
 | IT-016 | Voice-Sync off session: launching an overlay with a saved non-zero `autoScrollWPM` starts manual auto-scroll in the presented prompter instead of leaving the script stationary | `[ ]` |
@@ -296,6 +301,10 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, top chrome uses `#484C49`, Light Paper preview stays cream, notch preview uses `#434343`, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |
 | MT-048 | The Notch readability controls update the live preview correctly: Overlay Font remains the only font picker, Accessibility alignment includes `Justified`, spacing controls visibly change line/letter/word density, text shadow improves contrast, and padding changes the inset inside the overlay | `[ ]` |
 | MT-049 | Preferences tabs read `Appearance`, `The Notch`, `Pills`, and `System`; pill setup lives only in `Pills`, and `System` sections appear in Before / During / Controls / Privacy order | `[ ]` |
+| MT-049a | Preferences tabs read `Appearance`, `The Notch`, `Satellite`, and `System`; Satellite tab contains `Satellite count` plus appearance/readability controls only and no content-mode or script-assignment controls | `[ ]` |
+| MT-049a-a | Leaving Satellite tab untouched still allows Satellite launch; unconfigured Satellite renders with Notch defaults until user customizes that slot | `[ ]` |
+| MT-049b | Script Editor shows split launch control `[ Cast to Notch ] [ chevron ]`, and primary `Cast to Notch` never launches Satellite unexpectedly | `[ ]` |
+| MT-049c | Chevron dropdown offers `Cast to Notch` and `Cast with Satellite…`, and launch panel shows per-Satellite `Mirror current script` / `Choose script…` controls | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
 | MT-016 | Pill Windows toggle matches the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
