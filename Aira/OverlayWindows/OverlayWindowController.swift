@@ -108,8 +108,12 @@ class OverlayWindowController {
     voiceSyncMode: VoiceSyncMode = .voice,
     pillModes: [PillContentMode] = []
   ) {
+    let launchTrace = SessionLaunchTrace(label: "presentSession")
+    launchTrace.mark("presentSession.begin")
     endSession()
+    launchTrace.mark("presentSession.afterEndSession")
     prepareSharedSession(script: script)
+    launchTrace.mark("presentSession.afterPrepareSharedSession")
     AiraLogger.shared.info(
       "Started session scriptId=\(script.id.uuidString) pills=\(pillModes.count)",
       category: "session")
@@ -131,6 +135,7 @@ class OverlayWindowController {
       scrollCoordinator: scrollCoordinator,
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync, audioMonitor: audioMonitor,
+      launchTrace: launchTrace,
       canUndock: pillModes.isEmpty,
       onEndSession: { [weak self] in
         self?.endSession()

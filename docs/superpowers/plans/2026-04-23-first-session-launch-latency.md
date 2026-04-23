@@ -37,7 +37,7 @@
 Add these rows directly after `T-048c` in `docs/todo.md`:
 
 ```markdown
-- [ ] **T-048c.1** First-session launch instrumentation: add low-overhead timing marks around manager transition, overlay controller launch, notch panel creation, first prompter layout, and voice engine startup. — T-048c
+- [x] **T-048c.1** First-session launch instrumentation: add low-overhead timing marks around manager transition, overlay controller launch, notch panel creation, first prompter layout, and voice engine startup. — T-048c
 - [ ] **T-048c.2** Session presentation sequencing: keep the manager visible until the primary notch overlay has been ordered front, then hide the manager and switch to session presentation mode. — T-048c
 - [ ] **T-048c.3** Voice startup deferral: when countdown is zero, let the overlay render first and start `AVAudioEngine` / `SFSpeechRecognizer` on the next main-actor turn instead of inside the first `onAppear` pass. — T-048c
 - [ ] **T-048c.4** Layout cold-path mitigation: use launch trace data to decide whether to prewarm or reuse the existing `OverlayTextStyle.layoutSnapshot` cache before session launch. — T-048c
@@ -49,7 +49,7 @@ Add these rows directly after `T-048c` in `docs/todo.md`:
 Add these rows near the existing integration launch tests in `docs/tests.md`:
 
 ```markdown
-| UT-001a-d | Session launch tracing records monotonic marks for manager preparation, overlay ordering, and deferred voice startup without depending on AppKit windows | `[ ]` |
+| UT-001a-d | Session launch tracing records monotonic marks for manager preparation, overlay ordering, and deferred voice startup without depending on AppKit windows | `[x]` |
 | UT-001a-e | Zero-countdown sessions schedule Voice-Sync startup after the first overlay render turn instead of starting audio/speech synchronously during first `onAppear` | `[ ]` |
 | IT-001a-b | Presenter launch keeps the manager visible until the primary notch overlay has been ordered front, then transitions to session presentation mode | `[ ]` |
 ```
@@ -87,7 +87,7 @@ git commit -m "docs: break down first session launch latency work"
 - Modify: `docs/todo.md`
 - Modify: `docs/tests.md`
 
-- [ ] **Step 1: Write failing trace tests**
+- [x] **Step 1: Write failing trace tests**
 
 Create `AiraTests/SessionLaunchTraceTests.swift`:
 
@@ -120,7 +120,7 @@ struct SessionLaunchTraceTests {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -130,7 +130,7 @@ xcodebuild test -scheme Aira -destination 'platform=macOS' -only-testing:AiraTes
 
 Expected: FAIL because `SessionLaunchTrace` does not exist.
 
-- [ ] **Step 3: Add trace implementation**
+- [x] **Step 3: Add trace implementation**
 
 Create `Aira/OverlayWindows/SessionLaunchTrace.swift`:
 
@@ -172,7 +172,7 @@ final class SessionLaunchTrace {
 }
 ```
 
-- [ ] **Step 4: Thread trace through launch path**
+- [x] **Step 4: Thread trace through launch path**
 
 In `OverlayWindowController.presentSession(...)`, create a trace at the top and pass it into `NotchWindowController.present`:
 
@@ -219,7 +219,7 @@ launchTrace?.mark("prompter.afterFirstLayout")
 
 This requires adding `let launchTrace: SessionLaunchTrace?` to `PrompterContentView`, `NotchContentView`, and `PillContentView` initializers only where the trace is needed. For pills, pass `nil` unless tracing Satellite launch is explicitly needed.
 
-- [ ] **Step 5: Mark voice startup**
+- [x] **Step 5: Mark voice startup**
 
 In `VoiceSyncEngine.start()`:
 
@@ -236,7 +236,7 @@ try engine.start()
 AiraLogger.shared.info("voiceSync.engineStarted", category: "voice")
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 Run:
 
@@ -246,7 +246,7 @@ xcodebuild test -scheme Aira -destination 'platform=macOS' -only-testing:AiraTes
 
 Expected: PASS.
 
-- [ ] **Step 7: Update docs and commit**
+- [x] **Step 7: Update docs and commit**
 
 Mark `UT-001a-d` as `[x]` and `T-048c.1` as `[x]` after the test passes.
 

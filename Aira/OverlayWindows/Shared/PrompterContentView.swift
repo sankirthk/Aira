@@ -27,6 +27,7 @@ struct PrompterContentView: View {
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
+  let launchTrace: SessionLaunchTrace?
 
   @State private var sessionStarted: Bool = false
   @State private var isPointerInsideOverlay: Bool = false
@@ -65,7 +66,8 @@ struct PrompterContentView: View {
     textExitFadeHeight: CGFloat = 0,
     voiceSyncMode: VoiceSyncMode = .voice,
     voiceSync: VoiceSyncEngine,
-    audioMonitor: AudioLevelMonitor
+    audioMonitor: AudioLevelMonitor,
+    launchTrace: SessionLaunchTrace? = nil
   ) {
     self.script = script
     self.appearance = appearance
@@ -90,6 +92,7 @@ struct PrompterContentView: View {
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.launchTrace = launchTrace
   }
 
   private var ownsSynchronizedScroll: Bool {
@@ -286,6 +289,7 @@ struct PrompterContentView: View {
         }
       }
       .onAppear {
+        launchTrace?.mark("prompter.onAppear")
         if shouldRestoreRunningSession {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
@@ -301,6 +305,7 @@ struct PrompterContentView: View {
           displayedScrollOffset = fallbackDisplayedScrollOffset()
         }
         refreshRenderedLayout(width: viewportWidth)
+        launchTrace?.mark("prompter.afterFirstLayout")
         updatePrimaryMetrics()
         updateVisibleWordTrackingWindow()
 

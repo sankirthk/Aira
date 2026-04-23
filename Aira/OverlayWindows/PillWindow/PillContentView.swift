@@ -192,7 +192,8 @@ struct PillContentView: View {
         manualAutoScrollEnabled: mode == .voiceSync,
         voiceSyncMode: voiceSyncMode,
         voiceSync: voiceSync,
-        audioMonitor: audioMonitor
+        audioMonitor: audioMonitor,
+        launchTrace: nil
       )
       .clipShape(RoundedRectangle(cornerRadius: 16))
 
