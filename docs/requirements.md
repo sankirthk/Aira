@@ -339,7 +339,7 @@ Acceptance criteria:
 - Auto-save on dismiss: when the user navigates away from the editor without explicitly saving, the app saves automatically if the draft has meaningful content (as defined above). No dirty indicator is shown — auto-save makes it unnecessary.
 - The editor toolbar exposes a split-button launch control: primary `Cast to Notch` plus adjacent dropdown.
 - Pressing the primary `Cast to Notch` action is deterministic and never launches Satellite windows.
-- `Cast to Notch` does not start a presenter session when the resolved script body has zero non-whitespace characters; the app keeps the manager visible and shows a lightweight error message.
+- `Cast to Notch` does not start a presenter session when the resolved script body has zero non-whitespace characters; the app keeps the manager visible and shows a lightweight Aira-branded popup message instead of a native macOS alert.
 - Opening the dropdown exposes `Cast to Notch` and `Cast with Satellite…`.
 - Choosing `Cast with Satellite…` opens a launch panel listing each enabled Satellite and its content assignment controls.
 - The editor launch flow owns session intent: what launches, and which script appears in each Satellite.

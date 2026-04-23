@@ -36,8 +36,6 @@ struct ManagerWindowView: View {
           importErrorMessage: importErrorMessage,
           dismissErrorBinding: dismissErrorBinding,
           dismissErrorMessage: dismissErrorMessage,
-          overlayErrorBinding: overlayErrorBinding,
-          overlayErrorMessage: overlayErrorMessage,
           sessionRestrictionBinding: sessionRestrictionBinding,
           sessionRestrictionMessage: sessionRestrictionMessage,
           collectionErrorBinding: collectionErrorBinding,
@@ -47,6 +45,17 @@ struct ManagerWindowView: View {
       .overlay {
         if let pendingDeleteCollection {
           deleteCollectionOverlay(collection: pendingDeleteCollection)
+        }
+      }
+      .overlay {
+        if let overlayErrorMessage {
+          AiraMessagePopup(
+            content: .launchOverlayError(message: overlayErrorMessage),
+            onDismiss: {
+              self.overlayErrorMessage = nil
+            }
+          )
+          .transition(.opacity.combined(with: .scale(scale: 0.98)))
         }
       }
       .onAppear {
@@ -382,17 +391,6 @@ struct ManagerWindowView: View {
     )
   }
 
-  private var overlayErrorBinding: Binding<Bool> {
-    Binding(
-      get: { overlayErrorMessage != nil },
-      set: { isPresented in
-        if !isPresented {
-          overlayErrorMessage = nil
-        }
-      }
-    )
-  }
-
   private var sessionRestrictionBinding: Binding<Bool> {
     Binding(
       get: { sessionRestrictionMessage != nil },
@@ -689,8 +687,6 @@ private struct ManagerWindowAlerts: ViewModifier {
   let importErrorMessage: String?
   let dismissErrorBinding: Binding<Bool>
   let dismissErrorMessage: String?
-  let overlayErrorBinding: Binding<Bool>
-  let overlayErrorMessage: String?
   let sessionRestrictionBinding: Binding<Bool>
   let sessionRestrictionMessage: String?
   let collectionErrorBinding: Binding<Bool>
@@ -712,11 +708,6 @@ private struct ManagerWindowAlerts: ViewModifier {
         Button("OK", role: .cancel) {}
       } message: {
         Text(dismissErrorMessage ?? "Please try again.")
-      }
-      .alert("Unable to Launch Overlay", isPresented: overlayErrorBinding) {
-        Button("OK", role: .cancel) {}
-      } message: {
-        Text(overlayErrorMessage ?? "Please try again.")
       }
       .alert("Action Unavailable During Live Session", isPresented: sessionRestrictionBinding) {
         Button("OK", role: .cancel) {}

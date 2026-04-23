@@ -515,7 +515,24 @@ Shown from the Script Editor when the user opens the launch dropdown and selects
 
 ---
 
-### Screen 8: Overlay Appearance Popover
+### Screen 8: Aira Message Popup
+
+A compact in-window popup for manager-level messages that should match Aira's custom visual language instead of using native macOS alert chrome.
+
+**Empty script launch error:**
+- Triggered when `Cast to Notch` is pressed with a script body containing zero non-whitespace characters.
+- The manager window remains visible; no presenter session starts.
+- Popup content:
+  - eyebrow: `Cast paused`
+  - title: `Add script text first`
+  - body: `Write or paste a few words before casting to the notch.`
+  - primary action: `OK`
+- Visual style matches the custom update prompt: cream card, sage border, Indie Flower title, Crimson body copy, and Aira-styled primary action.
+- Dismissal clears the launch error message.
+
+---
+
+### Screen 9: Overlay Appearance Popover
 
 A per-window appearance override panel. Accessed from overlay-local controls when appearance actions are exposed.
 
@@ -536,7 +553,7 @@ Changes apply live as the user adjusts controls — no confirm step required.
 
 ---
 
-### Screen 9: Update Prompt
+### Screen 10: Update Prompt
 
 A compact Aira-branded update popup shown when Sparkle finds a newer version or finishes downloading one.
 
@@ -706,7 +723,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-027 No Account Required | No sign-in screen, no profile UI |
 | REQ-028 Free Distribution | No paywall UI, no subscription prompts |
 | REQ-029 Signed And Notarized | No UI impact — build/distribution concern |
-| REQ-030 Distribution Channels | Direct build uses Screen 9 Update Prompt plus GitHub Releases / Sparkle surfaces; Mac App Store build omits in-app updater surfaces |
+| REQ-030 Distribution Channels | Direct build uses Screen 10 Update Prompt plus GitHub Releases / Sparkle surfaces; Mac App Store build omits in-app updater surfaces |
 | REQ-031 Closed-Source Policy | No UI impact — repository concern |
 | REQ-032 Live Answer Mode | Experimental — opt-in toggle in Settings (labeled "Experimental"), disabled by default |
 | REQ-033 Experimental Transparency | Plain-language disclosure modal shown before first activation of Live Answer Mode |
@@ -714,7 +731,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-035 Script Import | ImportDropZone in Document Library; "Import Script" button in header bar |
 | REQ-036 Script Duplication | Duplicate button on ScriptCard; right-click context menu |
 | REQ-037 Collections | CollectionRow in sidebar; CollectionTag on script cards; Add to Collection popover |
-| REQ-038 Per-Window Overlay Appearance | Screen 8 OverlayAppearancePopover; Settings > Overlays for global defaults |
+| REQ-038 Per-Window Overlay Appearance | Screen 9 OverlayAppearancePopover; Settings > Overlays for global defaults |
 | REQ-039 Keyboard Voice-Sync Toggle | Settings > System > Pause/Resume Voice-Sync shortcut row (default ⌘⇧Space) |
 | REQ-040 Scroll Progress Indicator | Deferred — no UI in v1 |
 | REQ-041 Session Elapsed Timer | Deferred — no UI in v1 |
