@@ -1465,10 +1465,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       localScrollMonitor != nil,
       globalScrollMonitor != nil
     {
-      AiraLogger.shared.info(
-        "wheel panel refreshMonitoring skipped dedupe=\(newConfiguration.usesEventDeduplication) strictRouting=\(newConfiguration.usesStrictActiveAppWheelSourceRouting) hasHandler=\(newConfiguration.hasHandler)",
-        category: "overlay-wheel"
-      )
       return
     }
 
