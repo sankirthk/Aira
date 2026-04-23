@@ -603,6 +603,11 @@ struct ManagerWindowView: View {
   }
 
   private func startOverlaySession(with script: Script) {
+    guard ScriptEditorSessionLogic.canStartPresenterSession(withBody: script.body) else {
+      overlayErrorMessage = "Add script text before casting to the notch."
+      return
+    }
+
     // Hide the manager window and remove from Dock/⌘+Tab before presenting overlays.
     // Doing this first ensures panels are ordered-front while the app is already in
     // accessory mode — switching policy AFTER panels appear can cause macOS to hide them.
@@ -670,6 +675,10 @@ struct ScriptEditorSessionLogic {
   static func shouldPersistDraft(_ script: Script) -> Bool {
     let trimmedBody = script.body.trimmingCharacters(in: .whitespacesAndNewlines)
     return !trimmedBody.isEmpty || script.title != "Untitled Script"
+  }
+
+  static func canStartPresenterSession(withBody body: String) -> Bool {
+    !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 }
 

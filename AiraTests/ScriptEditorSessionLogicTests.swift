@@ -13,6 +13,12 @@ struct ScriptEditorSessionLogicTests {
       ])
   }
 
+  @Test func emptyOrWhitespaceScriptCannotStartPresenterSession() {
+    #expect(!ScriptEditorSessionLogic.canStartPresenterSession(withBody: ""))
+    #expect(!ScriptEditorSessionLogic.canStartPresenterSession(withBody: " \n\t "))
+    #expect(ScriptEditorSessionLogic.canStartPresenterSession(withBody: "Opening line"))
+  }
+
   @Test func emptyUntitledDraftIsDiscardedOnDismiss() {
     let draft = Script(
       id: UUID(),
