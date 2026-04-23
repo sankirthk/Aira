@@ -193,6 +193,9 @@ Repository automation is tracked here when it materially gates shipping quality.
 | IT-001a-a | `Cast to Notch` rejects scripts whose body has zero non-whitespace characters and leaves the manager visible instead of starting a presenter session | `[x]` |
 | UT-001a-b | Empty-script launch errors use Aira-branded message popup copy instead of generic macOS alert content | `[x]` |
 | UT-001a-c | Pill/Satellite launch planning skips any mirror or manual script whose resolved body has zero non-whitespace characters | `[x]` |
+| UT-001a-d | Session launch tracing records monotonic marks for manager preparation, overlay ordering, and deferred voice startup without depending on AppKit windows | `[ ]` |
+| UT-001a-e | Zero-countdown sessions schedule Voice-Sync startup after the first overlay render turn instead of starting audio/speech synchronously during first `onAppear` | `[ ]` |
+| IT-001a-b | Presenter launch keeps the manager visible until the primary notch overlay has been ordered front, then transitions to session presentation mode | `[ ]` |
 | IT-001b | Chevron dropdown `Cast with Satellite…` opens one panel for enabled Satellites, and Satellites set to `Mirror current script` launch against current editor script/shared playhead | `[ ]` |
 | IT-001b-a | If a Satellite slot has no custom appearance/readability config, mirrored Satellite initially uses Notch defaults instead of requiring separate Satellite setup | `[ ]` |
 | IT-001c | `Cast with Satellite…` presents one per-Satellite launch panel before launch and launches each `Choose script…` Satellite with its explicitly assigned script | `[ ]` |
