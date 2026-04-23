@@ -72,6 +72,7 @@ class VoiceSyncEngine: ObservableObject {
 
   func start() {
     guard state == .idle else { return }
+    AiraLogger.shared.info("voiceSync.start requested", category: "voice")
     recognitionEnabled = true
     startWithRecognitionIfAuthorized()
   }
@@ -198,6 +199,7 @@ class VoiceSyncEngine: ObservableObject {
   // MARK: - Engine
 
   private func startEngine() {
+    AiraLogger.shared.info("voiceSync.startEngine begin", category: "voice")
     let engine = AVAudioEngine()
     audioEngine = engine
 
@@ -264,6 +266,7 @@ class VoiceSyncEngine: ObservableObject {
 
     do {
       try engine.start()
+      AiraLogger.shared.info("voiceSync.engineStarted", category: "voice")
       state = .running
       if recognitionEnabled {
         scheduleSilenceDeadline()

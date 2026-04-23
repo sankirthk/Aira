@@ -133,6 +133,7 @@ struct NotchContentView: View {
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
+  let launchTrace: SessionLaunchTrace?
   let onDockToggle: () -> Void
   let onFullscreenToggle: () -> Void
   let onPauseToggle: () -> Void
@@ -158,6 +159,7 @@ struct NotchContentView: View {
     isFullScreen: Bool = false,
     notchSize: CGSize, voiceSyncMode: VoiceSyncMode = .voice, voiceSync: VoiceSyncEngine,
     audioMonitor: AudioLevelMonitor,
+    launchTrace: SessionLaunchTrace? = nil,
     defaultAppearance: OverlayAppearance? = nil,
     onDockToggle: @escaping () -> Void = {},
     onFullscreenToggle: @escaping () -> Void = {},
@@ -187,6 +189,7 @@ struct NotchContentView: View {
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.launchTrace = launchTrace
     self.onDockToggle = onDockToggle
     self.onFullscreenToggle = onFullscreenToggle
     self.onPauseToggle = onPauseToggle
@@ -245,7 +248,8 @@ struct NotchContentView: View {
             : 0,
           voiceSyncMode: voiceSyncMode,
           voiceSync: voiceSync,
-          audioMonitor: audioMonitor
+          audioMonitor: audioMonitor,
+          launchTrace: launchTrace
         )
         .clipShape(
           isDocked

@@ -27,6 +27,7 @@ struct PrompterContentView: View {
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
+  let launchTrace: SessionLaunchTrace?
 
   @State private var sessionStarted: Bool = false
   @State private var isPointerInsideOverlay: Bool = false
@@ -38,6 +39,7 @@ struct PrompterContentView: View {
   @State private var visibleWordRange: Range<Int>?
   @State private var cinematicController = CinematicScrollController()
   @State private var manualScrollDriver = ManualScrollDriver()
+  @State private var deferredVoiceStartupTask: Task<Void, Never>?
 
   private let embeddedAudioIndicatorLaneHeight: CGFloat = 44
   private let embeddedAudioIndicatorTopGap: CGFloat = 10
@@ -65,7 +67,8 @@ struct PrompterContentView: View {
     textExitFadeHeight: CGFloat = 0,
     voiceSyncMode: VoiceSyncMode = .voice,
     voiceSync: VoiceSyncEngine,
-    audioMonitor: AudioLevelMonitor
+    audioMonitor: AudioLevelMonitor,
+    launchTrace: SessionLaunchTrace? = nil
   ) {
     self.script = script
     self.appearance = appearance
@@ -90,6 +93,7 @@ struct PrompterContentView: View {
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.launchTrace = launchTrace
   }
 
   private var ownsSynchronizedScroll: Bool {
@@ -286,6 +290,7 @@ struct PrompterContentView: View {
         }
       }
       .onAppear {
+        launchTrace?.mark("prompter.onAppear")
         if shouldRestoreRunningSession {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
@@ -301,6 +306,7 @@ struct PrompterContentView: View {
           displayedScrollOffset = fallbackDisplayedScrollOffset()
         }
         refreshRenderedLayout(width: viewportWidth)
+        launchTrace?.mark("prompter.afterFirstLayout")
         updatePrimaryMetrics()
         updateVisibleWordTrackingWindow()
 
@@ -341,11 +347,19 @@ struct PrompterContentView: View {
         } else if countdownDuration == 0 {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
-          startVoiceSubsystemIfNeeded()
+          if PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(
+            countdownDuration: countdownDuration)
+          {
+            startVoiceSubsystemAfterFirstRenderTurnIfNeeded()
+          } else {
+            startVoiceSubsystemIfNeeded()
+          }
           startAutoScrollIfNeeded()
         }
       }
       .onDisappear {
+        deferredVoiceStartupTask?.cancel()
+        deferredVoiceStartupTask = nil
         cinematicController.stop()
         manualScrollDriver.stop()
         manualScrollDriver.onScrollTick = nil
@@ -584,6 +598,15 @@ struct PrompterContentView: View {
   private func startVoiceSubsystemIfNeeded() {
     if voiceSyncEnabled || spokenWordHighlightingEnabled {
       voiceSync.start()
+    }
+  }
+
+  private func startVoiceSubsystemAfterFirstRenderTurnIfNeeded() {
+    deferredVoiceStartupTask?.cancel()
+    deferredVoiceStartupTask = Task { @MainActor in
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+      startVoiceSubsystemIfNeeded()
     }
   }
 
@@ -984,6 +1007,12 @@ enum PrompterSessionRestorePolicy {
     voiceSyncState: VoiceSyncEngine.EngineState
   ) -> Bool {
     sharedSessionStarted || voiceSyncState != .idle
+  }
+}
+
+enum PrompterVoiceStartupPolicy {
+  static func shouldDeferVoiceStartup(countdownDuration: Int) -> Bool {
+    countdownDuration == 0
   }
 }
 
@@ -1436,10 +1465,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       localScrollMonitor != nil,
       globalScrollMonitor != nil
     {
-      AiraLogger.shared.info(
-        "wheel panel refreshMonitoring skipped dedupe=\(newConfiguration.usesEventDeduplication) strictRouting=\(newConfiguration.usesStrictActiveAppWheelSourceRouting) hasHandler=\(newConfiguration.hasHandler)",
-        category: "overlay-wheel"
-      )
       return
     }
 
