@@ -567,7 +567,12 @@ struct ManagerWindowView: View {
 
     do {
       let script = try defaultShortcutScript()
-      overlayController.addPill(
+      guard PillLaunchPolicy.canLaunchPill(with: script) else {
+        overlayErrorMessage = "Add script text before casting to Satellite."
+        return
+      }
+
+      let launched = overlayController.addPill(
         mode: .voiceSync,
         script: script,
         appearance: appState.settings.defaultOverlayAppearance,
@@ -576,7 +581,9 @@ struct ManagerWindowView: View {
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
         voiceSyncMode: appState.settings.voiceSyncMode
       )
-      miniaturizeManagerWindow()
+      if launched {
+        miniaturizeManagerWindow()
+      }
     } catch {
       AiraLogger.shared.error(error, category: "session", context: "Failed to toggle pill shortcut")
       overlayErrorMessage = error.localizedDescription

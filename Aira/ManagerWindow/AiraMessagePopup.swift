@@ -13,9 +13,19 @@ struct AiraMessagePopupContent: Equatable, Sendable {
     primaryActionTitle: "OK"
   )
 
+  static let emptySatelliteLaunchError = AiraMessagePopupContent(
+    eyebrow: "Satellite paused",
+    title: "Add script text first",
+    message: "Choose a Satellite script with at least a few words before launching.",
+    primaryActionTitle: "OK"
+  )
+
   static func launchOverlayError(message: String) -> AiraMessagePopupContent {
     if message == "Add script text before casting to the notch." {
       return emptyScriptLaunchError
+    }
+    if message == "Add script text before casting to Satellite." {
+      return emptySatelliteLaunchError
     }
 
     return AiraMessagePopupContent(

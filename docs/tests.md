@@ -192,6 +192,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | IT-001a | `Cast to Notch` launches notch only and does not create any Satellite windows even when Preferences `Satellite count` is 1 or 2 | `[ ]` |
 | IT-001a-a | `Cast to Notch` rejects scripts whose body has zero non-whitespace characters and leaves the manager visible instead of starting a presenter session | `[x]` |
 | UT-001a-b | Empty-script launch errors use Aira-branded message popup copy instead of generic macOS alert content | `[x]` |
+| UT-001a-c | Pill/Satellite launch planning skips any mirror or manual script whose resolved body has zero non-whitespace characters | `[x]` |
 | IT-001b | Chevron dropdown `Cast with Satellite…` opens one panel for enabled Satellites, and Satellites set to `Mirror current script` launch against current editor script/shared playhead | `[ ]` |
 | IT-001b-a | If a Satellite slot has no custom appearance/readability config, mirrored Satellite initially uses Notch defaults instead of requiring separate Satellite setup | `[ ]` |
 | IT-001c | `Cast with Satellite…` presents one per-Satellite launch panel before launch and launches each `Choose script…` Satellite with its explicitly assigned script | `[ ]` |
@@ -307,6 +308,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049a-a | Leaving Satellite tab untouched still allows Satellite launch; unconfigured Satellite renders with Notch defaults until user customizes that slot | `[ ]` |
 | MT-049b | Script Editor shows one connected split launch control `[ Cast to Notch ] [ chevron ]` using app-styled chrome rather than native macOS menu UI, without a duplicate label-side chevron, and primary `Cast to Notch` never launches Satellite unexpectedly | `[x]` |
 | MT-049c | Chevron dropdown offers `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)` with restored compact toolbar button height, app-styled dropdown chrome, and outside-click dismissal | `[x]` |
+| MT-049d | Cold launch the app, immediately cast a non-empty script to Notch, and confirm the manager remains responsive with no macOS beachball while the first presenter window appears within the accepted latency budget; repeat with Voice-Sync on and off to isolate speech startup cost | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
 | MT-016 | Pill Windows toggle matches the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |

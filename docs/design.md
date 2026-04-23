@@ -464,6 +464,7 @@ A free-moving overlay window launched explicitly from the Script Editor. A Satel
 - **Mirror current script**: identical to Notch Window session content — same script, same scroll position, same pause state, same VisualBeam. Multiple mirrored Satellites all track the same content progress.
 - If no per-Satellite appearance/readability override exists yet, a mirrored Satellite initially renders with the same appearance/readability defaults as the Notch.
 - **Explicit script assignment**: assigned script text + cue annotations + a VisualBeam (still reflects microphone level for awareness, but does not drive scroll). Scroll is driven by user input only.
+- A Satellite never opens with an empty or whitespace-only resolved script. Empty assigned Satellites are skipped, and a standalone Satellite/Pill shortcut attempt shows an Aira-branded popup instead of opening an empty window.
 - Mouse wheel / trackpad scrolling on an explicitly assigned Satellite remains available whenever the pointer is over the Satellite.
 - The global **Pause on mouse hover** setting does not apply to Satellite windows. Hovering a Satellite must never pause motion or block wheel / trackpad scrolling.
 
@@ -511,7 +512,7 @@ Shown from the Script Editor when the user opens the launch dropdown and selects
 - If one Satellite configured, one row shown.
 - If two Satellites configured, two independent sections shown.
 - One Satellite may mirror while the other uses an explicitly chosen script.
-- Unassigned `Choose script…` sections are skipped rather than silently mirrored; launch feedback explains skipped Satellites.
+- Unassigned or empty `Choose script…` sections are skipped rather than silently mirrored; launch feedback explains skipped Satellites.
 
 ---
 

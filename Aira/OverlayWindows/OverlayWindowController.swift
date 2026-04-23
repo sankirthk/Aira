@@ -2,6 +2,41 @@ import AppKit
 import Combine
 import Foundation
 
+struct PillLaunchPlan {
+  let mode: PillContentMode
+  let script: Script
+}
+
+enum PillLaunchPolicy {
+  static func canLaunchPill(with script: Script) -> Bool {
+    !script.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  static func resolvedLaunchPlans(
+    for modes: [PillContentMode],
+    fallbackScript: Script,
+    loadScript: (UUID) -> Script?
+  ) -> [PillLaunchPlan] {
+    modes.compactMap { mode in
+      let script = resolvedScript(for: mode, fallbackScript: fallbackScript, loadScript: loadScript)
+      guard canLaunchPill(with: script) else { return nil }
+      return PillLaunchPlan(mode: mode, script: script)
+    }
+  }
+
+  private static func resolvedScript(
+    for mode: PillContentMode,
+    fallbackScript: Script,
+    loadScript: (UUID) -> Script?
+  ) -> Script {
+    guard case .manual(let scriptID) = mode else {
+      return fallbackScript
+    }
+
+    return loadScript(scriptID) ?? fallbackScript
+  }
+}
+
 /// Entry point for creating and managing all overlay windows for a session.
 @MainActor
 class OverlayWindowController {
@@ -103,10 +138,17 @@ class OverlayWindowController {
     notchController = notch
 
     // Launch any pill windows
-    for mode in pillModes {
-      let pillScript = resolvedScript(for: mode, fallbackScript: script)
+    let pillLaunchPlans = PillLaunchPolicy.resolvedLaunchPlans(
+      for: pillModes,
+      fallbackScript: script,
+      loadScript: { [weak self] scriptID in
+        self?.loadScript(id: scriptID)
+      }
+    )
+
+    for plan in pillLaunchPlans {
       addPill(
-        mode: mode, script: pillScript, appearance: appearance,
+        mode: plan.mode, script: plan.script, appearance: appearance,
         countdownDuration: countdownDuration, voiceSyncEnabled: voiceSyncEnabled,
         spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
         pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
@@ -118,13 +160,22 @@ class OverlayWindowController {
     startSessionKeyboardMonitorsIfNeeded()
   }
 
+  @discardableResult
   func addPill(
     mode: PillContentMode, script: Script, appearance: OverlayAppearance,
     countdownDuration: Int, voiceSyncEnabled: Bool = true,
     spokenWordHighlightingEnabled: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0, voiceSyncMode: VoiceSyncMode = .voice
-  ) {
+  ) -> Bool {
+    guard PillLaunchPolicy.canLaunchPill(with: script) else {
+      AiraLogger.shared.info(
+        "Skipped pill launch for empty scriptId=\(script.id.uuidString)",
+        category: "overlay"
+      )
+      return false
+    }
+
     if !hasActiveOverlays {
       prepareSharedSession(script: script)
     }
@@ -162,6 +213,7 @@ class OverlayWindowController {
     appState?.stealthWarning = !stealthIsHonored
     syncPresenterSessionState()
     startSessionKeyboardMonitorsIfNeeded()
+    return true
   }
 
   func endSession() {
@@ -206,25 +258,6 @@ class OverlayWindowController {
     let notchStealth = notchController?.isStealthEnabled ?? true
     let pillStealth = pillControllers.allSatisfy(\.isStealthEnabled)
     return notchStealth && pillStealth
-  }
-
-  private func resolvedScript(for mode: PillContentMode, fallbackScript: Script) -> Script {
-    guard case .manual(let scriptID) = mode else {
-      return fallbackScript
-    }
-
-    guard let appState else {
-      return fallbackScript
-    }
-
-    do {
-      return try appState.readScript(id: scriptID)
-    } catch {
-      AiraLogger.shared.error(
-        error, category: "overlay",
-        context: "Failed to load manual pill script \(scriptID.uuidString)")
-      return fallbackScript
-    }
   }
 
   private func removePill(_ pill: PillWindowController) {
