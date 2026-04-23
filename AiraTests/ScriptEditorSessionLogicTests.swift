@@ -8,8 +8,8 @@ struct ScriptEditorSessionLogicTests {
   @Test func launchMenuItemsExposeSplitButtonChoicesInOrder() {
     #expect(
       ScriptEditorLaunchMenuAction.defaultItems.map(\.title) == [
-        "Cast to Notch",
-        "Cast with Satellite…",
+        "Cast with Satellite (Sync)",
+        "Cast with Satellite (Manual)",
       ])
   }
 

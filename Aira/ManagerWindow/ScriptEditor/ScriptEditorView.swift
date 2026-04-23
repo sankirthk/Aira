@@ -3,8 +3,8 @@ import SwiftUI
 
 struct ScriptEditorLaunchMenuAction: Identifiable, Equatable {
   enum Kind: Equatable {
-    case castToNotch
-    case castWithSatellite
+    case castWithSatelliteSync
+    case castWithSatelliteManual
   }
 
   let kind: Kind
@@ -13,8 +13,8 @@ struct ScriptEditorLaunchMenuAction: Identifiable, Equatable {
   var id: String { title }
 
   static let defaultItems: [ScriptEditorLaunchMenuAction] = [
-    .init(kind: .castToNotch, title: "Cast to Notch"),
-    .init(kind: .castWithSatellite, title: "Cast with Satellite…"),
+    .init(kind: .castWithSatelliteSync, title: "Cast with Satellite (Sync)"),
+    .init(kind: .castWithSatelliteManual, title: "Cast with Satellite (Manual)"),
   ]
 }
 
@@ -23,6 +23,7 @@ struct ScriptEditorView: View {
   @Binding var script: Script
   @State private var saveErrorMessage: String?
   @State private var selectedRange = NSRange(location: 0, length: 0)
+  @State private var isLaunchMenuPresented = false
   let managerFontScale: CGFloat
   let isReadOnly: Bool
   var onCast: () -> Void
@@ -43,130 +44,133 @@ struct ScriptEditorView: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
+    ZStack(alignment: .topTrailing) {
+      VStack(spacing: 0) {
 
-      HStack(spacing: 12) {
-        Button {
-          onBack()
-        } label: {
-          AiraIcon(type: .back, size: 20, color: Color("colorBackground"), animated: false)
-            .padding(8)
-            .background(Color.white.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-
-        TextField("Script title", text: $script.title)
-          .font(.custom("Manrope-Bold", size: scaled(20)))
-          .textFieldStyle(.plain)
-          .foregroundStyle(Color("colorBackground"))
-          .tint(Color("colorSecondary"))
-          .disabled(isReadOnly)
-
-        Spacer()
-
-        Text(estimatedDuration)
-          .font(.custom("Inter-Regular", size: scaled(13)))
-          .foregroundStyle(Color("colorBackground").opacity(0.72))
-
-        if isReadOnly {
-          Text("Live script · read only")
-            .font(.custom("CrimsonText-Regular", size: scaled(13)))
-            .foregroundStyle(Color("colorBackground"))
-        }
-
-        Button {
-          saveScript()
-        } label: {
-          HStack(spacing: 8) {
-            AiraIcon(type: .save, size: 18, color: Color("colorText"), animated: false)
-            Text("Save")
-          }
-        }
-        .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .tertiary))
-        .disabled(isReadOnly)
-        .opacity(isReadOnly ? 0.55 : 1)
-
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
           Button {
-            onCast()
+            onBack()
+          } label: {
+            AiraIcon(type: .back, size: 20, color: Color("colorBackground"), animated: false)
+              .padding(8)
+              .background(Color.white.opacity(0.12))
+              .clipShape(RoundedRectangle(cornerRadius: 8))
+          }
+          .buttonStyle(.plain)
+
+          TextField("Script title", text: $script.title)
+            .font(.custom("Manrope-Bold", size: scaled(20)))
+            .textFieldStyle(.plain)
+            .foregroundStyle(Color("colorBackground"))
+            .tint(Color("colorSecondary"))
+            .disabled(isReadOnly)
+
+          Spacer()
+
+          Text(estimatedDuration)
+            .font(.custom("Inter-Regular", size: scaled(13)))
+            .foregroundStyle(Color("colorBackground").opacity(0.72))
+
+          if isReadOnly {
+            Text("Live script · read only")
+              .font(.custom("CrimsonText-Regular", size: scaled(13)))
+              .foregroundStyle(Color("colorBackground"))
+          }
+
+          Button {
+            saveScript()
           } label: {
             HStack(spacing: 8) {
-              AiraIcon(type: .notch, size: 18, color: .white, animated: false)
-              Text("Cast to Notch")
+              AiraIcon(type: .save, size: 18, color: Color("colorText"), animated: false)
+              Text("Save")
             }
           }
-          .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .secondary))
+          .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .tertiary))
+          .disabled(isReadOnly)
+          .opacity(isReadOnly ? 0.55 : 1)
 
-          Menu {
-            ForEach(ScriptEditorLaunchMenuAction.defaultItems) { action in
-              Button(action.title) {
-                handleLaunchMenuAction(action.kind)
-              }
+          ScriptEditorLaunchSplitButton(
+            isMenuPresented: $isLaunchMenuPresented,
+            onPrimaryPress: {
+              isLaunchMenuPresented = false
+              onCast()
             }
-          } label: {
-            Image(systemName: "chevron.down")
-              .font(.system(size: 12, weight: .semibold))
-              .frame(width: 18, height: 18)
-          }
-          .menuStyle(.borderlessButton)
-          .fixedSize()
+          )
+          .disabled(isReadOnly)
+          .opacity(isReadOnly ? 0.55 : 1)
         }
-        .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .secondary))
-        .disabled(isReadOnly)
-        .opacity(isReadOnly ? 0.55 : 1)
-      }
-      .padding(16)
-      .background(Color("colorPrimary"))
+        .padding(16)
+        .background(Color("colorPrimary"))
 
-      HStack(alignment: .top, spacing: 24) {
-        ScriptEditorPanel(backgroundColor: Color("colorBackground")) {
-          VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-              RoundedRectangle(cornerRadius: 10)
-                .fill(Color("colorBackground"))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color("colorText").opacity(0.2), lineWidth: 2)
+        HStack(alignment: .top, spacing: 24) {
+          ScriptEditorPanel(backgroundColor: Color("colorBackground")) {
+            VStack(alignment: .leading, spacing: 0) {
+              ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 10)
+                  .fill(Color("colorBackground"))
+                  .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                      .stroke(Color("colorText").opacity(0.2), lineWidth: 2)
+                  )
+
+                ScriptTextEditor(
+                  text: $script.body,
+                  selectedRange: $selectedRange,
+                  isEditable: !isReadOnly
                 )
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-              ScriptTextEditor(
-                text: $script.body,
-                selectedRange: $selectedRange,
-                isEditable: !isReadOnly
-              )
-              .padding(14)
+                if script.body.isEmpty {
+                  Text("Start typing your script here...")
+                    .font(.custom("CrimsonText-Regular", size: scaled(18)))
+                    .foregroundStyle(Color("colorText").opacity(0.4))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 20)
+                    .allowsHitTesting(false)
+                }
+              }
               .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-              if script.body.isEmpty {
-                Text("Start typing your script here...")
-                  .font(.custom("CrimsonText-Regular", size: scaled(18)))
-                  .foregroundStyle(Color("colorText").opacity(0.4))
-                  .padding(.horizontal, 20)
-                  .padding(.vertical, 20)
-                  .allowsHitTesting(false)
+              HStack {
+                Text("\(wordCount) words")
+                Spacer()
+                Text("\(script.body.count) characters")
               }
+              .font(.custom("CrimsonText-Regular", size: scaled(15)))
+              .foregroundStyle(Color("colorMuted"))
+              .padding(.top, 16)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            HStack {
-              Text("\(wordCount) words")
-              Spacer()
-              Text("\(script.body.count) characters")
-            }
-            .font(.custom("CrimsonText-Regular", size: scaled(15)))
-            .foregroundStyle(Color("colorMuted"))
-            .padding(.top, 16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        CuePanelView(isReadOnly: isReadOnly, onInsertCue: insertCue)
-          .frame(width: 320)
+          CuePanelView(isReadOnly: isReadOnly, onInsertCue: insertCue)
+            .frame(width: 320)
+        }
+        .background(Color("colorBackground"))
+        .padding(24)
       }
-      .background(Color("colorBackground"))
-      .padding(24)
+
+      if isLaunchMenuPresented {
+        Color.clear
+          .contentShape(Rectangle())
+          .ignoresSafeArea()
+          .onTapGesture {
+            isLaunchMenuPresented = false
+          }
+
+        ScriptEditorLaunchMenuPanel(
+          actions: ScriptEditorLaunchMenuAction.defaultItems,
+          onActionSelected: { action in
+            isLaunchMenuPresented = false
+            handleLaunchMenuAction(action.kind)
+          }
+        )
+        .padding(.top, 58)
+        .padding(.trailing, 16)
+      }
     }
     .alert("Unable to Save Script", isPresented: saveErrorIsPresented) {
       Button("OK", role: .cancel) {
@@ -219,11 +223,119 @@ struct ScriptEditorView: View {
 
   private func handleLaunchMenuAction(_ action: ScriptEditorLaunchMenuAction.Kind) {
     switch action {
-    case .castToNotch:
-      onCast()
-    case .castWithSatellite:
+    case .castWithSatelliteSync, .castWithSatelliteManual:
       onCastWithSatellite()
     }
+  }
+}
+
+private struct ScriptEditorLaunchSplitButton: View {
+  @Binding var isMenuPresented: Bool
+  let onPrimaryPress: () -> Void
+  @Environment(\.managerFontScale) private var managerFontScale
+
+  private var cornerRadius: CGFloat { 7 }
+  private var controlHeight: CGFloat { 44 }
+  private var dividerHeight: CGFloat { 24 }
+
+  var body: some View {
+    ZStack(alignment: .topTrailing) {
+      HStack(spacing: 0) {
+        Button {
+          onPrimaryPress()
+        } label: {
+          HStack(spacing: 8) {
+            AiraIcon(type: .notch, size: 18, color: .white, animated: false)
+            Text("Cast to Notch")
+          }
+          .padding(.leading, 16)
+          .padding(.trailing, 14)
+          .frame(height: controlHeight)
+        }
+        .buttonStyle(.plain)
+        .contentShape(.rect)
+
+        Rectangle()
+          .fill(Color.white.opacity(0.28))
+          .frame(width: 1, height: dividerHeight)
+
+        Button {
+          isMenuPresented.toggle()
+        } label: {
+          Image(systemName: "chevron.down")
+            .font(.system(size: 10, weight: .semibold))
+            .frame(width: 30, height: controlHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+      }
+      .frame(height: controlHeight)
+      .font(.custom("IndieFlower", size: 15 * managerFontScale))
+      .foregroundStyle(.white)
+      .background(
+        RoundedRectangle(cornerRadius: cornerRadius)
+          .fill(Color("colorSecondary"))
+      )
+      .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+      .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+      .overlay(splitButtonBorder)
+    }
+    .frame(height: controlHeight)
+  }
+
+  private var splitButtonBorder: some View {
+    RoundedRectangle(cornerRadius: cornerRadius)
+      .inset(by: 2)
+      .stroke(
+        Color.white.opacity(0.8),
+        style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+      )
+  }
+}
+
+private struct ScriptEditorLaunchMenuPanel: View {
+  let actions: [ScriptEditorLaunchMenuAction]
+  let onActionSelected: (ScriptEditorLaunchMenuAction) -> Void
+  @Environment(\.managerFontScale) private var managerFontScale
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      ForEach(actions) { action in
+        Button {
+          onActionSelected(action)
+        } label: {
+          HStack(spacing: 10) {
+            Text(action.title)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+          .padding(.horizontal, 12)
+          .padding(.vertical, 9)
+          .contentShape(RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .font(.custom("CrimsonText-Regular", size: 15 * managerFontScale))
+        .foregroundStyle(Color("colorText"))
+        .background(
+          RoundedRectangle(cornerRadius: 10)
+            .fill(Color("colorBackground"))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 10)
+            .stroke(Color("colorText").opacity(0.12), lineWidth: 1)
+        )
+      }
+    }
+    .padding(8)
+    .frame(width: 218)
+    .background(
+      RoundedRectangle(cornerRadius: 14)
+        .fill(Color("colorSurface"))
+        .overlay(
+          RoundedRectangle(cornerRadius: 14)
+            .stroke(Color("colorText"), lineWidth: 2)
+        )
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 6)
+    )
   }
 }
 
