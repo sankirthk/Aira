@@ -140,6 +140,7 @@ struct AiraSidebarActionButtonStyle: ButtonStyle {
             style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
           )
       )
+      .contentShape(Rectangle())
   }
 }
 

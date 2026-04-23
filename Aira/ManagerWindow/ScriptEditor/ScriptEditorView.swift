@@ -326,7 +326,7 @@ private struct ScriptEditorLaunchMenuPanel: View {
       }
     }
     .padding(8)
-    .frame(width: 218)
+    .frame(width: 248)
     .background(
       RoundedRectangle(cornerRadius: 14)
         .fill(Color("colorSurface"))
