@@ -199,8 +199,10 @@ Repository automation is tracked here when it materially gates shipping quality.
 | IT-001d | When one of two Satellite assignment slots is left empty, launch proceeds for valid targets only and shows lightweight feedback describing skipped Satellite count | `[ ]` |
 | IT-002 | Session end: calling `OverlayWindowController.endSession()` stops VoiceSyncEngine, releases AVAudioEngine, and closes all panels | `[ ]` |
 | IT-003 | Microphone released: after `endSession()`, AVAudioEngine is no longer running (isRunning == false) | `[ ]` |
+| IT-003a | Voice-Sync still receives microphone input and advances the shared playhead while the user is on an active call/meeting app using the microphone, without requiring them to leave the call first | `[ ]` |
 | IT-016 | Voice-Sync off session: launching an overlay with a saved non-zero `autoScrollWPM` starts manual auto-scroll in the presented prompter instead of leaving the script stationary | `[ ]` |
 | IT-017 | Session scroll shortcuts: configured up/down shortcuts nudge the active session scroll position regardless of which window has keyboard focus | `[ ]` |
+| IT-017a | Session scroll shortcuts do not move Manual-mode Satellite windows; only the notch and synced overlays sharing the active playhead respond to shortcut nudges | `[ ]` |
 | IT-018 | System-tab manual scroll speed control persists a changed WPM value through `AppState` and `SettingsStore` | `[x]` |
 | IT-019 | Mouse wheel / trackpad scrolling on an active overlay updates the rendered script position without disabling Voice-Sync state, including hover-paused and button-paused notch sessions plus Manual-mode pill windows regardless of the hover-pause setting | `[ ]` |
 | IT-020 | Voice-Sync partial transcription updates advance the cursor in capped forward steps instead of jumping directly to the end of a long spoken window | `[ ]` |
@@ -309,6 +311,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049b | Script Editor shows one connected split launch control `[ Cast to Notch ] [ chevron ]` using app-styled chrome rather than native macOS menu UI, without a duplicate label-side chevron, and primary `Cast to Notch` never launches Satellite unexpectedly | `[x]` |
 | MT-049c | Chevron dropdown offers `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)` with restored compact toolbar button height, app-styled dropdown chrome, and outside-click dismissal | `[x]` |
 | MT-049d | Cold launch the app, immediately cast a non-empty script to Notch, and confirm the manager remains responsive with no macOS beachball while the first presenter window appears within the accepted latency budget; repeat with Voice-Sync on and off to isolate speech startup cost | `[ ]` |
+| MT-049e | Zero-countdown Notch launch produces no AppKit/SwiftUI recursive-layout warnings such as reentrant `NSHostingView` layout or `layoutSubtreeIfNeeded`-during-layout messages in the debug log | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
 | MT-016 | Pill Windows toggle matches the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
