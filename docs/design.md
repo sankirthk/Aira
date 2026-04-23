@@ -231,10 +231,15 @@ The full-screen authoring experience within the content area.
 
 **Launch behavior:**
 - Primary button press on `Cast to Notch` is deterministic and launches only the Notch Window with the current editor script.
+- The split launch control renders as one connected button, not as two detached buttons.
+- The split launch control keeps compact toolbar height consistent with the original `Cast to Notch` button.
+- The primary half does not repeat a second chevron beside the text; only the trailing chevron segment acts as dropdown affordance.
+- The dropdown panel uses Aira manager-app styling rather than native macOS menu chrome.
+- Clicking outside the dropdown panel dismisses it.
 - Chevron dropdown menu entries:
-  - `Cast to Notch`
-  - `Cast with Satellite…`
-- Choosing `Cast with Satellite…` opens one compact launch panel for all enabled Satellites.
+  - `Cast with Satellite (Sync)`
+  - `Cast with Satellite (Manual)`
+- Choosing either Satellite dropdown entry opens follow-up Satellite launch flow for that intent.
 - The launch panel shows one section per enabled Satellite.
 - Each Satellite section offers:
   - `Mirror current script`

@@ -262,10 +262,14 @@ A Satellite launch from the Script Editor shall require explicit per-Satellite c
 Acceptance criteria:
 - `Cast to Notch` always launches only the Notch Window with current editor script.
 - The editor presents a split-button launch control: primary `Cast to Notch` plus adjacent dropdown.
+- The split-button is rendered as one connected control with integrated app styling rather than native macOS menu styling.
+- The split-button preserves compact toolbar sizing comparable to the original `Cast to Notch` button.
+- The primary label does not repeat a decorative chevron beside the text; only the trailing chevron segment is the interactive dropdown trigger.
+- Clicking outside an open dropdown dismisses it.
 - The dropdown includes:
-  - `Cast to Notch`
-  - `Cast with Satellite…`
-- Choosing `Cast with Satellite…` opens one launch panel covering all enabled Satellite windows for that session.
+  - `Cast with Satellite (Sync)`
+  - `Cast with Satellite (Manual)`
+- Choosing either Satellite dropdown entry opens Satellite launch flow for that selected intent.
 - The launch panel shows one section per enabled Satellite.
 - Each Satellite section offers exactly two choices:
   - `Mirror current script`
