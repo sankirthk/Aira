@@ -39,6 +39,7 @@ struct PrompterContentView: View {
   @State private var visibleWordRange: Range<Int>?
   @State private var cinematicController = CinematicScrollController()
   @State private var manualScrollDriver = ManualScrollDriver()
+  @State private var deferredVoiceStartupTask: Task<Void, Never>?
 
   private let embeddedAudioIndicatorLaneHeight: CGFloat = 44
   private let embeddedAudioIndicatorTopGap: CGFloat = 10
@@ -346,11 +347,19 @@ struct PrompterContentView: View {
         } else if countdownDuration == 0 {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
-          startVoiceSubsystemIfNeeded()
+          if PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(
+            countdownDuration: countdownDuration)
+          {
+            startVoiceSubsystemAfterFirstRenderTurnIfNeeded()
+          } else {
+            startVoiceSubsystemIfNeeded()
+          }
           startAutoScrollIfNeeded()
         }
       }
       .onDisappear {
+        deferredVoiceStartupTask?.cancel()
+        deferredVoiceStartupTask = nil
         cinematicController.stop()
         manualScrollDriver.stop()
         manualScrollDriver.onScrollTick = nil
@@ -589,6 +598,15 @@ struct PrompterContentView: View {
   private func startVoiceSubsystemIfNeeded() {
     if voiceSyncEnabled || spokenWordHighlightingEnabled {
       voiceSync.start()
+    }
+  }
+
+  private func startVoiceSubsystemAfterFirstRenderTurnIfNeeded() {
+    deferredVoiceStartupTask?.cancel()
+    deferredVoiceStartupTask = Task { @MainActor in
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+      startVoiceSubsystemIfNeeded()
     }
   }
 
@@ -989,6 +1007,12 @@ enum PrompterSessionRestorePolicy {
     voiceSyncState: VoiceSyncEngine.EngineState
   ) -> Bool {
     sharedSessionStarted || voiceSyncState != .idle
+  }
+}
+
+enum PrompterVoiceStartupPolicy {
+  static func shouldDeferVoiceStartup(countdownDuration: Int) -> Bool {
+    countdownDuration == 0
   }
 }
 
