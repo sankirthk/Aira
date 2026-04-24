@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import Speech
 import Testing
@@ -792,6 +793,129 @@ struct VoiceSyncMatchingTests {
     #expect(VoiceSyncEngine.inputTapBufferSize == 128)
   }
 
+  @Test func voiceSyncRecognitionPreprocessingSelectsStrongestChannel() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 2,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let channel0: [Float] = [0.001, -0.002, 0.001, -0.001]
+    let channel1: [Float] = [0.010, -0.020, 0.015, -0.010]
+    let channels = [channel0, channel1]
+
+    for (channelIndex, samples) in channels.enumerated() {
+      let destination = UnsafeMutableBufferPointer(
+        start: buffer.floatChannelData![channelIndex],
+        count: Int(buffer.frameLength)
+      )
+      for (frameIndex, sample) in samples.enumerated() {
+        destination[frameIndex] = sample
+      }
+    }
+
+    #expect(VoiceSyncRecognitionInput.dominantChannelIndex(for: buffer) == 1)
+  }
+
+  @Test func voiceSyncRecognitionPreprocessingNormalizesQuietSpeechToMono() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 2,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let quietChannel0: [Float] = [0.001, -0.001, 0.002, -0.001]
+    let speechChannel1: [Float] = [0.010, -0.020, 0.015, -0.010]
+    let channels = [quietChannel0, speechChannel1]
+
+    for (channelIndex, samples) in channels.enumerated() {
+      let destination = UnsafeMutableBufferPointer(
+        start: buffer.floatChannelData![channelIndex],
+        count: Int(buffer.frameLength)
+      )
+      for (frameIndex, sample) in samples.enumerated() {
+        destination[frameIndex] = sample
+      }
+    }
+
+    let recognitionBuffer = try #require(
+      VoiceSyncRecognitionInput.makeRecognitionBuffer(from: buffer)
+    )
+
+    #expect(recognitionBuffer.format.channelCount == 1)
+    #expect(recognitionBuffer.format.commonFormat == AVAudioCommonFormat.pcmFormatFloat32)
+    #expect(recognitionBuffer.frameLength == buffer.frameLength)
+    let samples = UnsafeBufferPointer(
+      start: recognitionBuffer.floatChannelData![0],
+      count: Int(recognitionBuffer.frameLength)
+    )
+    let peak = samples.reduce(into: Float(0)) { runningPeak, sample in
+      runningPeak = max(runningPeak, abs(sample))
+    }
+    #expect(abs(peak - 0.18) < 0.0001)
+  }
+
+  @Test @MainActor func audioLevelMonitorUsesStrongestCapturedChannel() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 2,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let quietChannel0: [Float] = [0.001, -0.001, 0.002, -0.001]
+    let speechChannel1: [Float] = [0.010, -0.020, 0.015, -0.010]
+    let channels = [quietChannel0, speechChannel1]
+
+    for (channelIndex, samples) in channels.enumerated() {
+      let destination = UnsafeMutableBufferPointer(
+        start: buffer.floatChannelData![channelIndex],
+        count: Int(buffer.frameLength)
+      )
+      for (frameIndex, sample) in samples.enumerated() {
+        destination[frameIndex] = sample
+      }
+    }
+
+    let monitor = AudioLevelMonitor()
+    monitor.processBuffer(buffer)
+
+    #expect(monitor.level > 0.1)
+  }
+
+  @Test @MainActor func audioLevelMonitorNormalizesQuietSpeechForVisualMetering() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 1,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let quietSpeech: [Float] = [0.0015, -0.0033, 0.0022, -0.0018]
+    let destination = UnsafeMutableBufferPointer(
+      start: buffer.floatChannelData![0],
+      count: Int(buffer.frameLength)
+    )
+    for (frameIndex, sample) in quietSpeech.enumerated() {
+      destination[frameIndex] = sample
+    }
+
+    let monitor = AudioLevelMonitor()
+    monitor.processBuffer(buffer)
+
+    #expect(monitor.level >= 0.2)
+  }
+
   @Test @MainActor func voiceSyncReseedHighlightPreservesScrollOffsetAndUpdatesVisualAnchor() {
     let engine = VoiceSyncEngine()
     engine.loadScript(text: "one two three four five six", startingAt: 0.75)
@@ -1007,6 +1131,60 @@ struct VoiceSyncMatchingTests {
     #expect(match?.startIndex == 2)
     #expect(match?.overlap == 3)
     #expect(match?.currentWordIndex == 4)
+  }
+
+  @Test func voiceSyncStartupMatchConfigurationsAcceptEarlySingleWordPartial() {
+    let recognizedWords = [
+      VoiceSyncMatching.RecognizedWord(token: "hello", confidence: 0.60)
+    ]
+
+    let startupSingleWordConfiguration =
+      VoiceSyncMatching.matchConfigurations(hasEstablishedMatch: false)
+      .first { $0.windowLength == 1 }
+    let steadyStateSingleWordConfiguration =
+      VoiceSyncMatching.matchConfigurations(hasEstablishedMatch: true)
+      .first { $0.windowLength == 1 }
+
+    let startupWindow = VoiceSyncMatching.trailingRecognizedWindow(
+      from: recognizedWords,
+      length: startupSingleWordConfiguration?.windowLength ?? 1,
+      minimumWordConfidence: startupSingleWordConfiguration?.minimumWordConfidence ?? 1,
+      minimumAverageConfidence: startupSingleWordConfiguration?.minimumAverageConfidence ?? 1
+    )
+    let steadyStateWindow = VoiceSyncMatching.trailingRecognizedWindow(
+      from: recognizedWords,
+      length: steadyStateSingleWordConfiguration?.windowLength ?? 1,
+      minimumWordConfidence: steadyStateSingleWordConfiguration?.minimumWordConfidence ?? 1,
+      minimumAverageConfidence: steadyStateSingleWordConfiguration?.minimumAverageConfidence ?? 1
+    )
+
+    #expect(startupWindow?.map(\.token) == ["hello"])
+    #expect(steadyStateWindow == nil)
+  }
+
+  @Test func currentWordHighlightAttributesUseUnderlineOnly() {
+    let underlineColor = NSColor.labelColor
+
+    let attributes = OverlayStyledTextContainerView.currentWordTemporaryAttributes(
+      underlineColor: underlineColor
+    )
+
+    #expect(attributes[.foregroundColor] == nil)
+    #expect((attributes[.underlineColor] as? NSColor) == underlineColor)
+    #expect(
+      attributes[.underlineStyle] as? Int
+        == (NSUnderlineStyle.single.rawValue | NSUnderlineStyle.thick.rawValue))
+  }
+
+  @Test @MainActor func voiceSyncRecommendedLookAheadExpandsForLargerVisibleWindows() {
+    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 4) == 12)
+    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 24) == 12)
+    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 60) == 30)
+    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 200) == 36)
+
+    #expect(VoiceSyncEngine.recommendedVisualMatchLookAhead(visibleWordCount: 6) == 8)
+    #expect(VoiceSyncEngine.recommendedVisualMatchLookAhead(visibleWordCount: 30) == 10)
+    #expect(VoiceSyncEngine.recommendedVisualMatchLookAhead(visibleWordCount: 90) == 24)
   }
 
   @Test func normalizeTokenStripsCommonPunctuation() {

@@ -96,6 +96,13 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026e | `CinematicScrollController.stop()` halts further scroll tick callbacks so replaced undocked/fullscreen notch views cannot keep mutating shared playhead state in background | `[x]` |
 | UT-026f | `OverlayWindowController.endSession()` resets shared voice/playhead state so a later classic/manual session cannot inherit prior voice-session scroll or highlight state | `[x]` |
 | UT-026g | Active overlay controllers accept live updates for voice-driven scroll and pause-on-hover flags so session behavior can switch cleanly without relaunching the app | `[x]` |
+| UT-026h | Voice-Sync recognition preprocessing selects the strongest captured input channel instead of always using channel 0 when creating the speech-recognition buffer | `[ ]` |
+| UT-026i | Voice-Sync recognition preprocessing applies bounded gain normalization to quiet speech buffers before appending them to speech recognition, while preserving frame count and mono float format | `[ ]` |
+| UT-026j | Audio-level metering uses the strongest captured channel instead of always channel 0, so call-route voice arcs react to normal speaking volume when the dominant speech channel is not the first channel | `[x]` |
+| UT-026k | Audio-level metering applies bounded gain normalization for quiet speech so call-route voice arcs respond at normal volume without clipping direct-mic sessions to full scale | `[ ]` |
+| UT-026l | Voice-Sync accepts early single-word partials during startup highlighting so the first spoken-word visual feedback does not wait for a long/high-confidence suffix window | `[x]` |
+| UT-026m | Voice-Sync search/look-ahead window expands enough to let spoken-word highlighting catch up at higher `pt/s` overlay speeds instead of lagging behind the visible reading position | `[x]` |
+| UT-026n | Current spoken-word startup styling keeps the overlay text color and uses a stronger underline so the first highlighted word stays visible without introducing background/theme contrast problems | `[x]` |
 
 ### Models (Tasks T-001, T-002, T-003)
 
@@ -202,7 +209,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | IT-001d | When one of two Satellite assignment slots is left empty, launch proceeds for valid targets only and shows lightweight feedback describing skipped Satellite count | `[ ]` |
 | IT-002 | Session end: calling `OverlayWindowController.endSession()` stops VoiceSyncEngine, releases AVAudioEngine, and closes all panels | `[ ]` |
 | IT-003 | Microphone released: after `endSession()`, AVAudioEngine is no longer running (isRunning == false) | `[ ]` |
-| IT-003a | Voice-Sync still receives microphone input and advances the shared playhead while the user is on an active call/meeting app using the microphone, without requiring them to leave the call first | `[ ]` |
+| IT-003a | Voice-Sync still receives microphone input and advances the shared playhead while the user is on an active call/meeting app using the microphone, without requiring them to leave the call first | `[x]` |
 | IT-016 | Voice-Sync off session: launching an overlay with a saved non-zero `autoScrollWPM` starts manual auto-scroll in the presented prompter instead of leaving the script stationary | `[ ]` |
 | IT-017 | Session scroll shortcuts: configured up/down shortcuts nudge the active session scroll position regardless of which window has keyboard focus | `[ ]` |
 | IT-017a | Session scroll shortcuts do not move Manual-mode Satellite windows; only the notch and synced overlays sharing the active playhead respond to shortcut nudges | `[ ]` |
@@ -315,6 +322,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049c | Chevron dropdown offers `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)` with restored compact toolbar button height, app-styled dropdown chrome, and outside-click dismissal | `[x]` |
 | MT-049d | Cold launch the app, immediately cast a non-empty script to Notch, and confirm the manager remains responsive with no macOS beachball while the first presenter window appears within the accepted latency budget; repeat with Voice-Sync on and off to isolate speech startup cost | `[ ]` |
 | MT-049e | Zero-countdown Notch launch produces no AppKit/SwiftUI recursive-layout warnings such as reentrant `NSHostingView` layout or `layoutSubtreeIfNeeded`-during-layout messages in the debug log | `[ ]` |
+| MT-049f | During an active call/meeting app and during screen recording with microphone enabled, Voice-Sync diagnostics clearly show whether failure occurs at engine start, first tap buffer, first non-trivial audio level, or first speech-recognition partial/final result | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
 | MT-016 | Pill Windows toggle matches the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
