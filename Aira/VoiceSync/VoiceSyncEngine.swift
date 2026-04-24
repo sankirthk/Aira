@@ -33,13 +33,18 @@ class VoiceSyncEngine: ObservableObject {
   private var cursorIndex: Int = 0
   private var visualCursorIndex: Int = 0
   private var visibleWordRange: Range<Int> = 0..<0
-  private let strictMatchLookAhead: Int = 3
-  private let visualMatchLookAhead: Int = 3
   private let silenceThresholdNanoseconds: UInt64 = 500_000_000
+  private let firstTapTimeoutNanoseconds: UInt64 = 2_000_000_000
+  private let firstRecognitionTimeoutNanoseconds: UInt64 = 4_000_000_000
+  private let diagnosticAudioFloor: Float = 0.003
   private var recognitionEnabled: Bool = false
   private var recognitionDrivesScroll: Bool = true
   private var previousPartialTokens: [String] = []
   private var recognitionGeneration: UInt64 = 0
+  private var audioEngineConfigurationObserver: NSObjectProtocol?
+  private var firstTapTimeoutTask: Task<Void, Never>?
+  private var firstRecognitionTimeoutTask: Task<Void, Never>?
+  private var diagnostics = DiagnosticsState()
 
   init(
     speechAuthorizationStatus: @escaping () -> SFSpeechRecognizerAuthorizationStatus = {
@@ -86,6 +91,11 @@ class VoiceSyncEngine: ObservableObject {
   func stop() {
     recognitionGeneration &+= 1
     state = .idle
+    removeDiagnosticsObservers()
+    firstTapTimeoutTask?.cancel()
+    firstTapTimeoutTask = nil
+    firstRecognitionTimeoutTask?.cancel()
+    firstRecognitionTimeoutTask = nil
     silenceDeadlineTask?.cancel()
     silenceDeadlineTask = nil
     recognitionTask?.cancel()
@@ -111,6 +121,7 @@ class VoiceSyncEngine: ObservableObject {
     visibleWordRange = 0..<0
     visualCursorIndex = 0
     previousPartialTokens = []
+    diagnostics = DiagnosticsState()
   }
 
   func togglePause() {
@@ -184,14 +195,24 @@ class VoiceSyncEngine: ObservableObject {
 
   private func startWithRecognitionIfAuthorized() {
     let speechStatus = speechAuthorizationStatus()
+    let microphoneGranted = microphonePermissionGranted()
+    AiraLogger.shared.info(
+      "voiceSync.authorization speech=\(speechStatus.debugName) microphoneGranted=\(microphoneGranted)",
+      category: "voice"
+    )
 
-    if speechStatus == .authorized && microphonePermissionGranted() {
+    if speechStatus == .authorized && microphoneGranted {
       startEngine()
     }
   }
 
   private func startMonitoringIfAuthorized() {
-    if microphonePermissionGranted() {
+    let microphoneGranted = microphonePermissionGranted()
+    AiraLogger.shared.info(
+      "voiceSync.audioMonitor authorization microphoneGranted=\(microphoneGranted)",
+      category: "voice"
+    )
+    if microphoneGranted {
       startEngine()
     }
   }
@@ -200,11 +221,20 @@ class VoiceSyncEngine: ObservableObject {
 
   private func startEngine() {
     AiraLogger.shared.info("voiceSync.startEngine begin", category: "voice")
+    diagnostics = DiagnosticsState()
+    removeDiagnosticsObservers()
     let engine = AVAudioEngine()
     audioEngine = engine
+    observeAudioEngineConfigurationChanges(engine)
 
     let inputNode = engine.inputNode
+    let inputFormat = inputNode.inputFormat(forBus: 0)
     let format = inputNode.outputFormat(forBus: 0)
+    let recognizerLocale = recognizer?.locale.identifier ?? "nil"
+    AiraLogger.shared.info(
+      "voiceSync.input format input=\(inputFormat.voiceSyncDebugDescription) output=\(format.voiceSyncDebugDescription) recognizerAvailable=\(recognizer != nil) recognizerLocale=\(recognizerLocale)",
+      category: "voice"
+    )
 
     inputNode.installTap(onBus: 0, bufferSize: Self.inputTapBufferSize, format: format) {
       [weak self, recognitionBox] buffer, _ in
@@ -214,12 +244,17 @@ class VoiceSyncEngine: ObservableObject {
         recognitionBox.append(buffer)
       }
       Task { @MainActor [weak self] in
+        self?.recordTapDiagnostics(for: buffer)
         self?.audioLevelMonitor?.processBuffer(buffer)
       }
     }
 
     if recognitionEnabled {
       recognizer?.supportsOnDeviceRecognition = true
+      AiraLogger.shared.info(
+        "voiceSync.recognition config supportsOnDevice=\(recognizer?.supportsOnDeviceRecognition == true)",
+        category: "voice"
+      )
 
       let request = SFSpeechAudioBufferRecognitionRequest()
       request.requiresOnDeviceRecognition = true
@@ -234,6 +269,7 @@ class VoiceSyncEngine: ObservableObject {
         if let result {
           Task { @MainActor [weak self] in
             guard let self, generation == self.recognitionGeneration else { return }
+            self.recordRecognitionDiagnostics(for: result)
             self.handleRecognitionResult(result)
           }
           // On-device recognition tasks have a ~1 minute limit.
@@ -248,14 +284,11 @@ class VoiceSyncEngine: ObservableObject {
         }
         if let error {
           let nsError = error as NSError
+          self.logRecognitionError(nsError)
           // Code 301 = audio session interrupted; Code 216 = task cancelled
           // Code 1110 = no speech detected — ignore these
           let ignoredCodes = [216, 301, 1110]
           guard !ignoredCodes.contains(nsError.code) else { return }
-          AiraLogger.shared.error(
-            "Recognition error code=\(nsError.code) message=\(error.localizedDescription)",
-            category: "voice"
-          )
           Task { @MainActor [weak self] in
             guard let self, generation == self.recognitionGeneration else { return }
             self.restartRecognitionIfNeeded()
@@ -268,6 +301,7 @@ class VoiceSyncEngine: ObservableObject {
       try engine.start()
       AiraLogger.shared.info("voiceSync.engineStarted", category: "voice")
       state = .running
+      scheduleDiagnosticTimeouts()
       if recognitionEnabled {
         scheduleSilenceDeadline()
       }
@@ -310,8 +344,11 @@ class VoiceSyncEngine: ObservableObject {
     // based on how much contextual overlap we have. This ensures we don't jump
     // 40 words ahead just because the user said "the".
     var match: VoiceSyncMatching.Match?
+    let hasEstablishedSpokenMatch = currentWordIndex != nil || highlightedWordRange != nil
 
-    for configuration in VoiceSyncMatching.matchConfigurations {
+    for configuration in VoiceSyncMatching.matchConfigurations(
+      hasEstablishedMatch: hasEstablishedSpokenMatch
+    ) {
       guard
         let window = VoiceSyncMatching.trailingRecognizedWindow(
           from: recognizedWords,
@@ -325,7 +362,9 @@ class VoiceSyncEngine: ObservableObject {
         scriptWords: scriptWords,
         spokenWindow: window.map(\.token),
         cursorIndex: searchRange.lowerBound,
-        lookAhead: min(searchRange.count, strictMatchLookAhead),
+        lookAhead: Self.recommendedStrictMatchLookAhead(
+          visibleWordCount: searchRange.count
+        ),
         minimumOverlap: configuration.windowLength
       )
 
@@ -390,7 +429,9 @@ class VoiceSyncEngine: ObservableObject {
         max(nextVisualCursor, visualSearchRange.lowerBound), visualSearchRange.upperBound)
       let remainingLookAhead = min(
         max(visualSearchRange.upperBound - searchStart, 0),
-        visualMatchLookAhead
+        Self.recommendedVisualMatchLookAhead(
+          visibleWordCount: visualSearchRange.count
+        )
       )
       guard remainingLookAhead > 0 else { continue }
       guard
@@ -425,6 +466,10 @@ class VoiceSyncEngine: ObservableObject {
 
   private func restartRecognitionIfNeeded() {
     guard state != .idle, audioEngine != nil else { return }
+    diagnostics.didLogFirstRecognitionPartial = false
+    diagnostics.didLogFirstRecognitionFinal = false
+    firstRecognitionTimeoutTask?.cancel()
+    firstRecognitionTimeoutTask = nil
     recognitionTask?.cancel()
     recognitionTask = nil
 
@@ -441,6 +486,7 @@ class VoiceSyncEngine: ObservableObject {
       if let result {
         Task { @MainActor [weak self] in
           guard let self, generation == self.recognitionGeneration else { return }
+          self.recordRecognitionDiagnostics(for: result)
           self.handleRecognitionResult(result)
         }
         if result.isFinal {
@@ -452,18 +498,16 @@ class VoiceSyncEngine: ObservableObject {
       }
       if let error {
         let nsError = error as NSError
+        self.logRecognitionError(nsError)
         let ignoredCodes = [216, 301, 1110]
         guard !ignoredCodes.contains(nsError.code) else { return }
-        AiraLogger.shared.error(
-          "Recognition error code=\(nsError.code) message=\(error.localizedDescription)",
-          category: "voice"
-        )
         Task { @MainActor [weak self] in
           guard let self, generation == self.recognitionGeneration else { return }
           self.restartRecognitionIfNeeded()
         }
       }
     }
+    scheduleFirstRecognitionTimeout()
   }
 
   private func scheduleSilenceDeadline() {
@@ -489,6 +533,212 @@ class VoiceSyncEngine: ObservableObject {
   enum EngineState {
     case idle, running, paused
   }
+
+  private func observeAudioEngineConfigurationChanges(_ engine: AVAudioEngine) {
+    audioEngineConfigurationObserver = NotificationCenter.default.addObserver(
+      forName: .AVAudioEngineConfigurationChange,
+      object: engine,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        self?.logAudioEngineConfigurationChange()
+      }
+    }
+  }
+
+  private func removeDiagnosticsObservers() {
+    if let audioEngineConfigurationObserver {
+      NotificationCenter.default.removeObserver(audioEngineConfigurationObserver)
+      self.audioEngineConfigurationObserver = nil
+    }
+  }
+
+  private func logAudioEngineConfigurationChange() {
+    guard let audioEngine else { return }
+    let format = audioEngine.inputNode.outputFormat(forBus: 0)
+    AiraLogger.shared.info(
+      "voiceSync.configurationChanged state=\(state.debugName) format=\(format.voiceSyncDebugDescription)",
+      category: "voice"
+    )
+  }
+
+  private func scheduleDiagnosticTimeouts() {
+    scheduleFirstTapTimeout()
+    scheduleFirstRecognitionTimeout()
+  }
+
+  private func scheduleFirstTapTimeout() {
+    firstTapTimeoutTask?.cancel()
+    let generation = recognitionGeneration
+    firstTapTimeoutTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: self?.firstTapTimeoutNanoseconds ?? 2_000_000_000)
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        guard let self else { return }
+        guard generation == self.recognitionGeneration else { return }
+        guard !self.diagnostics.didLogFirstTap else { return }
+        AiraLogger.shared.info(
+          "voiceSync.diagnostic noTapBufferWithin2s recognitionEnabled=\(self.recognitionEnabled) state=\(self.state.debugName)",
+          category: "voice"
+        )
+      }
+    }
+  }
+
+  private func scheduleFirstRecognitionTimeout() {
+    guard recognitionEnabled else { return }
+    firstRecognitionTimeoutTask?.cancel()
+    let generation = recognitionGeneration
+    firstRecognitionTimeoutTask = Task { [weak self] in
+      try? await Task.sleep(
+        nanoseconds: self?.firstRecognitionTimeoutNanoseconds ?? 4_000_000_000)
+      guard !Task.isCancelled else { return }
+      await MainActor.run {
+        guard let self else { return }
+        guard generation == self.recognitionGeneration else { return }
+        guard !self.diagnostics.didLogFirstRecognitionPartial else { return }
+        AiraLogger.shared.info(
+          "voiceSync.diagnostic noRecognitionPartialWithin4s tapReceived=\(self.diagnostics.didLogFirstTap) nontrivialAudio=\(self.diagnostics.didLogFirstNontrivialAudio)",
+          category: "voice"
+        )
+      }
+    }
+  }
+
+  private func recordTapDiagnostics(for buffer: AVAudioPCMBuffer) {
+    if !diagnostics.didLogFirstTap {
+      diagnostics.didLogFirstTap = true
+      firstTapTimeoutTask?.cancel()
+      firstTapTimeoutTask = nil
+      AiraLogger.shared.info(
+        "voiceSync.tap firstBuffer frames=\(buffer.frameLength) format=\(buffer.format.voiceSyncDebugDescription)",
+        category: "voice"
+      )
+    }
+
+    guard !diagnostics.didLogFirstNontrivialAudio else { return }
+    let amplitude = buffer.voiceSyncPeakAmplitude
+    guard amplitude >= diagnosticAudioFloor else { return }
+    diagnostics.didLogFirstNontrivialAudio = true
+    let peakText = String(format: "%.4f", amplitude)
+    AiraLogger.shared.info(
+      "voiceSync.tap firstNontrivialAudio peak=\(peakText) frames=\(buffer.frameLength)",
+      category: "voice"
+    )
+  }
+
+  private func recordRecognitionDiagnostics(for result: SFSpeechRecognitionResult) {
+    let transcript = result.bestTranscription.formattedString
+    if !diagnostics.didLogFirstRecognitionPartial {
+      diagnostics.didLogFirstRecognitionPartial = true
+      firstRecognitionTimeoutTask?.cancel()
+      firstRecognitionTimeoutTask = nil
+      AiraLogger.shared.info(
+        "voiceSync.recognition firstPartial isFinal=\(result.isFinal) chars=\(transcript.count) text=\"\(transcript.prefix(80))\"",
+        category: "voice"
+      )
+    }
+
+    if result.isFinal && !diagnostics.didLogFirstRecognitionFinal {
+      diagnostics.didLogFirstRecognitionFinal = true
+      AiraLogger.shared.info(
+        "voiceSync.recognition firstFinal chars=\(transcript.count) text=\"\(transcript.prefix(80))\"",
+        category: "voice"
+      )
+    }
+  }
+
+  private func logRecognitionError(_ error: NSError) {
+    AiraLogger.shared.error(
+      "Recognition error domain=\(error.domain) code=\(error.code) message=\(error.localizedDescription)",
+      category: "voice"
+    )
+  }
+
+  private struct DiagnosticsState {
+    var didLogFirstTap = false
+    var didLogFirstNontrivialAudio = false
+    var didLogFirstRecognitionPartial = false
+    var didLogFirstRecognitionFinal = false
+  }
+
+  static func recommendedStrictMatchLookAhead(visibleWordCount: Int) -> Int {
+    let normalizedVisibleCount = max(visibleWordCount, 0)
+    return min(max(normalizedVisibleCount / 2, 12), 36)
+  }
+
+  static func recommendedVisualMatchLookAhead(visibleWordCount: Int) -> Int {
+    let normalizedVisibleCount = max(visibleWordCount, 0)
+    return min(max(normalizedVisibleCount / 3, 8), 24)
+  }
+}
+
+extension VoiceSyncEngine.EngineState {
+  fileprivate var debugName: String {
+    switch self {
+    case .idle:
+      "idle"
+    case .running:
+      "running"
+    case .paused:
+      "paused"
+    }
+  }
+}
+
+extension SFSpeechRecognizerAuthorizationStatus {
+  fileprivate var debugName: String {
+    switch self {
+    case .notDetermined:
+      "notDetermined"
+    case .denied:
+      "denied"
+    case .restricted:
+      "restricted"
+    case .authorized:
+      "authorized"
+    @unknown default:
+      "unknown"
+    }
+  }
+}
+
+extension AVAudioFormat {
+  fileprivate var voiceSyncDebugDescription: String {
+    "sampleRate=\(sampleRate) channels=\(channelCount) interleaved=\(isInterleaved) commonFormat=\(commonFormat.debugName)"
+  }
+}
+
+extension AVAudioCommonFormat {
+  fileprivate var debugName: String {
+    switch self {
+    case .otherFormat:
+      "other"
+    case .pcmFormatFloat32:
+      "float32"
+    case .pcmFormatFloat64:
+      "float64"
+    case .pcmFormatInt16:
+      "int16"
+    case .pcmFormatInt32:
+      "int32"
+    @unknown default:
+      "unknown"
+    }
+  }
+}
+
+extension AVAudioPCMBuffer {
+  fileprivate var voiceSyncPeakAmplitude: Float {
+    guard let channelData = floatChannelData, frameLength > 0 else { return 0 }
+    let frameCount = Int(frameLength)
+    let samples = UnsafeBufferPointer(start: channelData[0], count: frameCount)
+    var peak: Float = 0
+    for sample in samples {
+      peak = max(peak, abs(sample))
+    }
+    return peak
+  }
 }
 
 /// Thread-safe container for the active SFSpeechAudioBufferRecognitionRequest.
@@ -505,7 +755,88 @@ final class RecognitionRequestBox {
 
   func append(_ buffer: AVAudioPCMBuffer) {
     let r = lock.withLock { request }
-    r?.append(buffer)
+    guard let r else { return }
+    if let recognitionBuffer = VoiceSyncRecognitionInput.makeRecognitionBuffer(from: buffer) {
+      r.append(recognitionBuffer)
+    } else {
+      r.append(buffer)
+    }
+  }
+}
+
+struct VoiceSyncRecognitionInput {
+  static let targetPeak: Float = 0.18
+  static let maxGain: Float = 12
+
+  static func dominantChannelIndex(for buffer: AVAudioPCMBuffer) -> Int? {
+    guard let channelData = buffer.floatChannelData, buffer.frameLength > 0 else { return nil }
+
+    let frameCount = Int(buffer.frameLength)
+    var strongestIndex: Int?
+    var strongestPeak: Float = 0
+
+    for channelIndex in 0..<Int(buffer.format.channelCount) {
+      let samples = UnsafeBufferPointer(start: channelData[channelIndex], count: frameCount)
+      var peak: Float = 0
+      for sample in samples {
+        peak = max(peak, abs(sample))
+      }
+      guard peak > strongestPeak else { continue }
+      strongestPeak = peak
+      strongestIndex = channelIndex
+    }
+
+    return strongestIndex
+  }
+
+  static func makeRecognitionBuffer(from buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+    guard
+      let channelData = buffer.floatChannelData,
+      buffer.frameLength > 0,
+      let dominantChannelIndex = dominantChannelIndex(for: buffer)
+    else {
+      return nil
+    }
+
+    let frameCount = Int(buffer.frameLength)
+    let sourceSamples = UnsafeBufferPointer(
+      start: channelData[dominantChannelIndex],
+      count: frameCount
+    )
+    let sourcePeak = sourceSamples.reduce(into: Float(0)) { peak, sample in
+      peak = max(peak, abs(sample))
+    }
+
+    let monoFormat = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: buffer.format.sampleRate,
+      channels: 1,
+      interleaved: false
+    )
+    guard let monoFormat,
+      let recognitionBuffer = AVAudioPCMBuffer(
+        pcmFormat: monoFormat,
+        frameCapacity: buffer.frameLength
+      ),
+      let destinationChannel = recognitionBuffer.floatChannelData?[0]
+    else {
+      return nil
+    }
+
+    recognitionBuffer.frameLength = buffer.frameLength
+    let destinationSamples = UnsafeMutableBufferPointer(
+      start: destinationChannel, count: frameCount)
+    let gain = recognitionGain(forPeak: sourcePeak)
+    for frameIndex in 0..<frameCount {
+      destinationSamples[frameIndex] = max(-1, min(1, sourceSamples[frameIndex] * gain))
+    }
+
+    return recognitionBuffer
+  }
+
+  private static func recognitionGain(forPeak peak: Float) -> Float {
+    guard peak > 0 else { return 1 }
+    return max(1, min(maxGain, targetPeak / peak))
   }
 }
 
@@ -543,7 +874,16 @@ struct VoiceSyncMatching {
     tokenSpans(in: text).map(\.normalized)
   }
 
-  static let matchConfigurations: [MatchConfiguration] = [
+  static let startupMatchConfigurations: [MatchConfiguration] = [
+    MatchConfiguration(
+      windowLength: 3, minimumWordConfidence: 0.35, minimumAverageConfidence: 0.55),
+    MatchConfiguration(
+      windowLength: 2, minimumWordConfidence: 0.45, minimumAverageConfidence: 0.62),
+    MatchConfiguration(
+      windowLength: 1, minimumWordConfidence: 0.55, minimumAverageConfidence: 0.55),
+  ]
+
+  static let steadyStateMatchConfigurations: [MatchConfiguration] = [
     MatchConfiguration(
       windowLength: 3, minimumWordConfidence: 0.35, minimumAverageConfidence: 0.55),
     MatchConfiguration(
@@ -551,6 +891,10 @@ struct VoiceSyncMatching {
     MatchConfiguration(
       windowLength: 1, minimumWordConfidence: 0.72, minimumAverageConfidence: 0.72),
   ]
+
+  static func matchConfigurations(hasEstablishedMatch: Bool) -> [MatchConfiguration] {
+    hasEstablishedMatch ? steadyStateMatchConfigurations : startupMatchConfigurations
+  }
 
   static func recognizedWords(from segments: [SFTranscriptionSegment]) -> [RecognizedWord] {
     segments.compactMap { segment in
