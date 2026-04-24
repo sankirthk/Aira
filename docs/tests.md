@@ -96,6 +96,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026e | `CinematicScrollController.stop()` halts further scroll tick callbacks so replaced undocked/fullscreen notch views cannot keep mutating shared playhead state in background | `[x]` |
 | UT-026f | `OverlayWindowController.endSession()` resets shared voice/playhead state so a later classic/manual session cannot inherit prior voice-session scroll or highlight state | `[x]` |
 | UT-026g | Active overlay controllers accept live updates for voice-driven scroll and pause-on-hover flags so session behavior can switch cleanly without relaunching the app | `[x]` |
+| UT-026h | Session scroll keyboard nudges are consumed only by synchronized primary overlays; Manual Satellites ignore the shared shortcut event and follow only their own local scroll state | `[x]` |
 
 ### Models (Tasks T-001, T-002, T-003)
 
@@ -205,7 +206,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | IT-003a | Voice-Sync still receives microphone input and advances the shared playhead while the user is on an active call/meeting app using the microphone, without requiring them to leave the call first | `[ ]` |
 | IT-016 | Voice-Sync off session: launching an overlay with a saved non-zero `autoScrollWPM` starts manual auto-scroll in the presented prompter instead of leaving the script stationary | `[ ]` |
 | IT-017 | Session scroll shortcuts: configured up/down shortcuts nudge the active session scroll position regardless of which window has keyboard focus | `[ ]` |
-| IT-017a | Session scroll shortcuts do not move Manual-mode Satellite windows; only the notch and synced overlays sharing the active playhead respond to shortcut nudges | `[ ]` |
+| IT-017a | Session scroll shortcuts do not move Manual-mode Satellite windows; only the notch and synced overlays sharing the active playhead respond to shortcut nudges | `[x]` |
 | IT-018 | System-tab manual scroll speed control persists a changed WPM value through `AppState` and `SettingsStore` | `[x]` |
 | IT-019 | Mouse wheel / trackpad scrolling on an active overlay updates the rendered script position without disabling Voice-Sync state, including hover-paused and button-paused notch sessions plus Manual-mode pill windows regardless of the hover-pause setting | `[ ]` |
 | IT-020 | Voice-Sync partial transcription updates advance the cursor in capped forward steps instead of jumping directly to the end of a long spoken window | `[ ]` |

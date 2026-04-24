@@ -674,6 +674,27 @@ struct KeyboardShortcutDisplayTests {
     )
   }
 
+  @Test func sessionScrollShortcutsOnlyNudgePrimarySynchronizedOverlays() {
+    #expect(
+      OverlayScrollShortcutPolicy.respondsToManualLineNudges(
+        syncsSessionScroll: true,
+        ownsSynchronizedScroll: true
+      )
+    )
+    #expect(
+      !OverlayScrollShortcutPolicy.respondsToManualLineNudges(
+        syncsSessionScroll: true,
+        ownsSynchronizedScroll: false
+      )
+    )
+    #expect(
+      !OverlayScrollShortcutPolicy.respondsToManualLineNudges(
+        syncsSessionScroll: false,
+        ownsSynchronizedScroll: true
+      )
+    )
+  }
+
   @Test func syncClassicPillUsesSyncBadgeAndSuppressesVoiceLane() {
     #expect(
       PillChromePolicy.badge(
