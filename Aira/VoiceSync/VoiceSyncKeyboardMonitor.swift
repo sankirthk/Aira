@@ -6,11 +6,18 @@ final class KeyboardShortcutMonitor {
   struct Binding {
     let shortcut: String
     let suppressAutoRepeat: Bool
+    let consumesMatchedEvents: Bool
     let action: () -> Void
 
-    init(shortcut: String, suppressAutoRepeat: Bool = false, action: @escaping () -> Void) {
+    init(
+      shortcut: String,
+      suppressAutoRepeat: Bool = false,
+      consumesMatchedEvents: Bool = false,
+      action: @escaping () -> Void
+    ) {
       self.shortcut = shortcut
       self.suppressAutoRepeat = suppressAutoRepeat
+      self.consumesMatchedEvents = consumesMatchedEvents
       self.action = action
     }
   }
@@ -57,7 +64,9 @@ final class KeyboardShortcutMonitor {
         return Unmanaged.passUnretained(event)
       }
 
-      monitor.handle(event: event)
+      if monitor.handle(event: event) {
+        return nil
+      }
       return Unmanaged.passUnretained(event)
     }
 
@@ -65,7 +74,7 @@ final class KeyboardShortcutMonitor {
       let eventTap = CGEvent.tapCreate(
         tap: .cgSessionEventTap,
         place: .headInsertEventTap,
-        options: .listenOnly,
+        options: .defaultTap,
         eventsOfInterest: CGEventMask(mask),
         callback: callback,
         userInfo: userInfo
@@ -125,23 +134,31 @@ final class KeyboardShortcutMonitor {
 
   private func installEventMonitorFallback() {
     localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      self?.handle(event: event)
-      return event
+      guard let self else { return event }
+      return self.handle(event: event) ? nil : event
     }
     globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-      self?.handle(event: event)
+      _ = self?.handle(event: event)
     }
   }
 
-  private func handle(event: NSEvent) {
+  @discardableResult
+  private func handle(event: CGEvent) -> Bool {
+    guard let nsEvent = NSEvent(cgEvent: event) else { return false }
+    return handle(event: nsEvent)
+  }
+
+  @discardableResult
+  private func handle(event: NSEvent) -> Bool {
     for binding in bindings
     where KeyboardShortcutDisplay.matches(event: event, shortcut: binding.shortcut) {
       guard Self.shouldTriggerBinding(binding, isAutoRepeat: event.isARepeat) else {
-        return
+        return binding.consumesMatchedEvents
       }
       binding.action()
-      return
+      return binding.consumesMatchedEvents
     }
+    return false
   }
 
   static func shouldTriggerBinding(_ binding: Binding, isAutoRepeat: Bool) -> Bool {
@@ -165,8 +182,8 @@ final class VoiceSyncKeyboardMonitor {
     monitor.start(
       bindings: [
         .init(shortcut: toggleShortcut, suppressAutoRepeat: true, action: onToggle),
-        .init(shortcut: scrollUpShortcut, action: onScrollUp),
-        .init(shortcut: scrollDownShortcut, action: onScrollDown),
+        .init(shortcut: scrollUpShortcut, consumesMatchedEvents: true, action: onScrollUp),
+        .init(shortcut: scrollDownShortcut, consumesMatchedEvents: true, action: onScrollDown),
       ],
       promptForAccessibility: promptForAccessibility
     )

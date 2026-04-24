@@ -275,7 +275,12 @@ struct PrompterContentView: View {
       }
       .onChange(of: voiceSync.manualLineNudgeID) { _, _ in
         guard sessionStarted else { return }
-        guard ownsSynchronizedScroll else { return }
+        guard
+          OverlayScrollShortcutPolicy.respondsToManualLineNudges(
+            syncsSessionScroll: syncsSessionScroll,
+            ownsSynchronizedScroll: ownsSynchronizedScroll
+          )
+        else { return }
         applyManualLineNudge(direction: voiceSync.manualLineNudgeDirection)
       }
       .onHover { hovered in
@@ -994,6 +999,15 @@ enum OverlayPausePolicy {
   }
 
   static func publishesSharedPauseState(
+    syncsSessionScroll: Bool,
+    ownsSynchronizedScroll: Bool
+  ) -> Bool {
+    syncsSessionScroll && ownsSynchronizedScroll
+  }
+}
+
+enum OverlayScrollShortcutPolicy {
+  static func respondsToManualLineNudges(
     syncsSessionScroll: Bool,
     ownsSynchronizedScroll: Bool
   ) -> Bool {
