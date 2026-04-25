@@ -104,6 +104,15 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026m | Voice-Sync search/look-ahead window expands enough to let spoken-word highlighting catch up at higher `pt/s` overlay speeds instead of lagging behind the visible reading position | `[x]` |
 | UT-026n | Current spoken-word startup styling keeps the overlay text color and uses a stronger underline so the first highlighted word stays visible without introducing background/theme contrast problems | `[x]` |
 | UT-026o | Session scroll keyboard nudges are consumed only by synchronized primary overlays; Manual Satellites ignore the shared shortcut event and follow only their own local scroll state | `[x]` |
+| UT-026p | Voice-Sync highlight matching keeps single-word / visual catch-up searches within a bounded forward window so repeated/common words do not jump the highlight to unrelated later script positions | `[x]` |
+| UT-026q | Voice-Sync uses staged startup/steady/catch-up matcher plans so initial highlighting and high `pt/s` recovery widen only when anchored, while low-overlap matches still reject implausible forward jumps | `[x]` |
+| UT-026r | Voice-Sync startup mode accepts the first low-overlap spoken-word highlight inside its startup window, then immediately tightens back to steady/catch-up plausibility rules after the first lock | `[x]` |
+| UT-026s | Voice-Sync startup seeding uses the earliest plausible token from the first multi-word recognition partial so initial highlighting does not jump straight to the last word of that first chunk | `[x]` |
+| UT-026t | Voice-Sync startup search anchoring keeps the unconfirmed search window rooted at the visible word range instead of the forward-shifted cursor so early partials can match the first spoken words before steady/catch-up tightening resumes | `[x]` |
+| UT-026u | Manual seek never synthesizes a replacement active underline from the visible window while Voice-Sync is active | `[ ]` |
+| UT-026v | Overlay dulling follows the original worktree-start `visualHighlightedWordRange` delta renderer rather than the later committed-prefix path, so prior spoken words render correctly again after the rollback | `[x]` |
+| MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
+| MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 
 ### Models (Tasks T-001, T-002, T-003)
 
@@ -120,6 +129,9 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030f | Overlay appearance previews derive width, alignment, padding, and line spacing from the same layout snapshot inputs as live overlay rendering so justified alignment and readability spacing are visible in preview state | `[w]` |
 | UT-030m | Overlay spoken-word highlight updates use temporary TextKit display attributes and do not alter intrinsic height when only the current spoken token changes | `[x]` |
 | UT-030n | Expanding the spoken-word dull prefix across repeated temporary-attribute updates does not alter intrinsic height, covering the incremental prefix-update path used during live classic/voice highlighting | `[x]` |
+| UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
+| UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
+| UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |
 | UT-030o | Prompter spoken-word visuals clamp dull-prefix/current-word rendering to the visible word window so off-screen spoken ranges cannot expand overlay redraw scope | `[x]` |
 | UT-030o | Duplicate overlay scroll-wheel deliveries with the same timestamp/delta/phase collapse to one signature so local/global/direct monitor overlap cannot triple-apply a single manual scroll gesture | `[x]` |
 | UT-030p | Overlay scroll monitor routing ignores global wheel-monitor delivery while app is active, but still accepts local delivery when app is active and global delivery when app is inactive | `[x]` |

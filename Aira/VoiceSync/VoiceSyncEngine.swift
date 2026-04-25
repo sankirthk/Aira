@@ -46,6 +46,12 @@ class VoiceSyncEngine: ObservableObject {
   private var firstRecognitionTimeoutTask: Task<Void, Never>?
   private var diagnostics = DiagnosticsState()
 
+  enum MatcherMode: Equatable {
+    case startup
+    case steady
+    case catchUp(lagWords: Int)
+  }
+
   init(
     speechAuthorizationStatus: @escaping () -> SFSpeechRecognizerAuthorizationStatus = {
       SFSpeechRecognizer.authorizationStatus()
@@ -222,6 +228,7 @@ class VoiceSyncEngine: ObservableObject {
   private func startEngine() {
     AiraLogger.shared.info("voiceSync.startEngine begin", category: "voice")
     diagnostics = DiagnosticsState()
+    diagnostics.sessionStart = Date()
     removeDiagnosticsObservers()
     let engine = AVAudioEngine()
     audioEngine = engine
@@ -332,6 +339,7 @@ class VoiceSyncEngine: ObservableObject {
 
     isHumanSpeechActive = true
     let searchRange = normalizedSearchRange()
+    logSearchWindowStateIfNeeded(recognizedWords: recognizedWords, searchRange: searchRange)
     guard !searchRange.isEmpty else { return }
     processVisualPartialDelta(recognizedWords, searchRange: searchRange)
 
@@ -345,10 +353,29 @@ class VoiceSyncEngine: ObservableObject {
     // 40 words ahead just because the user said "the".
     var match: VoiceSyncMatching.Match?
     let hasEstablishedSpokenMatch = currentWordIndex != nil || highlightedWordRange != nil
+    let strictMatcherMode = matcherMode(
+      hasEstablishedMatch: hasEstablishedSpokenMatch,
+      lagWords: max(visibleWordRange.lowerBound - cursorIndex, 0)
+    )
+
+    if !hasEstablishedSpokenMatch,
+      let startupSeedMatch = Self.startupSeedMatch(
+        scriptWords: scriptWords,
+        recognizedWords: recognizedWords,
+        searchRange: searchRange
+      )
+    {
+      logStartupSeedMatch(
+        startupSeedMatch, recognizedWords: recognizedWords, searchRange: searchRange)
+      match = startupSeedMatch
+    } else if !hasEstablishedSpokenMatch {
+      logStartupSeedMissIfNeeded(recognizedWords: recognizedWords, searchRange: searchRange)
+    }
 
     for configuration in VoiceSyncMatching.matchConfigurations(
       hasEstablishedMatch: hasEstablishedSpokenMatch
     ) {
+      if match != nil { break }
       guard
         let window = VoiceSyncMatching.trailingRecognizedWindow(
           from: recognizedWords,
@@ -363,12 +390,26 @@ class VoiceSyncEngine: ObservableObject {
         spokenWindow: window.map(\.token),
         cursorIndex: searchRange.lowerBound,
         lookAhead: Self.recommendedStrictMatchLookAhead(
-          visibleWordCount: searchRange.count
+          visibleWordCount: searchRange.count,
+          minimumOverlap: configuration.windowLength,
+          mode: strictMatcherMode
         ),
         minimumOverlap: configuration.windowLength
       )
 
+      if let match,
+        !Self.isLowOverlapMatchPlausible(
+          matchStartIndex: match.startIndex,
+          searchStart: searchRange.lowerBound,
+          minimumOverlap: configuration.windowLength,
+          mode: strictMatcherMode
+        )
+      {
+        continue
+      }
+
       if match != nil {
+        logStrictMatch(match, configuration: configuration, mode: strictMatcherMode)
         break
       }
     }
@@ -377,6 +418,7 @@ class VoiceSyncEngine: ObservableObject {
 
     currentWordIndex = match.currentWordIndex
     highlightedWordRange = match.startIndex..<match.matchedWindowEnd
+    logScrollHighlightPublish(match)
 
     // Directly use the matched index. Visual smoothing is handled by UI.
     guard match.currentWordIndex > cursorIndex else { return }
@@ -393,7 +435,17 @@ class VoiceSyncEngine: ObservableObject {
 
   private func normalizedSearchRange() -> Range<Int> {
     guard !scriptWords.isEmpty else { return 0..<0 }
-    let lower = min(max(max(cursorIndex, visibleWordRange.lowerBound), 0), scriptWords.count)
+    let lower = min(
+      max(
+        Self.startupSearchLowerBound(
+          cursorIndex: cursorIndex,
+          visibleWordLowerBound: visibleWordRange.lowerBound,
+          hasEstablishedMatch: currentWordIndex != nil || highlightedWordRange != nil
+        ),
+        0
+      ),
+      scriptWords.count
+    )
     let upper = min(max(visibleWordRange.upperBound, lower), scriptWords.count)
     return lower..<upper
   }
@@ -408,8 +460,16 @@ class VoiceSyncEngine: ObservableObject {
       rhs: partialTokens
     )
 
+    let hasEstablishedVisualMatch = visualCurrentWordIndex != nil || !previousPartialTokens.isEmpty
     let visualSearchLowerBound = min(
-      max(max(visualCursorIndex, searchRange.lowerBound), 0),
+      max(
+        Self.startupSearchLowerBound(
+          cursorIndex: visualCursorIndex,
+          visibleWordLowerBound: searchRange.lowerBound,
+          hasEstablishedMatch: hasEstablishedVisualMatch
+        ),
+        0
+      ),
       scriptWords.count
     )
     let visualSearchUpperBound = min(
@@ -421,16 +481,47 @@ class VoiceSyncEngine: ObservableObject {
       return
     }
 
+    let visualMatcherMode = matcherMode(
+      hasEstablishedMatch: hasEstablishedVisualMatch,
+      lagWords: max(visibleWordRange.lowerBound - visualCursorIndex, 0)
+    )
+    let visibleLowerBound = searchRange.lowerBound
+
+    if visualMatcherMode == .startup,
+      let startupSeedMatch = Self.startupSeedMatch(
+        scriptWords: scriptWords,
+        recognizedWords: recognizedWords,
+        searchRange: visualSearchRange
+      )
+    {
+      visualCursorIndex = startupSeedMatch.currentWordIndex + 1
+      visualCurrentWordIndex = startupSeedMatch.currentWordIndex
+      visualHighlightedWordRange = 0..<startupSeedMatch.currentWordIndex
+      logVisualHighlightPublish(index: startupSeedMatch.currentWordIndex, source: "startupSeed")
+      previousPartialTokens = partialTokens
+      return
+    }
+
     var nextVisualCursor = visualCursorIndex
     var lastMatchedVisualIndex: Int?
 
     for token in partialTokens.dropFirst(stablePrefixCount) {
       let searchStart = min(
-        max(nextVisualCursor, visualSearchRange.lowerBound), visualSearchRange.upperBound)
+        max(
+          Self.startupSearchLowerBound(
+            cursorIndex: nextVisualCursor,
+            visibleWordLowerBound: visibleLowerBound,
+            hasEstablishedMatch: hasEstablishedVisualMatch
+          ),
+          visualSearchRange.lowerBound
+        ),
+        visualSearchRange.upperBound
+      )
       let remainingLookAhead = min(
         max(visualSearchRange.upperBound - searchStart, 0),
         Self.recommendedVisualMatchLookAhead(
-          visibleWordCount: visualSearchRange.count
+          visibleWordCount: visualSearchRange.count,
+          mode: visualMatcherMode
         )
       )
       guard remainingLookAhead > 0 else { continue }
@@ -444,6 +535,23 @@ class VoiceSyncEngine: ObservableObject {
         )
       else { continue }
 
+      guard
+        Self.isLowOverlapMatchPlausible(
+          matchStartIndex: match.startIndex,
+          searchStart: searchStart,
+          minimumOverlap: 1,
+          mode: visualMatcherMode
+        )
+      else { continue }
+
+      logVisualCandidateIfNeeded(
+        token: token,
+        searchStart: searchStart,
+        lookAhead: remainingLookAhead,
+        match: match,
+        mode: visualMatcherMode
+      )
+
       nextVisualCursor = match.currentWordIndex + 1
       lastMatchedVisualIndex = match.currentWordIndex
 
@@ -453,6 +561,7 @@ class VoiceSyncEngine: ObservableObject {
       if recognitionDrivesScroll {
         visualCurrentWordIndex = match.currentWordIndex
         visualHighlightedWordRange = 0..<match.currentWordIndex
+        logVisualHighlightPublish(index: match.currentWordIndex, source: "partialDelta")
       }
     }
 
@@ -460,6 +569,7 @@ class VoiceSyncEngine: ObservableObject {
     if !recognitionDrivesScroll, let lastMatchedVisualIndex {
       visualCurrentWordIndex = lastMatchedVisualIndex
       visualHighlightedWordRange = 0..<lastMatchedVisualIndex
+      logVisualHighlightPublish(index: lastMatchedVisualIndex, source: "highlightOnly")
     }
     previousPartialTokens = partialTokens
   }
@@ -629,12 +739,22 @@ class VoiceSyncEngine: ObservableObject {
 
   private func recordRecognitionDiagnostics(for result: SFSpeechRecognitionResult) {
     let transcript = result.bestTranscription.formattedString
+    diagnostics.recognitionPartialCount += 1
+    let partialWordCount = VoiceSyncMatching.recognizedWords(
+      from: result.bestTranscription.segments
+    ).count
+    if diagnostics.recognitionPartialCount <= 3 {
+      AiraLogger.shared.info(
+        "voiceSync.recognition partial seq=\(diagnostics.recognitionPartialCount) isFinal=\(result.isFinal) words=\(partialWordCount) chars=\(transcript.count) t=\(diagnosticElapsedText()) text=\"\(transcript.prefix(80))\"",
+        category: "voice"
+      )
+    }
     if !diagnostics.didLogFirstRecognitionPartial {
       diagnostics.didLogFirstRecognitionPartial = true
       firstRecognitionTimeoutTask?.cancel()
       firstRecognitionTimeoutTask = nil
       AiraLogger.shared.info(
-        "voiceSync.recognition firstPartial isFinal=\(result.isFinal) chars=\(transcript.count) text=\"\(transcript.prefix(80))\"",
+        "voiceSync.recognition firstPartial isFinal=\(result.isFinal) words=\(partialWordCount) chars=\(transcript.count) t=\(diagnosticElapsedText()) text=\"\(transcript.prefix(80))\"",
         category: "voice"
       )
     }
@@ -656,20 +776,228 @@ class VoiceSyncEngine: ObservableObject {
   }
 
   private struct DiagnosticsState {
+    var sessionStart: Date?
     var didLogFirstTap = false
     var didLogFirstNontrivialAudio = false
     var didLogFirstRecognitionPartial = false
     var didLogFirstRecognitionFinal = false
+    var didLogFirstStartupSeed = false
+    var didLogFirstStrictMatch = false
+    var didLogFirstVisualPublish = false
+    var didLogFirstScrollPublish = false
+    var didLogFirstSearchWindow = false
+    var didLogFirstStartupSeedMiss = false
+    var didLogFirstVisualCandidate = false
+    var recognitionPartialCount = 0
   }
 
-  static func recommendedStrictMatchLookAhead(visibleWordCount: Int) -> Int {
-    let normalizedVisibleCount = max(visibleWordCount, 0)
-    return min(max(normalizedVisibleCount / 2, 12), 36)
+  private func diagnosticElapsedText() -> String {
+    guard let sessionStart = diagnostics.sessionStart else { return "n/a" }
+    let elapsedMs = Date().timeIntervalSince(sessionStart) * 1000
+    return String(format: "%.2fms", elapsedMs)
   }
 
-  static func recommendedVisualMatchLookAhead(visibleWordCount: Int) -> Int {
+  private func logStartupSeedMatch(
+    _ match: VoiceSyncMatching.Match,
+    recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    searchRange: Range<Int>
+  ) {
+    guard !diagnostics.didLogFirstStartupSeed else { return }
+    diagnostics.didLogFirstStartupSeed = true
+    let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
+    AiraLogger.shared.info(
+      "voiceSync.startupSeed startIndex=\(match.startIndex) currentWordIndex=\(match.currentWordIndex) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      category: "voice"
+    )
+  }
+
+  private func logStartupSeedMissIfNeeded(
+    recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    searchRange: Range<Int>
+  ) {
+    guard !diagnostics.didLogFirstStartupSeedMiss else { return }
+    diagnostics.didLogFirstStartupSeedMiss = true
+    let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
+    AiraLogger.shared.info(
+      "voiceSync.startupSeed miss search=\(searchRange.lowerBound)..<\(searchRange.upperBound) cursor=\(cursorIndex) visualCursor=\(visualCursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      category: "voice"
+    )
+  }
+
+  private func logStrictMatch(
+    _ match: VoiceSyncMatching.Match?,
+    configuration: VoiceSyncMatching.MatchConfiguration,
+    mode: MatcherMode
+  ) {
+    guard !diagnostics.didLogFirstStrictMatch else { return }
+    guard let match else { return }
+    diagnostics.didLogFirstStrictMatch = true
+    AiraLogger.shared.info(
+      "voiceSync.strictMatch mode=\(mode.debugName) window=\(configuration.windowLength) startIndex=\(match.startIndex) overlap=\(match.overlap) currentWordIndex=\(match.currentWordIndex) t=\(diagnosticElapsedText())",
+      category: "voice"
+    )
+  }
+
+  private func logSearchWindowStateIfNeeded(
+    recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    searchRange: Range<Int>
+  ) {
+    guard diagnostics.recognitionPartialCount <= 3 else { return }
+    let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
+    AiraLogger.shared.info(
+      "voiceSync.searchWindow seq=\(diagnostics.recognitionPartialCount) cursor=\(cursorIndex) visualCursor=\(visualCursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      category: "voice"
+    )
+  }
+
+  private func logVisualCandidateIfNeeded(
+    token: String,
+    searchStart: Int,
+    lookAhead: Int,
+    match: VoiceSyncMatching.Match,
+    mode: MatcherMode
+  ) {
+    guard !diagnostics.didLogFirstVisualCandidate else { return }
+    diagnostics.didLogFirstVisualCandidate = true
+    AiraLogger.shared.info(
+      "voiceSync.visualCandidate token=\"\(token)\" mode=\(mode.debugName) searchStart=\(searchStart) lookAhead=\(lookAhead) matchStart=\(match.startIndex) currentWordIndex=\(match.currentWordIndex) t=\(diagnosticElapsedText())",
+      category: "voice"
+    )
+  }
+
+  private func logVisualHighlightPublish(index: Int, source: String) {
+    guard !diagnostics.didLogFirstVisualPublish else { return }
+    diagnostics.didLogFirstVisualPublish = true
+    AiraLogger.shared.info(
+      "voiceSync.publish visual index=\(index) source=\(source) t=\(diagnosticElapsedText())",
+      category: "voice"
+    )
+  }
+
+  private func logScrollHighlightPublish(_ match: VoiceSyncMatching.Match) {
+    guard !diagnostics.didLogFirstScrollPublish else { return }
+    diagnostics.didLogFirstScrollPublish = true
+    AiraLogger.shared.info(
+      "voiceSync.publish scroll startIndex=\(match.startIndex) currentWordIndex=\(match.currentWordIndex) t=\(diagnosticElapsedText())",
+      category: "voice"
+    )
+  }
+
+  private func matcherMode(hasEstablishedMatch: Bool, lagWords: Int) -> MatcherMode {
+    guard hasEstablishedMatch else { return .startup }
+    return lagWords >= 4 ? .catchUp(lagWords: lagWords) : .steady
+  }
+
+  static func startupSeedMatch(
+    scriptWords: [String],
+    recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    searchRange: Range<Int>
+  ) -> VoiceSyncMatching.Match? {
+    guard !recognizedWords.isEmpty else { return nil }
+
+    let startupLookAhead = Self.recommendedStrictMatchLookAhead(
+      visibleWordCount: searchRange.count,
+      minimumOverlap: 1,
+      mode: .startup
+    )
+
+    for recognizedWord in recognizedWords {
+      guard
+        let match = VoiceSyncMatching.findDetailedMatch(
+          scriptWords: scriptWords,
+          spokenWindow: [recognizedWord.token],
+          cursorIndex: searchRange.lowerBound,
+          lookAhead: startupLookAhead,
+          minimumOverlap: 1
+        )
+      else { continue }
+
+      return match
+    }
+
+    return nil
+  }
+
+  static func startupSearchLowerBound(
+    cursorIndex: Int,
+    visibleWordLowerBound: Int,
+    hasEstablishedMatch: Bool
+  ) -> Int {
+    let visibleLowerBound = max(visibleWordLowerBound, 0)
+    guard hasEstablishedMatch else { return visibleLowerBound }
+    return max(cursorIndex, visibleLowerBound)
+  }
+
+  static func recommendedStrictMatchLookAhead(
+    visibleWordCount: Int,
+    minimumOverlap: Int,
+    mode: MatcherMode
+  ) -> Int {
     let normalizedVisibleCount = max(visibleWordCount, 0)
-    return min(max(normalizedVisibleCount / 3, 8), 24)
+    switch mode {
+    case .startup:
+      switch minimumOverlap {
+      case 3...:
+        return min(max(normalizedVisibleCount / 3, 12), 18)
+      case 2:
+        return min(max(normalizedVisibleCount / 4, 10), 14)
+      default:
+        return min(max(normalizedVisibleCount / 4, 10), 12)
+      }
+    case .steady:
+      switch minimumOverlap {
+      case 3...:
+        return min(max(normalizedVisibleCount / 3, 10), 18)
+      case 2:
+        return min(max(normalizedVisibleCount / 5, 7), 12)
+      default:
+        return min(max(normalizedVisibleCount / 8, 4), 7)
+      }
+    case .catchUp(let lagWords):
+      let lagBonus = min(max(lagWords / 2, 0), 8)
+      switch minimumOverlap {
+      case 3...:
+        return min(max(normalizedVisibleCount / 2, 12) + lagBonus, 28)
+      case 2:
+        return min(max(normalizedVisibleCount / 4, 9) + (lagBonus / 2), 16)
+      default:
+        return min(max(normalizedVisibleCount / 6, 6) + (lagBonus / 2), 10)
+      }
+    }
+  }
+
+  static func recommendedVisualMatchLookAhead(
+    visibleWordCount: Int,
+    mode: MatcherMode
+  ) -> Int {
+    let normalizedVisibleCount = max(visibleWordCount, 0)
+    switch mode {
+    case .startup:
+      return min(max(normalizedVisibleCount / 4, 8), 10)
+    case .steady:
+      return min(max(normalizedVisibleCount / 8, 4), 7)
+    case .catchUp(let lagWords):
+      let lagBonus = min(max(lagWords / 2, 0), 8)
+      return min(max(normalizedVisibleCount / 5, 6) + (lagBonus / 2), 12)
+    }
+  }
+
+  static func isLowOverlapMatchPlausible(
+    matchStartIndex: Int,
+    searchStart: Int,
+    minimumOverlap: Int,
+    mode: MatcherMode
+  ) -> Bool {
+    guard minimumOverlap <= 1 else { return true }
+    let forwardDistance = max(matchStartIndex - searchStart, 0)
+    switch mode {
+    case .startup:
+      return true
+    case .steady:
+      return true
+    case .catchUp(let lagWords):
+      return forwardDistance <= min(max(lagWords + 4, 8), 12)
+    }
   }
 }
 
@@ -682,6 +1010,19 @@ extension VoiceSyncEngine.EngineState {
       "running"
     case .paused:
       "paused"
+    }
+  }
+}
+
+extension VoiceSyncEngine.MatcherMode {
+  fileprivate var debugName: String {
+    switch self {
+    case .startup:
+      "startup"
+    case .steady:
+      "steady"
+    case .catchUp(let lagWords):
+      "catchUp(\(lagWords))"
     }
   }
 }

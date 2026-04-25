@@ -346,6 +346,20 @@ struct KeyboardShortcutDisplayTests {
     #expect(view.intrinsicContentSize.height == baseHeight)
   }
 
+  @Test func overlayStyledTextCurrentWordUnderlineAttributesStaySeparateFromHistory() {
+    let underlineColor = NSColor.labelColor
+    let attributes = OverlayStyledTextContainerView.currentWordTemporaryAttributes(
+      underlineColor: underlineColor
+    )
+
+    #expect(
+      (attributes[.underlineStyle] as? Int)
+        == (NSUnderlineStyle.single.rawValue | NSUnderlineStyle.thick.rawValue)
+    )
+    #expect(attributes[.underlineColor] as? NSColor == underlineColor)
+    #expect(attributes[.foregroundColor] == nil)
+  }
+
   @Test func prompterHighlightWindowClampsVisualsToVisibleWords() {
     #expect(
       PrompterHighlightWindow.clampedHighlightRange(
@@ -1197,15 +1211,170 @@ struct VoiceSyncMatchingTests {
         == (NSUnderlineStyle.single.rawValue | NSUnderlineStyle.thick.rawValue))
   }
 
-  @Test @MainActor func voiceSyncRecommendedLookAheadExpandsForLargerVisibleWindows() {
-    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 4) == 12)
-    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 24) == 12)
-    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 60) == 30)
-    #expect(VoiceSyncEngine.recommendedStrictMatchLookAhead(visibleWordCount: 200) == 36)
+  @Test @MainActor func voiceSyncRecommendedLookAheadUsesStagedMatcherModes() {
+    #expect(
+      VoiceSyncEngine.recommendedStrictMatchLookAhead(
+        visibleWordCount: 60,
+        minimumOverlap: 1,
+        mode: .startup
+      ) == 12
+    )
+    #expect(
+      VoiceSyncEngine.recommendedStrictMatchLookAhead(
+        visibleWordCount: 60,
+        minimumOverlap: 3,
+        mode: .steady
+      ) == 18
+    )
+    #expect(
+      VoiceSyncEngine.recommendedStrictMatchLookAhead(
+        visibleWordCount: 60,
+        minimumOverlap: 2,
+        mode: .steady
+      ) == 12
+    )
+    #expect(
+      VoiceSyncEngine.recommendedStrictMatchLookAhead(
+        visibleWordCount: 60,
+        minimumOverlap: 1,
+        mode: .steady
+      ) == 7
+    )
+    #expect(
+      VoiceSyncEngine.recommendedStrictMatchLookAhead(
+        visibleWordCount: 60,
+        minimumOverlap: 1,
+        mode: .catchUp(lagWords: 10)
+      ) == 10
+    )
 
-    #expect(VoiceSyncEngine.recommendedVisualMatchLookAhead(visibleWordCount: 6) == 8)
-    #expect(VoiceSyncEngine.recommendedVisualMatchLookAhead(visibleWordCount: 30) == 10)
-    #expect(VoiceSyncEngine.recommendedVisualMatchLookAhead(visibleWordCount: 90) == 24)
+    #expect(
+      VoiceSyncEngine.recommendedVisualMatchLookAhead(
+        visibleWordCount: 30,
+        mode: .startup
+      ) == 8
+    )
+    #expect(
+      VoiceSyncEngine.recommendedVisualMatchLookAhead(
+        visibleWordCount: 30,
+        mode: .steady
+      ) == 4
+    )
+    #expect(
+      VoiceSyncEngine.recommendedVisualMatchLookAhead(
+        visibleWordCount: 90,
+        mode: .catchUp(lagWords: 10)
+      ) == 12
+    )
+  }
+
+  @Test @MainActor func voiceSyncLowOverlapPlausibilityRejectsImplausibleForwardJumps() {
+    #expect(
+      VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 6,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .startup
+      )
+    )
+    #expect(
+      VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 12,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .startup
+      )
+    )
+    #expect(
+      VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 10,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .catchUp(lagWords: 6)
+      )
+    )
+    #expect(
+      !VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 14,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .catchUp(lagWords: 4)
+      )
+    )
+    #expect(
+      VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 20,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .steady
+      )
+    )
+  }
+
+  @Test @MainActor func voiceSyncStartupLowOverlapStaysOpenUntilFirstLockThenTightens() {
+    #expect(
+      VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 14,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .startup
+      )
+    )
+    #expect(
+      !VoiceSyncEngine.isLowOverlapMatchPlausible(
+        matchStartIndex: 14,
+        searchStart: 0,
+        minimumOverlap: 1,
+        mode: .catchUp(lagWords: 4)
+      )
+    )
+    #expect(
+      VoiceSyncEngine.recommendedStrictMatchLookAhead(
+        visibleWordCount: 60,
+        minimumOverlap: 1,
+        mode: .startup
+      )
+        > VoiceSyncEngine.recommendedStrictMatchLookAhead(
+          visibleWordCount: 60,
+          minimumOverlap: 1,
+          mode: .steady
+        )
+    )
+  }
+
+  @Test @MainActor func voiceSyncStartupSeedUsesEarliestTokenFromFirstPartial() {
+    let scriptWords = ["hello", "world", "from", "aira"]
+    let recognizedWords = [
+      VoiceSyncMatching.RecognizedWord(token: "hello", confidence: 0.2),
+      VoiceSyncMatching.RecognizedWord(token: "world", confidence: 0.2),
+      VoiceSyncMatching.RecognizedWord(token: "from", confidence: 0.2),
+    ]
+
+    let match = VoiceSyncEngine.startupSeedMatch(
+      scriptWords: scriptWords,
+      recognizedWords: recognizedWords,
+      searchRange: 0..<scriptWords.count
+    )
+
+    #expect(match?.startIndex == 0)
+    #expect(match?.currentWordIndex == 0)
+  }
+
+  @Test @MainActor func voiceSyncStartupSearchAnchorsToVisibleRangeBeforeFirstLock() {
+    #expect(
+      VoiceSyncEngine.startupSearchLowerBound(
+        cursorIndex: 5,
+        visibleWordLowerBound: 0,
+        hasEstablishedMatch: false
+      ) == 0
+    )
+    #expect(
+      VoiceSyncEngine.startupSearchLowerBound(
+        cursorIndex: 5,
+        visibleWordLowerBound: 0,
+        hasEstablishedMatch: true
+      ) == 5
+    )
   }
 
   @Test func normalizeTokenStripsCommonPunctuation() {
