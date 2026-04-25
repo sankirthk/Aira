@@ -487,15 +487,15 @@ A free-moving overlay window launched explicitly from the Script Editor. A Satel
 
 ### Screen 7: Satellite Launch Chooser + Assignment Popup
 
-Shown from the Script Editor when the user opens the launch dropdown and selects `Cast with Satellite…`.
+Shown from the Script Editor when the user opens the launch dropdown and selects `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)`.
 
-**Trigger:** User clicks the chevron beside `Cast to Notch` and selects `Cast with Satellite…`.
+**Trigger:** User clicks the chevron beside `Cast to Notch` and selects `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)`.
 
 **Step 1: Launch dropdown**
 - Anchored to the chevron side of the split button
 - Options:
-  - `Cast to Notch`
-  - `Cast with Satellite…`
+  - `Cast with Satellite (Sync)`
+  - `Cast with Satellite (Manual)`
 
 **Step 2: Satellite launch panel**
 - Compact sheet or popup (~420pt wide) centered over the Script Editor
@@ -637,7 +637,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | `OverlayWindow` | Shared layout shell for Notch and Pill windows. No title bar, no chrome. Hosts script text, cue labels, countdown, and the appropriate audio indicator for that overlay style. | REQ-005, REQ-006, REQ-008, REQ-009 |
 | `ContentModeIndicator` | Small badge in top-left corner of Satellite windows. Indicates mirrored-current-script vs explicitly assigned-script launch state. Visible on hover only. | REQ-034 |
 | `CueAnnotation` | Small pill-shaped inline label in terracotta, rendered within script text flow. Distinct from plain text. | REQ-016, REQ-018 |
-| `SatelliteLaunchChooser` | Chevron dropdown attached to `Cast to Notch`, with `Cast to Notch` and `Cast with Satellite…` menu items. | REQ-034 |
+| `SatelliteLaunchChooser` | Chevron dropdown attached to `Cast to Notch`, with `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)` menu items. | REQ-034 |
 | `SatelliteAssignmentPopup` | Compact launch panel for per-Satellite assignment, allowing each enabled Satellite to choose `Mirror current script` or `Choose script…` before launch. | REQ-034 |
 | `OverlayAppearancePopover` | Per-window appearance override panel accessed via right-click. Live preview strip + controls for text color, background color, opacity, font, font size. | REQ-038 |
 | `UpdatePrompt` | Compact Aira-branded Sparkle update decision panel with version badge, calm copy, and `Update Now` / `Cancel` actions. | REQ-030 |
@@ -667,7 +667,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | Overlay Appearance Popover open | Per-window appearance controls visible | Live preview strip updates in real-time as controls change |
 | Sparkle update found (direct build only) | Small branded update prompt appears instead of the stock Sparkle alert | Version badge visible; `Update Now` / `Cancel` actions use Aira button styling |
 | Sparkle update ready to install (direct build only) | Same branded prompt style reused for install step | Primary action changes to `Install & Relaunch` |
-| `Cast with Satellite…` dropdown choice | Launch panel opens | One section per enabled Satellite appears |
+| `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)` dropdown choice | Launch panel opens | One section per enabled Satellite appears |
 | Assign script to Satellite | Launch panel | Script picker appears in that Satellite section |
 | Sidebar collapsed | Navigation icons only | Tooltip on hover reveals label |
 | Settings open | Content area dims slightly | Sheet slides up from bottom of Manager App window |

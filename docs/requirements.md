@@ -341,8 +341,10 @@ Acceptance criteria:
 - Pressing the primary `Cast to Notch` action is deterministic and never launches Satellite windows.
 - `Cast to Notch` does not start a presenter session when the resolved script body has zero non-whitespace characters; the app keeps the manager visible and shows a lightweight Aira-branded popup message instead of a native macOS alert.
 - Satellite/Pill windows never launch with scripts whose resolved body has zero non-whitespace characters, whether the Satellite mirrors the current script, uses a manually assigned script, or is launched through the Toggle Pill shortcut.
-- Opening the dropdown exposes `Cast to Notch` and `Cast with Satellite…`.
-- Choosing `Cast with Satellite…` opens a launch panel listing each enabled Satellite and its content assignment controls.
+- Opening the dropdown exposes only explicit Satellite launch intents:
+  - `Cast with Satellite (Sync)`
+  - `Cast with Satellite (Manual)`
+- Choosing either Satellite dropdown entry opens the Satellite launch flow for that selected intent, listing each enabled Satellite and its content assignment controls.
 - The editor launch flow owns session intent: what launches, and which script appears in each Satellite.
 
 #### REQ-015: Local Script Storage
@@ -645,7 +647,7 @@ The core presenter session dependency chain is:
 
 The core Satellite launch dependency chain is:
 
-- user opens launch dropdown → chooses `Cast with Satellite…` → per-Satellite assignment chosen in launch panel → valid Satellites launch alongside Notch
+- user opens launch dropdown → chooses `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)` → per-Satellite assignment chosen in launch panel → valid Satellites launch alongside Notch
 
 The core AI conversion dependency chain is:
 

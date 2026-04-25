@@ -240,8 +240,8 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 - [x] **T-047a** Product terminology docs pass: update normative requirements/design/spec language from `Pill` to `Satellite` for user-facing behavior, while explicitly allowing internal code symbols to stay on old naming until dedicated migration. — REQ-009, REQ-034, REQ-044. Completed in `requirements.md`, `design.md`, and `docs/superpowers/specs/2026-04-22-satellite-launch-and-settings-design.md`.
 - [x] **T-047b** Settings information architecture spec pass: remove Satellite enable toggle, launch mode, and script-assignment responsibilities from Settings docs; define Satellite tab as appearance/readability-only with a `Satellite count` selector plus slot switcher for `Satellite 1` / `Satellite 2`. — REQ-044. Completed in the Settings design/requirements docs; implementation still pending.
 - [x] **T-047c** Script Editor launch spec pass: document separate `Cast to Notch` and `Cast with Satellite` actions, with `Cast to Notch` guaranteed notch-only. — REQ-014, REQ-034. Completed in requirements/design/spec docs; implementation still pending.
-- [ ] **T-047d** Split launch dropdown UI: replace separate Satellite launch action with chevron dropdown beside `Cast to Notch`, with exactly two menu items — `Cast to Notch` and `Cast with Satellite…`. — REQ-034
-- [ ] **T-047e** Per-Satellite launch panel shell: when `Cast with Satellite…` is selected, present one panel with one section per enabled Satellite, and let each section choose `Mirror current script` or `Choose script…`. — REQ-034
+- [ ] **T-047d** Split launch dropdown UI: replace separate Satellite launch action with chevron dropdown beside `Cast to Notch`, with exactly two menu items — `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)`. — REQ-034
+- [ ] **T-047e** Per-Satellite launch panel shell: when `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)` is selected, present one panel with one section per enabled Satellite, and let each section choose `Mirror current script` or `Choose script…`. — REQ-034
 - [ ] **T-047f** Single-Satellite per-section wiring: support `Satellite 1` choosing either `Mirror current script` or `Choose script…`, launch notch plus that Satellite, and keep explicitly assigned Satellite independent from notch playhead. — REQ-009, REQ-034
 - [ ] **T-047g** Two-Satellite mixed-mode wiring: support `Satellite 1` and `Satellite 2` choosing independently between `Mirror current script` and `Choose script…` inside the same launch panel. — REQ-009, REQ-034
 - [ ] **T-047h** Partial-assignment handling: skip unassigned Satellite slots instead of silently mirroring them, and show lightweight launch feedback explaining what was skipped. — REQ-034
@@ -253,6 +253,9 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 - [x] **T-047l** Script Editor split-button affordance pass: implement visual/interaction polish for `[ Cast to Notch ] [ chevron ]` so notch remains default and Satellite launch remains explicit secondary intent. — REQ-014, REQ-021. Completed in worktree `feature/t-047l-split-button-polish` with app-styled compact split-button chrome, one chevron, outside-click dropdown dismissal, manual visual confirmation, and passing full suite verification.
 - [x] **T-047l.1** Script Editor split-button chrome pass: render the launch control as one connected compact Aira-styled split button with no duplicate label-side chevron; only the trailing chevron segment opens an app-styled menu panel, and outside clicks dismiss it. — REQ-014, REQ-021. Completed in worktree `feature/t-047l-split-button-polish` with focused Script Editor tests and passing full suite verification.
 - [ ] **T-047m** Regression/docs cleanup: update stale copy, test IDs, and manual QA labels from `Pill` setup language to `Satellite` launch language after behavior lands. — REQ-009, REQ-034, REQ-044
+
+
+## Misc 
 - [x] **T-048** Empty script cast guard: block `Cast to Notch` when the resolved script body has zero non-whitespace characters, keep the manager visible, and show a lightweight message instead of opening an empty presenter session. — REQ-014. Completed in worktree `feature/t-048-empty-script-cast-guard` with shared presenter-session eligibility logic and regression coverage.
 - [x] **T-048a** Empty script popup styling: replace the generic macOS launch-error alert for empty `Cast to Notch` attempts with the compact Aira-branded popup surface. — REQ-014. Added reusable `AiraMessagePopup` copy/view and wired launch-overlay errors through it.
 - [x] **T-048b** Empty Satellite/Pill guard: block or skip Satellite/Pill windows when their resolved script body has zero non-whitespace characters, including manual assigned scripts and the Toggle Pill shortcut. — REQ-014. Added `PillLaunchPolicy`, filtered presenter-session Pill launches, guarded direct Pill launch, and kept Toggle Pill from hiding the manager for empty scripts.
@@ -288,7 +291,7 @@ Recommended smallest implementation task:
 
 ## Deferred — Post-v1
 
-- [x] **T-047d.1** Script Editor split-button shell: add non-functional split launch control `[ Cast to Notch ] [ chevron ]` with dropdown items `Cast to Notch` and `Cast with Satellite…`. No Satellite launch behavior change yet. Completed in worktree `feature/t-047d-1-split-launch` with focused launch-menu logic test coverage.
+- [x] **T-047d.1** Script Editor split-button shell: add non-functional split launch control `[ Cast to Notch ] [ chevron ]` with dropdown items `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)`. No Satellite launch behavior change yet. Completed in worktree `feature/t-047d-1-split-launch` with focused launch-menu logic test coverage.
 
 These tasks are documented for future reference. Do not implement in v1.
 

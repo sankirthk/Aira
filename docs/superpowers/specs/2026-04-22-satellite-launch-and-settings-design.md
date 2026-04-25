@@ -89,14 +89,14 @@ Toolbar control:
 
 Rules:
 - `Cast to Notch` launches only notch
-- dropdown path `Cast with Satellite…` is required for any launch that includes Satellite
+- dropdown path `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)` is required for any launch that includes Satellite
 - launch involving Satellite is always explicit user choice
 
 ### 3. Launch Dropdown
 
 Chevron dropdown contains:
-- `Cast to Notch`
-- `Cast with Satellite…`
+- `Cast with Satellite (Sync)`
+- `Cast with Satellite (Manual)`
 
 Why:
 - primary action stays fastest/safest
@@ -105,7 +105,7 @@ Why:
 
 ### 4. Satellite Launch Panel
 
-Panel shown only after user selects `Cast with Satellite…`.
+Panel shown only after user selects `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)`.
 
 Contents:
 - current enabled Satellite count
@@ -160,7 +160,7 @@ Not in this pass:
 
 1. User edits script.
 2. User opens chevron dropdown.
-3. User selects `Cast with Satellite…`.
+3. User selects `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)`.
 4. App opens launch panel.
 5. User sets `Satellite 1 -> Mirror current script`.
 6. User sets `Satellite 2 -> Choose script…` and picks script.

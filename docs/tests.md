@@ -216,9 +216,9 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-001a-d | Session launch tracing records monotonic marks for manager preparation, overlay ordering, and deferred voice startup without depending on AppKit windows | `[x]` |
 | UT-001a-e | Zero-countdown sessions schedule Voice-Sync startup after the first overlay render turn instead of starting audio/speech synchronously during first `onAppear` | `[x]` |
 | IT-001a-b | Presenter launch keeps the manager visible until the primary notch overlay has been ordered front, then transitions to session presentation mode | `[ ]` |
-| IT-001b | Chevron dropdown `Cast with Satellite…` opens one panel for enabled Satellites, and Satellites set to `Mirror current script` launch against current editor script/shared playhead | `[ ]` |
+| IT-001b | Chevron dropdown `Cast with Satellite (Sync)` opens one panel for enabled Satellites, and Satellites set to `Mirror current script` launch against current editor script/shared playhead | `[ ]` |
 | IT-001b-a | If a Satellite slot has no custom appearance/readability config, mirrored Satellite initially uses Notch defaults instead of requiring separate Satellite setup | `[ ]` |
-| IT-001c | `Cast with Satellite…` presents one per-Satellite launch panel before launch and launches each `Choose script…` Satellite with its explicitly assigned script | `[ ]` |
+| IT-001c | `Cast with Satellite (Manual)` presents one per-Satellite launch panel before launch and launches each `Choose script…` Satellite with its explicitly assigned script | `[ ]` |
 | IT-001d | When one of two Satellite assignment slots is left empty, launch proceeds for valid targets only and shows lightweight feedback describing skipped Satellite count | `[ ]` |
 | IT-002 | Session end: calling `OverlayWindowController.endSession()` stops VoiceSyncEngine, releases AVAudioEngine, and closes all panels | `[ ]` |
 | IT-003 | Microphone released: after `endSession()`, AVAudioEngine is no longer running (isRunning == false) | `[ ]` |
