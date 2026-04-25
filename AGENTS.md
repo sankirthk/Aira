@@ -1,5 +1,10 @@
 # Aira — Codex Code Guide
 
+    ## Local Tooling Note
+
+    - In this repo, `qmd` must run with Node 22 from `nvm` or it can fail with a native-module ABI mismatch.
+      Use `PATH=/Users/sankirthkalahasti/.nvm/versions/node/v22.17.1/bin:$PATH qmd ...` when needed.
+
     ## What is Aira
 
     Aira is a native macOS teleprompter app for presenters, podcasters, and video creators. It displays a scrolling script in a
