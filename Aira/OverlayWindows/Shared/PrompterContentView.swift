@@ -536,7 +536,7 @@ struct PrompterContentView: View {
         category: "overlay-wheel"
       )
       playheadCoordinator.updateProgress(Double(updated))
-      voiceSync.nudgeScroll(to: updated)
+      voiceSync.nudgeScroll(to: updated, resetSpokenTracking: false)
       if ownsSynchronizedScroll {
         cinematicController.setInitialOffset(updated)
       }
@@ -563,7 +563,7 @@ struct PrompterContentView: View {
     if voiceSyncEnabled {
       let updated = min(max(CGFloat(playheadCoordinator.progress) + (delta * direction), 0), 1)
       playheadCoordinator.updateProgress(Double(updated))
-      voiceSync.nudgeScroll(to: updated)
+      voiceSync.nudgeScroll(to: updated, resetSpokenTracking: false)
       if ownsSynchronizedScroll {
         cinematicController.setInitialOffset(updated)
       }
