@@ -13,6 +13,31 @@ private final class ShortcutActionRecorder {
   }
 }
 
+@MainActor
+private final class FakeSpeechRecognitionBackend: SpeechRecognitionBackend {
+  var onRecognizedWord: (@MainActor (SpokenWordToken) -> Void)?
+  var onProcessingChanged: (@MainActor (Bool) -> Void)?
+  private(set) var prepareCallCount = 0
+  private(set) var acceptedAudio: [[Float]] = []
+  private(set) var stopCallCount = 0
+
+  func prepare() async throws {
+    prepareCallCount += 1
+  }
+
+  func acceptAudio(_ samples: [Float]) async {
+    acceptedAudio.append(samples)
+  }
+
+  func stop() {
+    stopCallCount += 1
+  }
+
+  func emit(_ word: String, timestamp: TimeInterval = 0, confidence: Float? = 0.9) {
+    onRecognizedWord?(SpokenWordToken(word: word, timestamp: timestamp, confidence: confidence))
+  }
+}
+
 struct KeyboardShortcutDisplayTests {
   @Test func formatsCommandShiftLetterShortcut() {
     let shortcut = KeyboardShortcutDisplay.string(
@@ -865,6 +890,24 @@ struct VoiceSyncMatchingTests {
 
   @Test @MainActor func voiceSyncInputTapBufferSizeUsesLowerLatency128Frames() {
     #expect(VoiceSyncEngine.inputTapBufferSize == 128)
+  }
+
+  @Test @MainActor func speechRecognitionBackendFakeCanEmitStableWordTokens() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    var emitted: [SpokenWordToken] = []
+    backend.onRecognizedWord = { token in
+      emitted.append(token)
+    }
+
+    try await backend.prepare()
+    await backend.acceptAudio([0.1, -0.1, 0.05])
+    backend.emit("hello", timestamp: 1.25, confidence: 0.8)
+    backend.stop()
+
+    #expect(backend.prepareCallCount == 1)
+    #expect(backend.acceptedAudio == [[0.1, -0.1, 0.05]])
+    #expect(emitted == [SpokenWordToken(word: "hello", timestamp: 1.25, confidence: 0.8)])
+    #expect(backend.stopCallCount == 1)
   }
 
   @Test func voiceSyncRecognitionPreprocessingSelectsStrongestChannel() throws {
