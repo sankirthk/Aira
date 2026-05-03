@@ -418,7 +418,7 @@ The full lifecycle of a presenter session:
 User clicks "Go Live" in Manager App
     → session picker: Notch / Pill / Both
     → if Pill or Both: PillSetupView sheet (content mode + script)
-    → OverlayWindowController.presentSession(script:, pillConfigs:)
+    → OverlayWindowController.presentSession(script:) / presentMirroredSatelliteSession(script:, satelliteCount:) / presentAssignedSatelliteSession(script:, satelliteSelections:)
     → NotchWindowController.present(script:, appearance:)   [creates NSPanel, sets sharingType = .none]
     → for each pill config: PillWindowController.present(config:) [creates NSPanel, sets sharingType = .none]
     → Stealth check: verify sharingType accepted → show warning banner if not
@@ -515,9 +515,9 @@ struct OverlayAppearance: Codable, Equatable {
 
 **Default appearance** is stored in `AppSettings.defaultOverlayAppearance` (a single `OverlayAppearance` value). The Settings > Overlays tab edits this value, with Overlay Font as the only typeface picker and Accessibility handling alignment, spacing, text shadow, and inner padding. `UserDefaults` stores it via `SettingsStore`. Both Notch and Pill windows are initialised from this single value — there are no separate per-pill appearance defaults.
 
-**Pill settings** are two additional fields on `AppSettings`:
-- `pillsEnabled: Bool = false` — gates whether pills can be launched. The "Go Live" pill flow checks this before presenting `PillSetupView`.
-- `maxPillCount: Int = 1` — 1 or 2. `OverlayWindowController.presentSession` caps the number of pill configs it accepts at this value.
+**Pill Window settings** currently persist two Pill Window-specific settings on `AppSettings`:
+- `maxPillCount: Int = 1` — 1 or 2. Explicit Pill Window launch surfaces derive how many mirrored/assignment slots participate from this count, while launch content choice stays session-scoped instead of persisting in Settings.
+- `satelliteAppearances: [OverlayAppearance?]` — optional per-slot appearance/readability defaults for `Pill Window 1` / `Pill Window 2`. A `nil` slot means "inherit `defaultOverlayAppearance`", so uncustomized Pill Windows launch with shared Notch defaults.
 
 **Per-window overrides:** Each `NSPanel` controller (`NotchWindowController`, `PillWindowController`) holds a `var currentAppearance: OverlayAppearance`. At creation, it is initialized from `AppSettings.defaultOverlayAppearance`. When the user changes it via `OverlayAppearancePopover`, only `currentAppearance` on that specific controller is updated — other windows are unaffected.
 
@@ -754,6 +754,14 @@ User clicks "Cast to Notch"
     → OverlayWindowController.presentSession(script:)
     → script body passed directly to PrompterContentView
     → VoiceSyncEngine.loadScript(text:) — tokenizes words for matching
+
+User triggers mirrored Pill Window launch from menu bar quick cast
+    → OverlayWindowController.presentMirroredSatelliteSession(script:, satelliteCount:)
+    → mirrored Pill Window selections are derived from count and shared playhead mode
+
+User triggers assigned Pill Window launch from Script Editor
+    → OverlayWindowController.presentAssignedSatelliteSession(script:, satelliteSelections:)
+    → explicit per-slot Mirror/Manual choices are preserved into launch planning
 
 User creates a Pill in Voice-Sync mode (REQ-034)
     → PillWindowController.present(mode: .voiceSync)

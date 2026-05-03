@@ -14,9 +14,9 @@ struct AiraMessagePopupContent: Equatable, Sendable {
   )
 
   static let emptySatelliteLaunchError = AiraMessagePopupContent(
-    eyebrow: "Satellite paused",
+    eyebrow: "Pill Window paused",
     title: "Add script text first",
-    message: "Choose a Satellite script with at least a few words before launching.",
+    message: "Choose a Pill Window script with at least a few words before launching.",
     primaryActionTitle: "OK"
   )
 
@@ -24,7 +24,7 @@ struct AiraMessagePopupContent: Equatable, Sendable {
     if message == "Add script text before casting to the notch." {
       return emptyScriptLaunchError
     }
-    if message == "Add script text before casting to Satellite." {
+    if message == "Add script text before casting to a Pill Window." {
       return emptySatelliteLaunchError
     }
 

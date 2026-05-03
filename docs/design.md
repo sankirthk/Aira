@@ -91,7 +91,7 @@ Base grid: 4pt. All spacing values are multiples of 4.
 |---|---|
 | Cards, inputs | 8pt |
 | Panels, sidebar | 16pt |
-| Pills, overlays, toggles | 24pt |
+| Pill windows, overlays, toggles | 24pt |
 | Circular elements | 50% |
 
 ### Elevation
@@ -123,7 +123,7 @@ The persistent main window. This is the user's home base for authoring and manag
 **Sidebar anatomy (top to bottom):**
 1. App wordmark ("Aira") and sidebar toggle button
 2. **New Script** action button — terracotta fill, Manrope Bold label
-3. **Go Live** action button — sage green fill, launches session picker (Notch / Satellite / Both)
+3. **Go Live** action button — sage green fill, launches session picker (Notch / Pill Window / Both)
 4. Navigation section divider
 5. Library navigation:
    - All Scripts
@@ -182,7 +182,7 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Starred toggle (top-right corner of card, filled/outline star)
 - Primary action: **Edit** button
 - Secondary action: **Cast to Notch** button
-- Satellite launch is intentionally excluded from library-card quick actions in this pass; Satellite-inclusive launch belongs to the Script Editor where per-Satellite content choice can be made explicitly.
+- Pill Window launch is intentionally excluded from library-card quick actions in this pass; Pill Window-inclusive launch belongs to the Script Editor where per-Pill Window content choice can be made explicitly.
 - Tertiary action: **Duplicate** button (creates a "Copy of [title]" script immediately; the copy opens in the editor for renaming)
 - Destructive action: **Delete** button (with confirmation)
 - Right-click context menu on card: Edit, Duplicate, Add to Collection…, Cast to Notch, Delete
@@ -237,16 +237,15 @@ The full-screen authoring experience within the content area.
 - The dropdown panel uses Aira manager-app styling rather than native macOS menu chrome.
 - Clicking outside the dropdown panel dismisses it.
 - Chevron dropdown menu entries:
-  - `Cast with Satellite (Sync)`
-  - `Cast with Satellite (Manual)`
-- Choosing either Satellite dropdown entry opens follow-up Satellite launch flow for that intent.
-- The launch panel shows one section per enabled Satellite.
-- Each Satellite section offers:
+  - `Cast with Pill Windows`
+- Choosing the Pill Windows dropdown entry opens follow-up Pill Window launch flow.
+- The launch panel shows one section per enabled Pill Window.
+- Each Pill Window section offers:
   - `Mirror current script`
-  - `Choose script…`
-- A Satellite set to `Mirror current script` launches with the current editor script mirrored from the notch session; mirrored Satellites inherit live Notch session behavior because they are following that shared session.
-- A Satellite set to `Choose script…` exposes script picker controls inside the same launch panel.
-- Missing assignment never falls back silently to mirrored content; the app launches only valid targets and shows lightweight feedback for skipped Satellite windows.
+  - `Manual`
+- A Pill Window set to `Mirror current script` launches with the current editor script mirrored from the notch session; mirrored Pill Windows inherit live Notch session behavior because they are following that shared session.
+- A Pill Window set to `Manual` exposes script picker controls inside the same launch panel.
+- Missing assignment never falls back silently to mirrored content; the app launches only valid targets and shows lightweight feedback for skipped Pill Windows.
 
 **Main text area:**
 - Full-height, no visible border — blends with content area background
@@ -297,13 +296,13 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - **Width** (Notch only): slider 400–800pt, default 600pt
 - **Height** (Notch only): notch body height slider
 
-#### Tab 3: Satellite
-- This tab is configuration-only. It defines how Satellite windows look and read; it does not decide what they show during a session.
-- If a Satellite slot has never been customized, it inherits the shared Notch appearance/readability defaults.
-- `Satellite count` segmented control: choose how many Satellite windows are enabled for the session launch flow (`1` or `2`).
-- Top switcher: `Satellite 1` / `Satellite 2`
-- The selected count controls how many Satellite assignment rows appear in the launch flow and how many mirrored Satellites launch from `Cast with Satellite`.
-- Live preview for selected Satellite slot
+#### Tab 3: Pill Windows
+- This tab is configuration-only. It defines how Pill Windows look and read; it does not decide what they show during a session.
+- If a Pill Window slot has never been customized, it inherits the shared Notch appearance/readability defaults.
+- `Pill Window count` segmented control: choose how many Pill Windows are enabled for the session launch flow (`1` or `2`).
+- Top switcher: `Pill Window 1` / `Pill Window 2`
+- The selected count controls how many Pill Window assignment rows appear in the launch flow and how many mirrored Pill Windows launch from `Cast with Pill Windows`.
+- Live preview for selected Pill Window slot
 - Appearance controls:
   - opacity
   - font size
@@ -317,7 +316,7 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
   - word spacing
   - text shadow
   - inner text padding
-- Supporting note: "Satellite content is chosen when launching from the Script Editor." — shown in `CrimsonText-Regular` 14pt, muted.
+- Supporting note: "Pill Window content is chosen when launching from the Script Editor." — shown in `CrimsonText-Regular` 14pt, muted.
 
 #### Tab 4: System
 - **Before your session**
@@ -350,12 +349,13 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - The Light Paper preview swatch remains the same warm cream preview in both light and dark mode; it does not inherit the app theme.
 - In the System tab, only section headings use `IndieFlower`; action labels, helper copy, field values, and control labels use `CrimsonText-Regular` for readability.
 - The Notch preview canvas background uses `#434343`.
+- In Settings, reset/default action buttons and custom color swatches use the full visible control surface as the hit target; interaction must not collapse to text-only or center-only regions.
 - In dark mode, script overview cards use `#3A3A3A` as the card surface.
 - The Cast to Notch button on script cards always uses the light text color.
 - The sidebar New Script action uses pure white label/icon color.
 - The script-card Cast button label/icon match the Edit button's white label color.
 - Script cards use a slightly larger gap between the outer solid border and inner dashed border than the previous implementation.
-- The Pill Windows enable control uses the same switch dimensions and sage-green tint treatment as the Voice Tracking toggle.
+- The Pill Windows count/config controls use the same switch dimensions and sage-green tint treatment as the Voice Tracking toggle.
 - The Sidebar Scripts navigation item uses a document icon with scribble lines, distinct from the New Script plus icon.
 - While Voice-Sync is active, the currently spoken word or short matched phrase is highlighted inline inside the visible reading window using high-contrast emphasis that remains legible against the current overlay appearance.
 
@@ -440,33 +440,33 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 
 ---
 
-### Screen 6: Satellite Window (Floating Overlay)
+### Screen 6: Pill Window (Floating Overlay)
 
-A free-moving overlay window launched explicitly from the Script Editor. A Satellite can either mirror current script/playhead state from the Notch session or show an explicitly assigned script that scrolls independently.
+A free-moving overlay window launched explicitly from the Script Editor. A Pill Window can either mirror current script/playhead state from the Notch session or show an explicitly assigned script that scrolls independently.
 
 **Window characteristics:**
 - Free-moving `NSPanel`, draggable by clicking and dragging anywhere on the window body
 - Resizable by dragging edges or corners
 - Can be moved to secondary monitors
-- Multiple Satellite Windows can be open simultaneously
-- Each Satellite Window operates independently — closing one does not affect others or the Notch Window
+- Multiple Pill Windows can be open simultaneously
+- Each Pill Window operates independently — closing one does not affect others or the Notch Window
 - Same stealth behavior as Notch Window: excluded from screen capture by default, with the same user-controlled System-tab toggle available when overlays should remain shareable
 - All four corners are rounded (16pt radius)
 - Hover chrome appears in top-right while hovered: `Swap`, `Fullscreen`, `Close`
 
 **Launch relationship indicator:**
-- A small badge in the top-left corner of the Satellite (3pt inside the window edge)
+- A small badge in the top-left corner of the Pill Window (3pt inside the window edge)
 - Mirror-current-script: small sage green sync indicator
 - Explicit-script assignment: small hand-pointer icon in Warm Tan
 - The badge is only visible on hover; it disappears after 1.5 seconds to avoid distracting during a session
 
 **Content anatomy:**
-- **Mirror current script**: identical to Notch Window session content — same script, same scroll position, same pause state, same VisualBeam. Multiple mirrored Satellites all track the same content progress.
-- If no per-Satellite appearance/readability override exists yet, a mirrored Satellite initially renders with the same appearance/readability defaults as the Notch.
+- **Mirror current script**: identical to Notch Window session content — same script, same scroll position, same pause state, same VisualBeam. Multiple mirrored Pill Windows all track the same content progress.
+- If no per-Pill Window appearance/readability override exists yet, a mirrored Pill Window initially renders with the same appearance/readability defaults as the Notch.
 - **Explicit script assignment**: assigned script text + cue annotations + a VisualBeam (still reflects microphone level for awareness, but does not drive scroll). Scroll is driven by user input only.
-- A Satellite never opens with an empty or whitespace-only resolved script. Empty assigned Satellites are skipped, and a standalone Satellite/Pill shortcut attempt shows an Aira-branded popup instead of opening an empty window.
-- Mouse wheel / trackpad scrolling on an explicitly assigned Satellite remains available whenever the pointer is over the Satellite.
-- The global **Pause on mouse hover** setting does not apply to Satellite windows. Hovering a Satellite must never pause motion or block wheel / trackpad scrolling.
+- A Pill Window never opens with an empty or whitespace-only resolved script. Empty assigned Pill Windows are skipped, and a standalone Pill Window shortcut attempt shows an Aira-branded popup instead of opening an empty window.
+- Mouse wheel / trackpad scrolling on an explicitly assigned Pill Window remains available whenever the pointer is over the Pill Window.
+- The global **Pause on mouse hover** setting does not apply to Pill Windows. Hovering a Pill Window must never pause motion or block wheel / trackpad scrolling.
 
 **Assigned script label (Manual mode only):**
 - A small Inter label at the bottom edge of the pill showing the script title in Slate Blue
@@ -485,34 +485,36 @@ A free-moving overlay window launched explicitly from the Script Editor. A Satel
 
 ---
 
-### Screen 7: Satellite Launch Chooser + Assignment Popup
+### Screen 7: Pill Window Launch Chooser + Assignment Popup
+Shown from the Script Editor when the user opens the launch dropdown and selects `Cast with Pill Windows`.
 
-Shown from the Script Editor when the user opens the launch dropdown and selects `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)`.
-
-**Trigger:** User clicks the chevron beside `Cast to Notch` and selects `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)`.
+**Trigger:** User clicks the chevron beside `Cast to Notch` and selects `Cast with Pill Windows`.
 
 **Step 1: Launch dropdown**
 - Anchored to the chevron side of the split button
 - Options:
-  - `Cast with Satellite (Sync)`
-  - `Cast with Satellite (Manual)`
+  - `Cast with Pill Windows`
 
-**Step 2: Satellite launch panel**
+**Step 2: Pill Window launch panel**
 - Compact sheet or popup (~420pt wide) centered over the Script Editor
-- One section per enabled Satellite
+- One section per enabled Pill Window
 - Each section includes:
-  - slot label (`Satellite 1`, `Satellite 2`)
-  - `Mirror current script` choice
-  - `Choose script…` choice
-  - when `Choose script…` selected: script picker listing library scripts sorted by last edited, with search affordance if list is long
+  - slot label (`Pill Window 1`, `Pill Window 2`)
+  - `Mirror current script` full-width choice button
+  - `Manual` full-width choice button
+  - when `Manual` selected: collapsed script dropdown showing the selected script title or `Select script`
+  - opening the script dropdown lists library scripts sorted by last edited, with search affordance if list is long
+  - selecting a script immediately collapses the dropdown
+- Manual script dropdown rows are full-width click targets, not text-only targets.
+- All interactive controls in the panel use a pointing-hand cursor across the whole visible hit target on hover.
 - Primary action: `Launch`
 - Secondary action: `Cancel`
 
-**Multiple Satellites:**
-- If one Satellite configured, one row shown.
-- If two Satellites configured, two independent sections shown.
-- One Satellite may mirror while the other uses an explicitly chosen script.
-- Unassigned or empty `Choose script…` sections are skipped rather than silently mirrored; launch feedback explains skipped Satellites.
+**Multiple Pill Windows:**
+- If one Pill Window is configured, one row is shown.
+- If two Pill Windows are configured, two independent sections are shown.
+- One Pill Window may mirror while the other uses an explicitly chosen script.
+- Unassigned or empty `Manual` sections are skipped rather than silently mirrored; launch feedback explains skipped Pill Windows.
 
 ---
 
@@ -635,10 +637,10 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | `VisualBeam` | Row of 8 animated `RoundedRectangle` bars, sage green, heights driven by microphone RMS level. Used by Pill overlays and any embedded-audio indicator surfaces. | REQ-004 |
 | `CountdownOverlay` | Full-overlay with large Manrope numeral centered. Background and text colors respect the window's current `OverlayAppearance`. Fades between counts. Skipped if duration is 0. | REQ-012, REQ-013 |
 | `OverlayWindow` | Shared layout shell for Notch and Pill windows. No title bar, no chrome. Hosts script text, cue labels, countdown, and the appropriate audio indicator for that overlay style. | REQ-005, REQ-006, REQ-008, REQ-009 |
-| `ContentModeIndicator` | Small badge in top-left corner of Satellite windows. Indicates mirrored-current-script vs explicitly assigned-script launch state. Visible on hover only. | REQ-034 |
+| `ContentModeIndicator` | Small badge in top-left corner of Pill Windows. Indicates mirrored-current-script vs explicitly assigned-script launch state. Visible on hover only. | REQ-034 |
 | `CueAnnotation` | Small pill-shaped inline label in terracotta, rendered within script text flow. Distinct from plain text. | REQ-016, REQ-018 |
-| `SatelliteLaunchChooser` | Chevron dropdown attached to `Cast to Notch`, with `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)` menu items. | REQ-034 |
-| `SatelliteAssignmentPopup` | Compact launch panel for per-Satellite assignment, allowing each enabled Satellite to choose `Mirror current script` or `Choose script…` before launch. | REQ-034 |
+| `PillWindowLaunchChooser` | Chevron dropdown attached to `Cast to Notch`, with one `Cast with Pill Windows` menu item. | REQ-034 |
+| `PillWindowAssignmentPopup` | Compact launch panel for per-Pill Window assignment, allowing each enabled Pill Window to choose `Mirror current script` or `Manual` before launch. | REQ-034 |
 | `OverlayAppearancePopover` | Per-window appearance override panel accessed via right-click. Live preview strip + controls for text color, background color, opacity, font, font size. | REQ-038 |
 | `UpdatePrompt` | Compact Aira-branded Sparkle update decision panel with version badge, calm copy, and `Update Now` / `Cancel` actions. | REQ-030 |
 | `EmptyState` | Illustration + Indie Flower headline + Crimson Text sub-copy + terracotta CTA. Used in Document Library when no scripts exist. | — |
@@ -667,8 +669,8 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | Overlay Appearance Popover open | Per-window appearance controls visible | Live preview strip updates in real-time as controls change |
 | Sparkle update found (direct build only) | Small branded update prompt appears instead of the stock Sparkle alert | Version badge visible; `Update Now` / `Cancel` actions use Aira button styling |
 | Sparkle update ready to install (direct build only) | Same branded prompt style reused for install step | Primary action changes to `Install & Relaunch` |
-| `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)` dropdown choice | Launch panel opens | One section per enabled Satellite appears |
-| Assign script to Satellite | Launch panel | Script picker appears in that Satellite section |
+| `Cast with Pill Windows` dropdown choice | Launch panel opens | One section per enabled Pill Window appears |
+| Assign script to Pill Window | Launch panel | Script picker appears in that Pill Window section |
 | Sidebar collapsed | Navigation icons only | Tooltip on hover reveals label |
 | Settings open | Content area dims slightly | Sheet slides up from bottom of Manager App window |
 | Collection nav item clicked | Document Library filters to show only scripts in that collection | Header bar shows collection name; "All Scripts" link to clear filter |
@@ -703,7 +705,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-006 Prompter Visible To User | Overlay windows fully visible on local display at all times |
 | REQ-007 Stealth Failure Notification | Yellow warning banner in Manager App before session starts |
 | REQ-008 Notch Window | Screen 5 — fixed-position NSPanel beneath notch |
-| REQ-009 Satellite Windows | Screen 6 — free-moving, resizable, multi-instance NSPanel |
+| REQ-009 Pill Windows | Screen 6 — free-moving, resizable, multi-instance NSPanel |
 | REQ-010 Hover-To-Pause | Interaction state on all overlay windows |
 | REQ-011 Resume After Hover | Cursor exit resumes from paused offset |
 | REQ-012 Pre-Session Countdown | CountdownOverlay component in all overlay windows |
@@ -728,7 +730,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-031 Closed-Source Policy | No UI impact — repository concern |
 | REQ-032 Live Answer Mode | Experimental — opt-in toggle in Settings (labeled "Experimental"), disabled by default |
 | REQ-033 Experimental Transparency | Plain-language disclosure modal shown before first activation of Live Answer Mode |
-| REQ-034 Satellite Launch Assignment | Screen 3 split launch control; Screen 7 SatelliteLaunchChooser + SatelliteAssignmentPopup |
+| REQ-034 Pill Window Launch Assignment | Screen 3 split launch control; Screen 7 PillWindowLaunchChooser + PillWindowAssignmentPopup |
 | REQ-035 Script Import | ImportDropZone in Document Library; "Import Script" button in header bar |
 | REQ-036 Script Duplication | Duplicate button on ScriptCard; right-click context menu |
 | REQ-037 Collections | CollectionRow in sidebar; CollectionTag on script cards; Add to Collection popover |

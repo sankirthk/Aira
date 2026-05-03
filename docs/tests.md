@@ -61,8 +61,11 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-018 | `save(_:)` followed by `load()` returns the same AppSettings | `[x]` |
 | UT-019 | AppSettings Codable round-trip | `[x]` |
 | UT-019a | `textColor` mutation via `SettingsStore` persists across store re-initialization — REQ-023 | `[x]` |
-| UT-019b | `pillsEnabled` and `maxPillCount` mutations persist across store re-initialization — REQ-044 | `[x]` |
+| UT-019b | `maxPillCount` mutations persist across store re-initialization and continue driving Pill Window launch count after store re-initialization — REQ-044 | `[x]` |
+| UT-019b-b | Per-slot Pill Window appearance/readability overrides resolve to shared Notch defaults when unset and persist independently once customized — REQ-044 | `[x]` |
+| UT-019b-c | Pill Window settings slot editing writes overrides only for the selected slot and preserves inherited fallback for untouched slots — REQ-044 | `[x]` |
 | UT-019c | `AppSettings.maxPillCount` is normalized to the supported `1...2` range during init and decode — REQ-044 | `[x]` |
+| UT-019b-a | Legacy persisted Pill Window enable/content-assignment fields are ignored on decode and stripped on the next save so Settings keeps count plus appearance/readability defaults only — REQ-044 | `[x]` |
 | UT-019k | `AppState.settings.autoScrollWPM` mutations normalize in memory before persistence so the live value and reloaded store value remain identical — REQ-023 | `[x]` |
 | UT-019l | `MenuBarStatusItemController` status item uses template rendering so macOS can switch between black and white automatically — REQ-021 | `[x]` |
 | UT-019m | Menu bar quick-access popover dismisses only for outside interactions, not clicks inside the popover or on the status-item button itself — REQ-021 | `[x]` |
@@ -103,7 +106,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026l | Voice-Sync accepts early single-word partials during startup highlighting so the first spoken-word visual feedback does not wait for a long/high-confidence suffix window | `[x]` |
 | UT-026m | Voice-Sync search/look-ahead window expands enough to let spoken-word highlighting catch up at higher `pt/s` overlay speeds instead of lagging behind the visible reading position | `[x]` |
 | UT-026n | Current spoken-word startup styling keeps the overlay text color and uses a stronger underline so the first highlighted word stays visible without introducing background/theme contrast problems | `[x]` |
-| UT-026o | Session scroll keyboard nudges are consumed only by synchronized primary overlays; Manual Satellites ignore the shared shortcut event and follow only their own local scroll state | `[x]` |
+| UT-026o | Session scroll keyboard nudges are consumed only by synchronized primary overlays; Manual Pill Windows ignore the shared shortcut event and follow only their own local scroll state | `[x]` |
 | UT-026p | Voice-Sync highlight matching keeps single-word / visual catch-up searches within a bounded forward window so repeated/common words do not jump the highlight to unrelated later script positions | `[x]` |
 | UT-026q | Voice-Sync uses staged startup/steady/catch-up matcher plans so initial highlighting and high `pt/s` recovery widen only when anchored, while low-overlap matches still reject implausible forward jumps | `[x]` |
 | UT-026r | Voice-Sync startup mode accepts the first low-overlap spoken-word highlight inside its startup window, then immediately tightens back to steady/catch-up plausibility rules after the first lock | `[x]` |
@@ -152,6 +155,8 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030i | `AppSettings.pauseOnHoverEnabled` defaults to `true` and persists through store load/save plus `AppState` mutations | `[x]` |
 | UT-030j | Settings > The Notch default preview copy fits within the default notch preview bounds instead of overlapping the notch cutout | `[x]` |
 | UT-030k | Settings > The Notch preview auto-expands from saved notch dimensions when readability settings need more room, and the sample still fits within the resolved preview bounds | `[x]` |
+| UT-030l | Settings reset buttons and custom color swatches use the full visible hit target instead of text-only or center-only interaction regions | `[x]` |
+| UT-030l-a | Settings custom color swatches use a full-tile AppKit panel-opening control rather than an inner color-well hit region, so clicking anywhere in the tile opens the system color picker | `[w]` |
 | UT-030g | `NotchWidthConfiguration.defaultWidth` stays at the intended narrower default and `NotchWindowController` uses persisted width/height values instead of falling back to the old hardcoded launch width | `[w]` |
 | UT-030t | Manual pill windows keep overlay wheel deduplication enabled so direct/local/global overlay delivery still collapses duplicates instead of bypassing the shared working wheel path | `[x]` |
 
@@ -209,23 +214,32 @@ Repository automation is tracked here when it materially gates shipping quality.
 | ID | Test | Status |
 |---|---|---|
 | IT-001 | Cast to Notch: calling `OverlayWindowController.presentSession(script:appearance:countdownDuration:)` results in a visible NSPanel and VoiceSyncEngine in `.running` state after countdown | `[x]` |
-| IT-001a | `Cast to Notch` launches notch only and does not create any Satellite windows even when Preferences `Satellite count` is 1 or 2 | `[ ]` |
+| IT-001a | `Cast to Notch` launches notch only and does not create any Pill Windows even when Preferences `Pill Window count` is 1 or 2 | `[ ]` |
 | IT-001a-a | `Cast to Notch` rejects scripts whose body has zero non-whitespace characters and leaves the manager visible instead of starting a presenter session | `[x]` |
 | UT-001a-b | Empty-script launch errors use Aira-branded message popup copy instead of generic macOS alert content | `[x]` |
-| UT-001a-c | Pill/Satellite launch planning skips any mirror or manual script whose resolved body has zero non-whitespace characters | `[x]` |
+| UT-001a-c | Notch/Pill Window launch planning skips any mirror or manual script whose resolved body has zero non-whitespace characters | `[x]` |
 | UT-001a-d | Session launch tracing records monotonic marks for manager preparation, overlay ordering, and deferred voice startup without depending on AppKit windows | `[x]` |
 | UT-001a-e | Zero-countdown sessions schedule Voice-Sync startup after the first overlay render turn instead of starting audio/speech synchronously during first `onAppear` | `[x]` |
 | IT-001a-b | Presenter launch keeps the manager visible until the primary notch overlay has been ordered front, then transitions to session presentation mode | `[ ]` |
-| IT-001b | Chevron dropdown `Cast with Satellite (Sync)` opens one panel for enabled Satellites, and Satellites set to `Mirror current script` launch against current editor script/shared playhead | `[ ]` |
-| IT-001b-a | If a Satellite slot has no custom appearance/readability config, mirrored Satellite initially uses Notch defaults instead of requiring separate Satellite setup | `[ ]` |
-| IT-001c | `Cast with Satellite (Manual)` presents one per-Satellite launch panel before launch and launches each `Choose script…` Satellite with its explicitly assigned script | `[ ]` |
-| IT-001d | When one of two Satellite assignment slots is left empty, launch proceeds for valid targets only and shows lightweight feedback describing skipped Satellite count | `[ ]` |
+| IT-001b | Chevron dropdown `Cast with Pill Windows` opens one panel for enabled Pill Windows, and Pill Windows set to `Mirror current script` launch against current editor script/shared playhead | `[x]` |
+| UT-001b-a | Pill Window launch panel maps `Mirror current script` to a synced Pill Window mode and `Manual` with a selected script to an independent manual Pill Window mode | `[x]` |
+| UT-001b-b | Pill Window launch panel manual script dropdown displays `Select script` before assignment and the chosen script title after assignment | `[x]` |
+| UT-001b-c | Pill Window launch panel manual script dropdown rows are specified as full-width pointing-hand targets | `[x]` |
+| UT-001b-d | Pill Window launch panel Mirror/Manual choice buttons are specified as full-width pointing-hand targets | `[x]` |
+| UT-001b-e | Pill Window launch panel blocks the editor's I-beam cursor ownership while visible, so hover-tracked pointing-hand targets on Mirror/Manual buttons and the Manual script dropdown can win consistently | `[x]` |
+| UT-001b-f | Two-Pill Window launch preserves independent per-slot `Mirror current script` / `Manual` choices in slot order, and the launch policy resolves them into matching mixed-mode launch plans | `[x]` |
+| UT-001b-g | Pill Window launch request skips Manual sections whose selected script is missing or has zero words, while keeping valid Mirror/Manual sections in slot order | `[x]` |
+| UT-001b-h | Pill Window launch panel shows inline skipped-Pill Window feedback when one or more requested sections do not have a valid launchable script | `[x]` |
+| UT-001b-i | Overlay launch APIs model notch-only, mirrored-Pill Window, and assigned-Pill Window intent explicitly instead of overloading one shared `satelliteSelections` argument | `[x]` |
+| IT-001b-a | If a Pill Window slot has no custom appearance/readability config, mirrored Pill Window initially uses Notch defaults instead of requiring separate Pill Window setup | `[ ]` |
+| IT-001c | `Cast with Pill Windows` presents one per-Pill Window launch panel before launch and launches each `Manual` Pill Window with its explicitly assigned script | `[ ]` |
+| IT-001d | When one of two Pill Window assignment slots is left empty, launch proceeds for valid targets only and shows lightweight feedback describing skipped Pill Window count | `[ ]` |
 | IT-002 | Session end: calling `OverlayWindowController.endSession()` stops VoiceSyncEngine, releases AVAudioEngine, and closes all panels | `[ ]` |
 | IT-003 | Microphone released: after `endSession()`, AVAudioEngine is no longer running (isRunning == false) | `[ ]` |
 | IT-003a | Voice-Sync still receives microphone input and advances the shared playhead while the user is on an active call/meeting app using the microphone, without requiring them to leave the call first | `[x]` |
 | IT-016 | Voice-Sync off session: launching an overlay with a saved non-zero `autoScrollWPM` starts manual auto-scroll in the presented prompter instead of leaving the script stationary | `[ ]` |
 | IT-017 | Session scroll shortcuts: configured up/down shortcuts nudge the active session scroll position regardless of which window has keyboard focus | `[ ]` |
-| IT-017a | Session scroll shortcuts do not move Manual-mode Satellite windows; only the notch and synced overlays sharing the active playhead respond to shortcut nudges | `[x]` |
+| IT-017a | Session scroll shortcuts do not move Manual-mode Pill Windows; only the notch and synced overlays sharing the active playhead respond to shortcut nudges | `[x]` |
 | IT-018 | System-tab manual scroll speed control persists a changed WPM value through `AppState` and `SettingsStore` | `[x]` |
 | IT-019 | Mouse wheel / trackpad scrolling on an active overlay updates the rendered script position without disabling Voice-Sync state, including hover-paused and button-paused notch sessions plus Manual-mode pill windows regardless of the hover-pause setting | `[ ]` |
 | IT-020 | Voice-Sync partial transcription updates advance the cursor in capped forward steps instead of jumping directly to the end of a long spoken window | `[ ]` |
@@ -328,17 +342,17 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-013 | Settings modal top chrome uses themed surface color in both light and dark mode, App Theme swatches are centered, and System-tab control labels/body copy use Crimson Text while section headings stay Indie Flower | `[ ]` |
 | MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, top chrome uses `#484C49`, Light Paper preview stays cream, notch preview uses `#434343`, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |
 | MT-048 | The Notch readability controls update the live preview correctly: Overlay Font remains the only font picker, Accessibility alignment includes `Justified`, spacing controls visibly change line/letter/word density, text shadow improves contrast, and padding changes the inset inside the overlay | `[ ]` |
-| MT-049 | Preferences tabs read `Appearance`, `The Notch`, `Pills`, and `System`; pill setup lives only in `Pills`, and `System` sections appear in Before / During / Controls / Privacy order | `[ ]` |
-| MT-049a | Preferences tabs read `Appearance`, `The Notch`, `Satellite`, and `System`; Satellite tab contains `Satellite count` plus appearance/readability controls only and no content-mode or script-assignment controls | `[ ]` |
-| MT-049a-a | Leaving Satellite tab untouched still allows Satellite launch; unconfigured Satellite renders with Notch defaults until user customizes that slot | `[ ]` |
-| MT-049b | Script Editor shows one connected split launch control `[ Cast to Notch ] [ chevron ]` using app-styled chrome rather than native macOS menu UI, without a duplicate label-side chevron, and primary `Cast to Notch` never launches Satellite unexpectedly | `[x]` |
-| MT-049c | Chevron dropdown offers `Cast with Satellite (Sync)` and `Cast with Satellite (Manual)` with restored compact toolbar button height, app-styled dropdown chrome, and outside-click dismissal | `[x]` |
+| MT-049 | Preferences tabs read `Appearance`, `The Notch`, `Pill Windows`, and `System`; Pill Window setup lives only in `Pill Windows`, and `System` sections appear in Before / During / Controls / Privacy order | `[ ]` |
+| MT-049a | Preferences tabs read `Appearance`, `The Notch`, `Pill Windows`, and `System`; the `Pill Windows` tab contains `Pill Window count` plus appearance/readability controls only, with no separate enable toggle and no content-mode or script-assignment controls | `[ ]` |
+| MT-049a-a | Leaving the `Pill Windows` tab untouched still allows Pill Window launch; an unconfigured Pill Window renders with Notch defaults until the user customizes that slot | `[ ]` |
+| MT-049b | Script Editor shows one connected split launch control `[ Cast to Notch ] [ chevron ]` using app-styled chrome rather than native macOS menu UI, without a duplicate label-side chevron, and primary `Cast to Notch` never launches Pill Windows unexpectedly | `[x]` |
+| MT-049c | Chevron dropdown offers one `Cast with Pill Windows` item with restored compact toolbar button height, app-styled dropdown chrome, and outside-click dismissal | `[x]` |
 | MT-049d | Cold launch the app, immediately cast a non-empty script to Notch, and confirm the manager remains responsive with no macOS beachball while the first presenter window appears within the accepted latency budget; repeat with Voice-Sync on and off to isolate speech startup cost | `[ ]` |
 | MT-049e | Zero-countdown Notch launch produces no AppKit/SwiftUI recursive-layout warnings such as reentrant `NSHostingView` layout or `layoutSubtreeIfNeeded`-during-layout messages in the debug log | `[ ]` |
 | MT-049f | During an active call/meeting app and during screen recording with microphone enabled, Voice-Sync diagnostics clearly show whether failure occurs at engine start, first tap buffer, first non-trivial audio level, or first speech-recognition partial/final result | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
-| MT-016 | Pill Windows toggle matches the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
+| MT-016 | Pill Window controls match the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
 | MT-017 | Voice Tracking enable row uses the same plain System panel styling as adjacent controls, without a separate highlighted background container | `[ ]` |
 | MT-018 | During Voice-Sync, the scroll progression no longer skips ahead by large blocks of unseen script, and the overlay does not visibly emphasize the currently spoken word | `[ ]` |
 | MT-019 | Entering selection mode from Select All does not visually shift existing script cards or the selection bar; card actions simply disappear and the trash button appears without layout jitter | `[ ]` |
@@ -377,7 +391,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-039 | Long scripts do not introduce visible overlay lag or jitter from per-frame text rebuild cost while manual scrolling is active | `[ ]` |
 | MT-040 | Script Editor cue panel uses shared theme tokens for its sage background and cream foreground so it stays visually consistent across theme audits | `[ ]` |
 | MT-041 | Collections sidebar warning uses the shared warm token instead of an inline hex color, and collections navigation still behaves correctly after the manager window accessor main-actor cleanup | `[ ]` |
-| MT-042 | Settings chunk-1 audit: tabs read `Appearance`, `The Notch`, and `System`; Light Paper/Dark Studio swatches use shared theme tokens; and Pill Windows still behaves correctly after `maxPillCount` normalization | `[ ]` |
+| MT-042 | Settings chunk-1 audit: tabs read `Appearance`, `The Notch`, `Pill Windows`, and `System`; Light Paper/Dark Studio swatches use shared theme tokens; and Pill Windows still behave correctly after `maxPillCount` normalization | `[ ]` |
 | MT-048 | `Check for Updates…` is enabled only when the built app bundle resolves a valid Sparkle feed URL and public key | `[ ]` |
 | MT-049 | The branded update prompt appears for both `update found` and `ready to install` states, and `Cancel` cleanly dismisses without starting installation | `[ ]` |
 | MT-050 | A tagged release publishes DMG, ZIP, and `appcast.xml`, and an installed build successfully discovers the update from `https://raw.githubusercontent.com/sankirthk/aira-releases/main/appcast.xml` | `[ ]` |

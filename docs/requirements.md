@@ -58,13 +58,13 @@ The visible overlay that displays the current script and scrolls in response to 
 
 The primary prompter window anchored beneath the camera notch region of the display.
 
-### Satellite Window
+### Pill Window
 
-A free-moving, resizable overlay window that the user can place anywhere on screen. `Satellite` is product language; implementation may still use historical `Pill` naming until code migration is complete.
+A free-moving, resizable overlay window that the user can place anywhere on screen. `Pill Window` is product language; implementation may still use historical `Satellite` naming until code migration is complete.
 
-### Satellite Launch Mode
+### Pill Window Launch Mode
 
-The content relationship chosen when launching a Satellite from the Script Editor. A Satellite in **Mirror Current Script** mode follows the same script and shared scroll position as the active Notch session. A Satellite in **Choose Script** mode displays an explicitly selected script for that Satellite window and scrolls independently by hand.
+The content relationship chosen when launching a Pill Window from the Script Editor. A Pill Window in **Mirror Current Script** mode follows the same script and shared scroll position as the active Notch session. A Pill Window in **Choose Script** mode displays an explicitly selected script for that Pill Window and scrolls independently by hand.
 
 ### Voice-Sync
 
@@ -116,7 +116,7 @@ These rules apply across all of Aira's behavior.
 - No network connection is required to use any core authoring or presenter feature. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). App Store builds do not use Sparkle and therefore must not perform updater traffic. If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
 - Stealth Mode must never fail silently; if the prompter cannot be excluded from screen-share output, the user must be informed before a presenter session begins.
 - Voice-Sync and manual scroll are always independently available; one must never depend on the other being active.
-- The Notch Window and Satellite Windows are independent surfaces; the failure or closure of one must not affect the other.
+- The Notch Window and Pill Windows are independent surfaces; the failure or closure of one must not affect the other.
 - Experimental features must be clearly labeled as such and must require an explicit opt-in before activating.
 
 ## Requirements
@@ -176,7 +176,7 @@ The app shall exclude all Aira windows from the screen-share stream visible to r
 Acceptance criteria:
 - When the user shares their screen in Zoom, Microsoft Teams, or equivalent tools, no Aira window appears in the shared output.
 - Screen-share exclusion is enabled by default, but the user may explicitly disable it in Preferences > System when they want overlays to appear in screenshots, recordings, or video calls.
-- This behavior applies to both the Notch Window and all Satellite Windows.
+- This behavior applies to both the Notch Window and all Pill Windows.
 - Stealth Mode is active by default; the user does not need to enable it manually.
 
 #### REQ-006: Prompter Visible To User During Share
@@ -204,37 +204,37 @@ The app shall provide a primary prompter window anchored beneath the camera notc
 Acceptance criteria:
 - The Notch Window is positioned at the top of the **built-in laptop display**, beneath the camera, regardless of how many external monitors are connected or which screen is currently "main".
 - The Notch Window cannot be freely repositioned; its anchor is fixed to the notch region of the built-in display.
-- The Notch Window is available regardless of whether a Satellite Window exists.
+- The Notch Window is available regardless of whether a Pill Window exists.
 - The runtime notch cutout must align to the physical notch width with **no horizontal side overscan**; both cutout side-overscan clamps remain `0.0` so the overlay edge sits flush against the notch walls.
 - The readable script area begins below the notch cutout so active text does not disappear behind the notch while being read.
 - Script motion in the Notch Window follows a teleprompter-style lower reading zone, with lines entering from lower in the overlay and progressing upward.
 
-#### REQ-009: Satellite Windows
+#### REQ-009: Pill Windows
 
-The app shall support up to two free-moving, resizable Satellite Windows that the user can place anywhere on screen.
-
-Acceptance criteria:
-- Satellite Windows are user-invoked launch surfaces; they never appear as an implicit side effect of `Cast to Notch`.
-- The user can launch 1 or 2 Satellite Windows during a presenter session, based on the Satellite count selected in Settings.
-- Satellite Windows are independently positionable and resizable.
-- A Satellite Window can be placed on a secondary monitor.
-- Closing a Satellite Window does not affect the Notch Window or any other Satellite Window.
-- A Satellite launched in Mirror Current Script mode follows the active Notch session script and shared playhead state.
-- A Satellite launched in Choose Script mode displays an explicitly assigned script and scrolls independently of the Notch session.
-
-#### REQ-044: Satellite Window Settings
-
-The app shall expose Satellite appearance configuration in Settings without storing or hiding session content choices there.
+The app shall support up to two free-moving, resizable Pill Windows that the user can place anywhere on screen.
 
 Acceptance criteria:
-- Settings includes a `Satellite` tab with a count selector for how many Satellite windows are enabled during a Satellite launch (`1` or `2`) plus a switcher for `Satellite 1` and `Satellite 2`.
+- Pill Windows are user-invoked launch surfaces; they never appear as an implicit side effect of `Cast to Notch`.
+- The user can launch 1 or 2 Pill Windows during a presenter session, based on the Pill Window count selected in Settings.
+- Pill Windows are independently positionable and resizable.
+- A Pill Window can be placed on a secondary monitor.
+- Closing a Pill Window does not affect the Notch Window or any other Pill Window.
+- A Pill Window launched in Mirror Current Script mode follows the active Notch session script and shared playhead state.
+- A Pill Window launched in Choose Script mode displays an explicitly assigned script and scrolls independently of the Notch session.
+
+#### REQ-044: Pill Window Settings
+
+The app shall expose Pill Window appearance configuration in Settings without storing or hiding session content choices there.
+
+Acceptance criteria:
+- Settings includes a `Pill Windows` tab with a count selector for how many Pill Windows are enabled during a Pill Window launch (`1` or `2`) plus a switcher for `Pill Window 1` and `Pill Window 2`.
 - Settings does not contain a separate enable toggle.
-- Settings stores Satellite appearance/readability defaults only: opacity, font size, font, background color, text color, and text accessibility controls.
+- Settings stores Pill Window appearance/readability defaults only: opacity, font size, font, background color, text color, and text accessibility controls.
 - Settings does not store Mirror-vs-Choose-script launch behavior.
-- Settings does not store remembered per-Satellite script assignments.
-- If the user has not customized a Satellite slot, that Satellite inherits the shared Notch appearance/readability defaults.
-- Satellite Windows inherit their initial appearance from their configured Satellite defaults; per-window customisation may still happen in-session via the overlay popover (REQ-038).
-- The selected Satellite count and appearance/readability values persist across app restarts.
+- Settings does not store remembered per-Pill Window script assignments.
+- If the user has not customized a Pill Window slot, that Pill Window inherits the shared Notch appearance/readability defaults.
+- Pill Windows inherit their initial appearance from their configured Pill Window defaults; per-window customisation may still happen in-session via the overlay popover (REQ-038).
+- The selected Pill Window count and appearance/readability values persist across app restarts.
 
 #### REQ-010: Hover-To-Pause
 
@@ -245,7 +245,7 @@ Acceptance criteria:
 - Spoken-word highlighting is controlled by a persisted Settings toggle in the System > During Session section, defaults to disabled, and affects only visual emphasis rather than scroll behavior.
 - Moving the cursor over the Notch Window pauses scroll for as long as the cursor remains over it.
 - The script position is preserved during the hover pause.
-- Satellite Windows ignore the hover-pause setting so floating overlays remain manually scrollable while hovered.
+- Pill Windows ignore the hover-pause setting so floating overlays remain manually scrollable while hovered.
 
 #### REQ-011: Resume After Hover Pause
 
@@ -255,9 +255,9 @@ Acceptance criteria:
 - Scroll resumes from the exact position at which it paused.
 - No user action other than moving the cursor away is required to resume.
 
-#### REQ-034: Satellite Launch Assignment
+#### REQ-034: Pill Window Launch Assignment
 
-A Satellite launch from the Script Editor shall require explicit per-Satellite content choice at launch time.
+A Pill Window launch from the Script Editor shall require explicit per-Pill Window content choice at launch time.
 
 Acceptance criteria:
 - `Cast to Notch` always launches only the Notch Window with current editor script.
@@ -267,20 +267,19 @@ Acceptance criteria:
 - The primary label does not repeat a decorative chevron beside the text; only the trailing chevron segment is the interactive dropdown trigger.
 - Clicking outside an open dropdown dismisses it.
 - The dropdown includes:
-  - `Cast with Satellite (Sync)`
-  - `Cast with Satellite (Manual)`
-- Choosing either Satellite dropdown entry opens Satellite launch flow for that selected intent.
-- The launch panel shows one section per enabled Satellite.
-- Each Satellite section offers exactly two choices:
+  - `Cast with Pill Windows`
+- Choosing the Pill Windows dropdown entry opens Pill Window launch flow.
+- The launch panel shows one section per enabled Pill Window.
+- Each Pill Window section offers exactly two choices:
   - `Mirror current script`
-  - `Choose script…`
-- A Satellite set to `Mirror current script` launches against the current editor script and shared session playhead state.
-- A mirrored Satellite also inherits the active Notch session behavior because it is following the same live session.
-- A Satellite set to `Choose script…` requires explicit script assignment inside the launch panel before launch.
-- When two Satellite windows are enabled, choice is made independently per Satellite inside the same launch panel.
-- A Satellite launched with an explicitly chosen script scrolls independently of the Notch Window; Voice-Sync does not advance that Satellite.
-- If a required manual assignment is missing, that Satellite must not launch silently as mirrored content.
-- The app may launch valid targets and skip invalid Satellite launches, but it must surface lightweight feedback explaining what was skipped.
+  - `Manual`
+- A Pill Window set to `Mirror current script` launches against the current editor script and shared session playhead state.
+- A mirrored Pill Window also inherits the active Notch session behavior because it is following the same live session.
+- A Pill Window set to `Manual` requires explicit script assignment inside the launch panel before launch.
+- When two Pill Windows are enabled, choice is made independently per Pill Window inside the same launch panel.
+- A Pill Window launched with an explicitly chosen script scrolls independently of the Notch Window; Voice-Sync does not advance that Pill Window.
+- If a required manual assignment is missing, that Pill Window must not launch silently as mirrored content.
+- The app may launch valid targets and skip invalid Pill Window launches, but it must surface lightweight feedback explaining what was skipped.
 
 ### Countdown Timer
 
@@ -319,7 +318,7 @@ Acceptance criteria:
 - Bulk delete is not available while a presenter session is active.
 - The Select All control and bulk delete control are hidden while a presenter session is active.
 - Individual script deletion is not available while a presenter session is active.
-- A script currently used by the active notch or any active Satellite session cannot be opened for editing until that session ends.
+- A script currently used by the active notch or any active Pill Window session cannot be opened for editing until that session ends.
 
 #### REQ-014: Built-In Script Editor
 
@@ -338,14 +337,13 @@ Acceptance criteria:
 - Multiple scripts can be stored and named independently.
 - Auto-save on dismiss: when the user navigates away from the editor without explicitly saving, the app saves automatically if the draft has meaningful content (as defined above). No dirty indicator is shown — auto-save makes it unnecessary.
 - The editor toolbar exposes a split-button launch control: primary `Cast to Notch` plus adjacent dropdown.
-- Pressing the primary `Cast to Notch` action is deterministic and never launches Satellite windows.
+- Pressing the primary `Cast to Notch` action is deterministic and never launches Pill Windows.
 - `Cast to Notch` does not start a presenter session when the resolved script body has zero non-whitespace characters; the app keeps the manager visible and shows a lightweight Aira-branded popup message instead of a native macOS alert.
-- Satellite/Pill windows never launch with scripts whose resolved body has zero non-whitespace characters, whether the Satellite mirrors the current script, uses a manually assigned script, or is launched through the Toggle Pill shortcut.
-- Opening the dropdown exposes only explicit Satellite launch intents:
-  - `Cast with Satellite (Sync)`
-  - `Cast with Satellite (Manual)`
-- Choosing either Satellite dropdown entry opens the Satellite launch flow for that selected intent, listing each enabled Satellite and its content assignment controls.
-- The editor launch flow owns session intent: what launches, and which script appears in each Satellite.
+- Pill Windows never launch with scripts whose resolved body has zero non-whitespace characters, whether the Pill Window mirrors the current script, uses a manually assigned script, or is launched through the Toggle Pill Window shortcut.
+- Opening the dropdown exposes only explicit Pill Window launch intents:
+  - `Cast with Pill Windows`
+- Choosing the Pill Windows dropdown entry opens the Pill Window launch flow, listing each enabled Pill Window and its content assignment controls.
+- The editor launch flow owns session intent: what launches, and which script appears in each Pill Window.
 
 #### REQ-015: Local Script Storage
 
@@ -645,9 +643,8 @@ The core presenter session dependency chain is:
 
 - script authored or imported → loaded into prompter → countdown completes → Voice-Sync begins → scrolling advances with speech
 
-The core Satellite launch dependency chain is:
-
-- user opens launch dropdown → chooses `Cast with Satellite (Sync)` or `Cast with Satellite (Manual)` → per-Satellite assignment chosen in launch panel → valid Satellites launch alongside Notch
+The core Pill Window launch dependency chain is:
+- user opens launch dropdown → chooses `Cast with Pill Windows` → per-Pill Window assignment chosen in launch panel → valid Pill Windows launch alongside Notch
 
 The core AI conversion dependency chain is:
 

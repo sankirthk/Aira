@@ -3,8 +3,38 @@ import Combine
 import Foundation
 
 struct PillLaunchPlan {
+  let slotIndex: Int
   let mode: PillContentMode
   let script: Script
+}
+
+struct SatelliteLaunchSelection: Equatable {
+  let slotIndex: Int
+  let mode: PillContentMode
+}
+
+enum OverlaySessionLaunchIntent: Equatable {
+  case notchOnly
+  case mirroredSatellites(count: Int)
+  case assignedSatellites([SatelliteLaunchSelection])
+
+  var satelliteSelections: [SatelliteLaunchSelection] {
+    switch self {
+    case .notchOnly:
+      return []
+    case .mirroredSatellites(let count):
+      guard count > 0 else { return [] }
+      return (1...count).map { slotIndex in
+        SatelliteLaunchSelection(slotIndex: slotIndex, mode: .voiceSync)
+      }
+    case .assignedSatellites(let selections):
+      return selections
+    }
+  }
+
+  var allowsNotchUndock: Bool {
+    satelliteSelections.isEmpty
+  }
 }
 
 enum PillLaunchPolicy {
@@ -13,14 +43,26 @@ enum PillLaunchPolicy {
   }
 
   static func resolvedLaunchPlans(
-    for modes: [PillContentMode],
+    for selections: [SatelliteLaunchSelection],
     fallbackScript: Script,
     loadScript: (UUID) -> Script?
   ) -> [PillLaunchPlan] {
-    modes.compactMap { mode in
-      let script = resolvedScript(for: mode, fallbackScript: fallbackScript, loadScript: loadScript)
+    selections.compactMap { selection in
+      guard
+        let script = resolvedScript(
+          for: selection.mode,
+          fallbackScript: fallbackScript,
+          loadScript: loadScript
+        )
+      else {
+        return nil
+      }
       guard canLaunchPill(with: script) else { return nil }
-      return PillLaunchPlan(mode: mode, script: script)
+      return PillLaunchPlan(
+        slotIndex: selection.slotIndex,
+        mode: selection.mode,
+        script: script
+      )
     }
   }
 
@@ -28,12 +70,12 @@ enum PillLaunchPolicy {
     for mode: PillContentMode,
     fallbackScript: Script,
     loadScript: (UUID) -> Script?
-  ) -> Script {
+  ) -> Script? {
     guard case .manual(let scriptID) = mode else {
       return fallbackScript
     }
 
-    return loadScript(scriptID) ?? fallbackScript
+    return loadScript(scriptID)
   }
 }
 
@@ -105,9 +147,67 @@ class OverlayWindowController {
     script: Script, appearance: OverlayAppearance,
     countdownDuration: Int, voiceSyncEnabled: Bool = true,
     autoScrollWPM: Double = 0,
-    voiceSyncMode: VoiceSyncMode = .voice,
-    pillModes: [PillContentMode] = []
+    voiceSyncMode: VoiceSyncMode = .voice
   ) {
+    presentSession(
+      script: script,
+      appearance: appearance,
+      countdownDuration: countdownDuration,
+      voiceSyncEnabled: voiceSyncEnabled,
+      autoScrollWPM: autoScrollWPM,
+      voiceSyncMode: voiceSyncMode,
+      launchIntent: .notchOnly
+    )
+  }
+
+  func presentMirroredSatelliteSession(
+    script: Script,
+    appearance: OverlayAppearance,
+    countdownDuration: Int,
+    satelliteCount: Int,
+    voiceSyncEnabled: Bool = true,
+    autoScrollWPM: Double = 0,
+    voiceSyncMode: VoiceSyncMode = .voice
+  ) {
+    presentSession(
+      script: script,
+      appearance: appearance,
+      countdownDuration: countdownDuration,
+      voiceSyncEnabled: voiceSyncEnabled,
+      autoScrollWPM: autoScrollWPM,
+      voiceSyncMode: voiceSyncMode,
+      launchIntent: .mirroredSatellites(count: satelliteCount)
+    )
+  }
+
+  func presentAssignedSatelliteSession(
+    script: Script, appearance: OverlayAppearance,
+    countdownDuration: Int, voiceSyncEnabled: Bool = true,
+    autoScrollWPM: Double = 0,
+    voiceSyncMode: VoiceSyncMode = .voice,
+    satelliteSelections: [SatelliteLaunchSelection]
+  ) {
+    presentSession(
+      script: script,
+      appearance: appearance,
+      countdownDuration: countdownDuration,
+      voiceSyncEnabled: voiceSyncEnabled,
+      autoScrollWPM: autoScrollWPM,
+      voiceSyncMode: voiceSyncMode,
+      launchIntent: .assignedSatellites(satelliteSelections)
+    )
+  }
+
+  private func presentSession(
+    script: Script,
+    appearance: OverlayAppearance,
+    countdownDuration: Int,
+    voiceSyncEnabled: Bool,
+    autoScrollWPM: Double,
+    voiceSyncMode: VoiceSyncMode,
+    launchIntent: OverlaySessionLaunchIntent
+  ) {
+    let satelliteSelections = launchIntent.satelliteSelections
     let launchTrace = SessionLaunchTrace(label: "presentSession")
     launchTrace.mark("presentSession.begin")
     endSession()
@@ -115,7 +215,7 @@ class OverlayWindowController {
     prepareSharedSession(script: script)
     launchTrace.mark("presentSession.afterPrepareSharedSession")
     AiraLogger.shared.info(
-      "Started session scriptId=\(script.id.uuidString) pills=\(pillModes.count)",
+      "Started session scriptId=\(script.id.uuidString) pills=\(satelliteSelections.count)",
       category: "session")
 
     // Launch notch window
@@ -136,7 +236,7 @@ class OverlayWindowController {
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync, audioMonitor: audioMonitor,
       launchTrace: launchTrace,
-      canUndock: pillModes.isEmpty,
+      canUndock: launchIntent.allowsNotchUndock,
       onEndSession: { [weak self] in
         self?.endSession()
       })
@@ -144,7 +244,7 @@ class OverlayWindowController {
 
     // Launch any pill windows
     let pillLaunchPlans = PillLaunchPolicy.resolvedLaunchPlans(
-      for: pillModes,
+      for: satelliteSelections,
       fallbackScript: script,
       loadScript: { [weak self] scriptID in
         self?.loadScript(id: scriptID)
@@ -152,8 +252,12 @@ class OverlayWindowController {
     )
 
     for plan in pillLaunchPlans {
+      let resolvedAppearance =
+        appState?.settings.effectiveSatelliteAppearance(
+          forSlot: plan.slotIndex, fallback: appearance)
+        ?? appearance
       addPill(
-        mode: plan.mode, script: plan.script, appearance: appearance,
+        mode: plan.mode, script: plan.script, appearance: resolvedAppearance,
         countdownDuration: countdownDuration, voiceSyncEnabled: voiceSyncEnabled,
         spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
         pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,

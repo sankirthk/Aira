@@ -53,12 +53,22 @@ struct SettingsStoreTests {
       managerTypography: .large,
       liveAnswerDisclosureAccepted: true,
       hasCompletedInitialPermissionPrompt: true,
-      pillsEnabled: true,
       maxPillCount: 2,
-      pillConfigurations: [
-        PillWindowConfiguration(contentMode: .voiceSync),
-        PillWindowConfiguration(
-          contentMode: .manual(scriptId: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!)),
+      satelliteAppearances: [
+        nil,
+        OverlayAppearance(
+          textColor: "#F6E7C8",
+          backgroundColor: "#456789",
+          opacity: 0.71,
+          fontName: "Inter-Regular",
+          fontSize: 21,
+          textAlignment: .center,
+          lineSpacing: 9,
+          letterSpacing: 0.6,
+          wordSpacing: 2,
+          textShadow: 1.5,
+          contentPadding: 19
+        ),
       ],
       shortcutToggleNotch: "⌘1",
       shortcutTogglePill: "⌘2",
@@ -100,12 +110,22 @@ struct SettingsStoreTests {
       managerTypography: .small,
       liveAnswerDisclosureAccepted: false,
       hasCompletedInitialPermissionPrompt: true,
-      pillsEnabled: true,
       maxPillCount: 2,
-      pillConfigurations: [
-        PillWindowConfiguration(
-          contentMode: .manual(scriptId: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!)),
-        PillWindowConfiguration(contentMode: .voiceSync),
+      satelliteAppearances: [
+        OverlayAppearance(
+          textColor: "#111111",
+          backgroundColor: "#778899",
+          opacity: 0.81,
+          fontName: "Manrope-Bold",
+          fontSize: 19,
+          textAlignment: .center,
+          lineSpacing: 8,
+          letterSpacing: 0.5,
+          wordSpacing: 1.5,
+          textShadow: 1,
+          contentPadding: 18
+        ),
+        nil,
       ],
       shortcutToggleNotch: "⌘⇧N",
       shortcutTogglePill: "⌘⇧P",
@@ -215,7 +235,7 @@ struct SettingsStoreTests {
   }
 
   // UT-019b — REQ-044
-  @Test func pillSettingsPersistAcrossStoreReinitialization() throws {
+  @Test func maxPillCountPersistsAcrossStoreReinitializationAndDrivesMirrorLaunchCount() throws {
     let suiteName = "AiraSettingsTests.pills.\(UUID().uuidString)"
     let defaults1 = UserDefaults(suiteName: suiteName)!
     defaults1.removePersistentDomain(forName: suiteName)
@@ -223,7 +243,6 @@ struct SettingsStoreTests {
 
     let store1 = SettingsStore(defaults: defaults1)
     var settings = try store1.load()
-    settings.pillsEnabled = true
     settings.maxPillCount = 2
     try store1.save(settings)
 
@@ -231,9 +250,87 @@ struct SettingsStoreTests {
     let store2 = SettingsStore(defaults: defaults2)
     let loaded = try store2.load()
 
-    #expect(loaded.pillsEnabled)
     #expect(loaded.maxPillCount == 2)
-    #expect(loaded.pillConfigurations.count == PillWindowConfiguration.maximumSlotCount)
+    #expect(loaded.mirroredSatelliteModes == [.voiceSync, .voiceSync])
+  }
+
+  @Test func satelliteAppearanceOverridesFallbackToNotchDefaultsAndPersistIndependently()
+    throws
+  {
+    let suiteName = "AiraSettingsTests.satelliteAppearance.\(UUID().uuidString)"
+    let defaults1 = UserDefaults(suiteName: suiteName)!
+    defaults1.removePersistentDomain(forName: suiteName)
+    defer { defaults1.removePersistentDomain(forName: suiteName) }
+
+    let store1 = SettingsStore(defaults: defaults1)
+    var settings = try store1.load()
+    settings.defaultOverlayAppearance = OverlayAppearance(
+      textColor: "#FAF3E8",
+      backgroundColor: "#234567",
+      opacity: 0.67,
+      fontName: "CrimsonText-Regular",
+      fontSize: 22,
+      textAlignment: .justified,
+      lineSpacing: 11,
+      letterSpacing: 0.4,
+      wordSpacing: 3,
+      textShadow: 2,
+      contentPadding: 21
+    )
+    settings.setSatelliteAppearanceOverride(
+      OverlayAppearance(
+        textColor: "#101010",
+        backgroundColor: "#C0A080",
+        opacity: 0.83,
+        fontName: "OpenDyslexic-Regular",
+        fontSize: 18,
+        textAlignment: .center,
+        lineSpacing: 7,
+        letterSpacing: 0.8,
+        wordSpacing: 2,
+        textShadow: 1.5,
+        contentPadding: 17
+      ),
+      forSlot: 2
+    )
+    try store1.save(settings)
+
+    let defaults2 = UserDefaults(suiteName: suiteName)!
+    let store2 = SettingsStore(defaults: defaults2)
+    let loaded = try store2.load()
+
+    #expect(loaded.satelliteAppearanceOverride(forSlot: 1) == nil)
+    #expect(loaded.effectiveSatelliteAppearance(forSlot: 1) == loaded.defaultOverlayAppearance)
+    #expect(loaded.satelliteAppearanceOverride(forSlot: 2) != nil)
+    #expect(
+      loaded.effectiveSatelliteAppearance(forSlot: 2)
+        == loaded.satelliteAppearanceOverride(
+          forSlot: 2)
+    )
+  }
+
+  @Test func satelliteAppearanceOverrideMutationTouchesOnlySelectedSlot() {
+    var settings = AppSettings()
+    let slotTwoAppearance = OverlayAppearance(
+      textColor: "#202020",
+      backgroundColor: "#7A8B9C",
+      opacity: 0.79,
+      fontName: "Inter-Regular",
+      fontSize: 19,
+      textAlignment: .center,
+      lineSpacing: 8,
+      letterSpacing: 0.5,
+      wordSpacing: 2,
+      textShadow: 1,
+      contentPadding: 18
+    )
+
+    settings.setSatelliteAppearanceOverride(slotTwoAppearance, forSlot: 2)
+
+    #expect(settings.satelliteAppearanceOverride(forSlot: 1) == nil)
+    #expect(settings.effectiveSatelliteAppearance(forSlot: 1) == settings.defaultOverlayAppearance)
+    #expect(settings.satelliteAppearanceOverride(forSlot: 2) == slotTwoAppearance)
+    #expect(settings.effectiveSatelliteAppearance(forSlot: 2) == slotTwoAppearance)
   }
 
   @Test func screenCaptureExclusionSettingPersistsAcrossStoreReinitialization() throws {
@@ -280,12 +377,7 @@ struct SettingsStoreTests {
         "managerTypography": "medium",
         "liveAnswerDisclosureAccepted": false,
         "hasCompletedInitialPermissionPrompt": false,
-        "pillsEnabled": true,
         "maxPillCount": 0,
-        "pillConfigurations": [
-          { "contentMode": { "type": "voiceSync" } },
-          { "contentMode": { "type": "voiceSync" } }
-        ],
         "shortcutToggleNotch": "⌘⇧N",
         "shortcutTogglePill": "⌘⇧P",
         "shortcutToggleVoiceSync": "⌘⇧Space",
@@ -299,7 +391,7 @@ struct SettingsStoreTests {
     #expect(decoded.maxPillCount == 1)
   }
 
-  @MainActor @Test func legacySinglePillContentModeMigratesToAllPillSlots() throws {
+  @MainActor @Test func legacySatelliteBehaviorFieldsAreIgnoredAndStrippedOnSave() throws {
     let scriptID = UUID(uuidString: "12345678-1234-1234-1234-123456789ABC")!
     let json = """
       {
@@ -322,6 +414,19 @@ struct SettingsStoreTests {
         "liveAnswerDisclosureAccepted": false,
         "pillsEnabled": true,
         "maxPillCount": 2,
+        "pillConfigurations": [
+          {
+            "contentMode": {
+              "type": "manual",
+              "scriptId": "\(scriptID.uuidString)"
+            }
+          },
+          {
+            "contentMode": {
+              "type": "voiceSync"
+            }
+          }
+        ],
         "pillContentMode": {
           "type": "manual",
           "scriptId": "\(scriptID.uuidString)"
@@ -336,10 +441,14 @@ struct SettingsStoreTests {
       """.data(using: .utf8)!
 
     let decoded = try JSONDecoder().decode(AppSettings.self, from: json)
+    #expect(decoded.maxPillCount == 2)
+    #expect(decoded.mirroredSatelliteModes == [.voiceSync, .voiceSync])
 
-    #expect(decoded.pillConfigurations.count == PillWindowConfiguration.maximumSlotCount)
-    #expect(decoded.pillContentMode(forSlot: 0) == .manual(scriptId: scriptID))
-    #expect(decoded.pillContentMode(forSlot: 1) == .manual(scriptId: scriptID))
+    let encoded = try JSONEncoder().encode(decoded)
+    let encodedJSON = String(decoding: encoded, as: UTF8.self)
+    #expect(!encodedJSON.contains("\"pillsEnabled\""))
+    #expect(!encodedJSON.contains("\"pillConfigurations\""))
+    #expect(!encodedJSON.contains("\"pillContentMode\""))
   }
 
   @Test func appSettingsDefaultsMatchConfiguredCountdownBehavior() {
@@ -353,9 +462,9 @@ struct SettingsStoreTests {
     #expect(defaults.appearanceMode == .system)
     #expect(defaults.managerTypography == .medium)
     #expect(!defaults.hasCompletedInitialPermissionPrompt)
-    #expect(!defaults.pillsEnabled)
     #expect(defaults.maxPillCount == 1)
-    #expect(defaults.pillConfigurations == PillWindowConfiguration.defaultSlots)
+    #expect(defaults.satelliteAppearances == AppSettings.defaultSatelliteAppearances)
+    #expect(defaults.mirroredSatelliteModes == [.voiceSync])
   }
 
   @Test func manualScrollConfigurationClampsSupportedWPMRange() {

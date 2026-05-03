@@ -52,13 +52,16 @@ struct AppSettings: Codable, Equatable {
   var hasCompletedInitialPermissionPrompt: Bool = false
 
   // Pill Windows (REQ-009, REQ-044)
-  var pillsEnabled: Bool = false
   var maxPillCount: Int = 1 {  // 1 or 2
     didSet {
       maxPillCount = Self.normalizedMaxPillCount(maxPillCount)
     }
   }
-  var pillConfigurations: [PillWindowConfiguration] = PillWindowConfiguration.defaultSlots
+  var satelliteAppearances: [OverlayAppearance?] = Self.defaultSatelliteAppearances {
+    didSet {
+      satelliteAppearances = Self.normalizedSatelliteAppearances(from: satelliteAppearances)
+    }
+  }
 
   // Keyboard shortcuts stored as display strings; parsed at session start
   var shortcutToggleNotch: String = "⌘⇧N"
@@ -84,9 +87,8 @@ struct AppSettings: Codable, Equatable {
     managerTypography: ManagerTypography = .medium,
     liveAnswerDisclosureAccepted: Bool = false,
     hasCompletedInitialPermissionPrompt: Bool = false,
-    pillsEnabled: Bool = false,
     maxPillCount: Int = 1,
-    pillConfigurations: [PillWindowConfiguration] = PillWindowConfiguration.defaultSlots,
+    satelliteAppearances: [OverlayAppearance?] = AppSettings.defaultSatelliteAppearances,
     shortcutToggleNotch: String = "⌘⇧N",
     shortcutTogglePill: String = "⌘⇧P",
     shortcutToggleVoiceSync: String = "⌘⇧Space",
@@ -109,9 +111,8 @@ struct AppSettings: Codable, Equatable {
     self.managerTypography = managerTypography
     self.liveAnswerDisclosureAccepted = liveAnswerDisclosureAccepted
     self.hasCompletedInitialPermissionPrompt = hasCompletedInitialPermissionPrompt
-    self.pillsEnabled = pillsEnabled
     self.maxPillCount = Self.normalizedMaxPillCount(maxPillCount)
-    self.pillConfigurations = Self.normalizedPillConfigurations(from: pillConfigurations)
+    self.satelliteAppearances = Self.normalizedSatelliteAppearances(from: satelliteAppearances)
     self.shortcutToggleNotch = shortcutToggleNotch
     self.shortcutTogglePill = shortcutTogglePill
     self.shortcutToggleVoiceSync = shortcutToggleVoiceSync
@@ -124,41 +125,65 @@ struct AppSettings: Codable, Equatable {
     min(max(maxPillCount, 1), PillWindowConfiguration.maximumSlotCount)
   }
 
-  var enabledPillModes: [PillContentMode] {
-    guard pillsEnabled else { return [] }
-    return pillModes(forRequestedCount: maxPillCount)
+  var mirroredSatelliteModes: [PillContentMode] {
+    mirroredSatelliteModes(forRequestedCount: maxPillCount)
   }
 
-  func pillModes(forRequestedCount count: Int) -> [PillContentMode] {
-    Array(
-      Self.normalizedPillConfigurations(from: pillConfigurations)
-        .prefix(min(max(count, 0), PillWindowConfiguration.maximumSlotCount))
-        .map(\.contentMode)
-    )
+  static let defaultSatelliteAppearances = [OverlayAppearance?](
+    repeating: nil,
+    count: PillWindowConfiguration.maximumSlotCount
+  )
+
+  func mirroredSatelliteModes(forRequestedCount count: Int) -> [PillContentMode] {
+    let requestedCount = min(max(count, 0), PillWindowConfiguration.maximumSlotCount)
+    return Array(repeating: .voiceSync, count: requestedCount)
   }
 
-  func pillContentMode(forSlot slot: Int) -> PillContentMode {
-    Self.normalizedPillConfigurations(from: pillConfigurations)[slot].contentMode
+  func satelliteAppearanceOverride(forSlot slot: Int) -> OverlayAppearance? {
+    guard let index = Self.zeroBasedSatelliteSlotIndex(for: slot) else {
+      return nil
+    }
+    return Self.normalizedSatelliteAppearances(from: satelliteAppearances)[index]
   }
 
-  mutating func setPillContentMode(_ mode: PillContentMode, forSlot slot: Int) {
-    var configurations = Self.normalizedPillConfigurations(from: pillConfigurations)
-    configurations[slot].contentMode = mode
-    pillConfigurations = configurations
+  func effectiveSatelliteAppearance(
+    forSlot slot: Int,
+    fallback: OverlayAppearance? = nil
+  ) -> OverlayAppearance {
+    satelliteAppearanceOverride(forSlot: slot) ?? fallback ?? defaultOverlayAppearance
   }
 
-  static func normalizedPillConfigurations(from configurations: [PillWindowConfiguration])
-    -> [PillWindowConfiguration]
+  mutating func setSatelliteAppearanceOverride(_ appearance: OverlayAppearance?, forSlot slot: Int)
   {
-    var normalized = Array(configurations.prefix(PillWindowConfiguration.maximumSlotCount))
+    guard let index = Self.zeroBasedSatelliteSlotIndex(for: slot) else {
+      return
+    }
+
+    var normalized = Self.normalizedSatelliteAppearances(from: satelliteAppearances)
+    normalized[index] = appearance
+    satelliteAppearances = normalized
+  }
+
+  static func normalizedSatelliteAppearances(from appearances: [OverlayAppearance?])
+    -> [OverlayAppearance?]
+  {
+    var normalized = Array(appearances.prefix(PillWindowConfiguration.maximumSlotCount))
     while normalized.count < PillWindowConfiguration.maximumSlotCount {
-      normalized.append(.default)
+      normalized.append(nil)
     }
     return normalized
   }
 
   static func normalizedMaxPillCount(_ value: Int) -> Int {
     min(max(value, 1), PillWindowConfiguration.maximumSlotCount)
+  }
+
+  private static func zeroBasedSatelliteSlotIndex(for slot: Int) -> Int? {
+    let index = slot - 1
+    guard (0..<PillWindowConfiguration.maximumSlotCount).contains(index) else {
+      return nil
+    }
+    return index
   }
 
   private enum CodingKeys: String, CodingKey {
@@ -177,10 +202,8 @@ struct AppSettings: Codable, Equatable {
     case managerTypography
     case liveAnswerDisclosureAccepted
     case hasCompletedInitialPermissionPrompt
-    case pillsEnabled
     case maxPillCount
-    case pillConfigurations
-    case pillContentMode
+    case satelliteAppearances
     case shortcutToggleNotch
     case shortcutTogglePill
     case shortcutToggleVoiceSync
@@ -227,26 +250,13 @@ struct AppSettings: Codable, Equatable {
       ?? false
     liveAnswerDisclosureAccepted =
       try container.decodeIfPresent(Bool.self, forKey: .liveAnswerDisclosureAccepted) ?? false
-    pillsEnabled = try container.decodeIfPresent(Bool.self, forKey: .pillsEnabled) ?? false
     maxPillCount = Self.normalizedMaxPillCount(
       try container.decodeIfPresent(Int.self, forKey: .maxPillCount) ?? 1
     )
-
-    if let decodedConfigurations = try container.decodeIfPresent(
-      [PillWindowConfiguration].self, forKey: .pillConfigurations)
-    {
-      pillConfigurations = Self.normalizedPillConfigurations(from: decodedConfigurations)
-    } else if let legacyMode = try container.decodeIfPresent(
-      PillContentMode.self, forKey: .pillContentMode)
-    {
-      pillConfigurations = Self.normalizedPillConfigurations(
-        from: Array(
-          repeating: PillWindowConfiguration(contentMode: legacyMode),
-          count: PillWindowConfiguration.maximumSlotCount)
-      )
-    } else {
-      pillConfigurations = PillWindowConfiguration.defaultSlots
-    }
+    satelliteAppearances = Self.normalizedSatelliteAppearances(
+      from: try container.decodeIfPresent([OverlayAppearance?].self, forKey: .satelliteAppearances)
+        ?? Self.defaultSatelliteAppearances
+    )
 
     shortcutToggleNotch =
       try container.decodeIfPresent(String.self, forKey: .shortcutToggleNotch) ?? "⌘⇧N"
@@ -279,10 +289,11 @@ struct AppSettings: Codable, Equatable {
     try container.encode(
       hasCompletedInitialPermissionPrompt, forKey: .hasCompletedInitialPermissionPrompt)
     try container.encode(liveAnswerDisclosureAccepted, forKey: .liveAnswerDisclosureAccepted)
-    try container.encode(pillsEnabled, forKey: .pillsEnabled)
     try container.encode(maxPillCount, forKey: .maxPillCount)
     try container.encode(
-      Self.normalizedPillConfigurations(from: pillConfigurations), forKey: .pillConfigurations)
+      Self.normalizedSatelliteAppearances(from: satelliteAppearances),
+      forKey: .satelliteAppearances
+    )
     try container.encode(shortcutToggleNotch, forKey: .shortcutToggleNotch)
     try container.encode(shortcutTogglePill, forKey: .shortcutTogglePill)
     try container.encode(shortcutToggleVoiceSync, forKey: .shortcutToggleVoiceSync)
@@ -292,13 +303,8 @@ struct AppSettings: Codable, Equatable {
   }
 }
 
-struct PillWindowConfiguration: Codable, Equatable {
+struct PillWindowConfiguration {
   static let maximumSlotCount = 2
-  static let `default` = PillWindowConfiguration(contentMode: .voiceSync)
-  static let defaultSlots = Array(
-    repeating: PillWindowConfiguration.default, count: maximumSlotCount)
-
-  var contentMode: PillContentMode = .voiceSync
 }
 
 enum SpeechSensitivity: String, Codable, CaseIterable {

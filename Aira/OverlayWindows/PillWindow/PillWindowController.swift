@@ -10,7 +10,7 @@ class PillWindowController {
   let mode: PillContentMode
   private(set) var scriptID: UUID?
   var currentAppearance: OverlayAppearance = .default
-  private let defaultAppearance: OverlayAppearance = .default
+  private var defaultAppearance: OverlayAppearance = .default
   private var currentScript: Script?
   private var countdownDuration: Int = 0
   private var voiceSyncEnabled: Bool = true
@@ -58,6 +58,7 @@ class PillWindowController {
     onSwapWithNotch: (() -> Void)? = nil
   ) {
     currentAppearance = appearance
+    defaultAppearance = appearance
     currentScript = script
     scriptID = script.id
     self.countdownDuration = countdownDuration
@@ -121,6 +122,8 @@ class PillWindowController {
     hostingView = nil
     currentScript = nil
     scriptID = nil
+    currentAppearance = .default
+    defaultAppearance = .default
     restoredFrameAfterFullScreen = nil
     isPseudoFullScreen = false
   }
