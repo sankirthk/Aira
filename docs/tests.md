@@ -220,7 +220,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-001a-c | Notch/Pill Window launch planning skips any mirror or manual script whose resolved body has zero non-whitespace characters | `[x]` |
 | UT-001a-d | Session launch tracing records monotonic marks for manager preparation, overlay ordering, and deferred voice startup without depending on AppKit windows | `[x]` |
 | UT-001a-e | Zero-countdown sessions schedule Voice-Sync startup after the first overlay render turn instead of starting audio/speech synchronously during first `onAppear` | `[x]` |
-| IT-001a-b | Presenter launch keeps the manager visible until the primary notch overlay has been ordered front, then transitions to session presentation mode | `[ ]` |
+| IT-001a-b | Presenter launch sequencing follow-up is deferred because the cold-launch stall is not reproducible in the current build; reopen if the manager-to-overlay handoff stalls again | `[x]` |
 | IT-001b | Chevron dropdown `Cast with Pill Windows` opens one panel for enabled Pill Windows, and Pill Windows set to `Mirror current script` launch against current editor script/shared playhead | `[x]` |
 | UT-001b-a | Pill Window launch panel maps `Mirror current script` to a synced Pill Window mode and `Manual` with a selected script to an independent manual Pill Window mode | `[x]` |
 | UT-001b-b | Pill Window launch panel manual script dropdown displays `Select script` before assignment and the chosen script title after assignment | `[x]` |
@@ -347,8 +347,8 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049a-a | Leaving the `Pill Windows` tab untouched still allows Pill Window launch; an unconfigured Pill Window renders with Notch defaults until the user customizes that slot | `[ ]` |
 | MT-049b | Script Editor shows one connected split launch control `[ Cast to Notch ] [ chevron ]` using app-styled chrome rather than native macOS menu UI, without a duplicate label-side chevron, and primary `Cast to Notch` never launches Pill Windows unexpectedly | `[x]` |
 | MT-049c | Chevron dropdown offers one `Cast with Pill Windows` item with restored compact toolbar button height, app-styled dropdown chrome, and outside-click dismissal | `[x]` |
-| MT-049d | Cold launch the app, immediately cast a non-empty script to Notch, and confirm the manager remains responsive with no macOS beachball while the first presenter window appears within the accepted latency budget; repeat with Voice-Sync on and off to isolate speech startup cost | `[ ]` |
-| MT-049e | Zero-countdown Notch launch produces no AppKit/SwiftUI recursive-layout warnings such as reentrant `NSHostingView` layout or `layoutSubtreeIfNeeded`-during-layout messages in the debug log | `[ ]` |
+| MT-049d | Cold-launch beachball regression watch: currently not reproducible in the app, so further launch-latency work is deferred until a current build reproduces the stall with trace evidence | `[x]` |
+| MT-049e | Zero-countdown recursive-layout warning regression watch: currently not reproducible in the app, so the AppKit/SwiftUI layout-warning fix is deferred until current console evidence returns | `[x]` |
 | MT-049f | During an active call/meeting app and during screen recording with microphone enabled, Voice-Sync diagnostics clearly show whether failure occurs at engine start, first tap buffer, first non-trivial audio level, or first speech-recognition partial/final result | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
