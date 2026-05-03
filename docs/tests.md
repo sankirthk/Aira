@@ -114,6 +114,8 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026t | Voice-Sync startup search anchoring keeps the unconfirmed search window rooted at the visible word range instead of the forward-shifted cursor so early partials can match the first spoken words before steady/catch-up tightening resumes | `[x]` |
 | UT-026u | Manual seek never synthesizes a replacement active underline from the visible window while Voice-Sync is active | `[ ]` |
 | UT-026v | Overlay dulling follows the original worktree-start `visualHighlightedWordRange` delta renderer rather than the later committed-prefix path, so prior spoken words render correctly again after the rollback | `[x]` |
+| UT-026w | Advancing the current spoken-word underline does not remove the dull foreground color from words that just moved into the spoken prefix | `[x]` |
+| UT-026x | Established Voice-Sync matching searches forward from the engine cursor even when the visible word window has advanced past that cursor | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 
