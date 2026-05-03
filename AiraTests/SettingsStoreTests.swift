@@ -218,9 +218,33 @@ struct SettingsStoreTests {
   @Test func voiceScrollModesExposeSettingsMenuCopy() {
     #expect(
       VoiceScrollMode.allCases.map(\.settingsTitle) == [
-        "Classic", "Voice-gated", "Word tracking",
+        "Classic", "Sound-based", "Word tracking",
       ])
     #expect(VoiceScrollMode.allCases.allSatisfy { !$0.settingsDescription.isEmpty })
+  }
+
+  @Test func voiceScrollModeDecodesLegacyVolumeGatedAsSoundBased() throws {
+    let decoded = try JSONDecoder().decode(VoiceScrollMode.self, from: Data(#""volumeGated""#.utf8))
+
+    #expect(decoded == .soundBased)
+  }
+
+  @Test func voiceScrollModePoliciesSeparateMicRecognitionAndMotion() {
+    #expect(!VoiceScrollMode.classicScroll.usesVoiceDrivenScroll)
+    #expect(
+      !VoiceScrollMode.classicScroll.usesSpeechRecognition(spokenWordHighlightingEnabled: false))
+    #expect(
+      VoiceScrollMode.classicScroll.usesSpeechRecognition(spokenWordHighlightingEnabled: true))
+
+    #expect(VoiceScrollMode.soundBased.usesVoiceDrivenScroll)
+    #expect(VoiceScrollMode.soundBased.usesSoundBasedMotion)
+    #expect(!VoiceScrollMode.soundBased.usesSpeechRecognition(spokenWordHighlightingEnabled: false))
+    #expect(VoiceScrollMode.soundBased.usesSpeechRecognition(spokenWordHighlightingEnabled: true))
+
+    #expect(VoiceScrollMode.wordTracking.usesVoiceDrivenScroll)
+    #expect(!VoiceScrollMode.wordTracking.usesSoundBasedMotion)
+    #expect(
+      VoiceScrollMode.wordTracking.usesSpeechRecognition(spokenWordHighlightingEnabled: false))
   }
 
   @Test func loadCorruptDataThrows() {

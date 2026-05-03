@@ -296,7 +296,6 @@ class VoiceSyncEngine: ObservableObject {
   private func handleRecognizedWordToken(_ token: SpokenWordToken) {
     guard acceptsRecognitionCallbacks else { return }
     guard !isPausedByUser else { return }
-    let wasHumanSpeechActive = isHumanSpeechActive
     scheduleSilenceDeadline()
     recordRecognitionTokenDiagnostics(token)
     if state == .paused {
@@ -315,13 +314,8 @@ class VoiceSyncEngine: ObservableObject {
     switch voiceScrollMode {
     case .classicScroll:
       break
-    case .volumeGated:
-      if recognitionDrivesScroll && wasHumanSpeechActive {
-        scrollOffset = VoiceSyncMatching.scrollOffset(
-          cursorIndex: cursorIndex,
-          totalWords: scriptWords.count
-        )
-      }
+    case .soundBased:
+      break
     case .wordTracking:
       if recognitionDrivesScroll {
         scrollOffset = VoiceSyncMatching.scrollOffset(

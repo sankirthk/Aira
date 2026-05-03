@@ -40,6 +40,10 @@ struct AppSettings: Codable, Equatable {
   var pauseOnHoverEnabled: Bool = true
   var voiceSyncMode: VoiceSyncMode = .voice
   var voiceScrollMode: VoiceScrollMode = .wordTracking
+
+  var voiceDrivenScrollEnabled: Bool {
+    voiceScrollMode.usesVoiceDrivenScroll
+  }
   var speechSensitivity: SpeechSensitivity = .medium
   var autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM {
     didSet {
@@ -341,15 +345,30 @@ enum VoiceSyncMode: String, Codable, CaseIterable {
 
 enum VoiceScrollMode: String, Codable, CaseIterable {
   case classicScroll
-  case volumeGated
+  case soundBased
   case wordTracking
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let rawValue = try container.decode(String.self)
+    switch rawValue {
+    case Self.classicScroll.rawValue:
+      self = .classicScroll
+    case Self.soundBased.rawValue, "volumeGated":
+      self = .soundBased
+    case Self.wordTracking.rawValue:
+      self = .wordTracking
+    default:
+      self = .wordTracking
+    }
+  }
 
   var settingsTitle: String {
     switch self {
     case .classicScroll:
       return "Classic"
-    case .volumeGated:
-      return "Voice-gated"
+    case .soundBased:
+      return "Sound-based"
     case .wordTracking:
       return "Word tracking"
     }
@@ -359,11 +378,27 @@ enum VoiceScrollMode: String, Codable, CaseIterable {
     switch self {
     case .classicScroll:
       return "Use the configured scroll speed; voice only updates highlighting."
-    case .volumeGated:
-      return "Scroll while speech is active, using the configured speed as the base."
+    case .soundBased:
+      return "Scroll while microphone volume is above the sound threshold."
     case .wordTracking:
       return "Follow the currently spoken word and adapt to your actual pace."
     }
+  }
+
+  var usesVoiceDrivenScroll: Bool {
+    self != .classicScroll
+  }
+
+  var usesSoundBasedMotion: Bool {
+    self == .soundBased
+  }
+
+  var usesSpeechRecognitionForScroll: Bool {
+    self == .wordTracking
+  }
+
+  func usesSpeechRecognition(spokenWordHighlightingEnabled: Bool) -> Bool {
+    usesSpeechRecognitionForScroll || spokenWordHighlightingEnabled
   }
 }
 

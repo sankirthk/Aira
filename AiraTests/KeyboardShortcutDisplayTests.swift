@@ -948,11 +948,11 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
   }
 
-  @Test @MainActor func volumeGatedModeOnlyScrollsWhenSpeechIsActive() async throws {
+  @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
     engine.loadScript(text: "one two three four", startingAt: 0)
-    engine.voiceScrollMode = .volumeGated
+    engine.voiceScrollMode = .soundBased
 
     backend.emit("three")
     #expect(engine.scrollOffset == 0)
@@ -961,7 +961,8 @@ struct VoiceSyncMatchingTests {
     engine.isHumanSpeechActive = true
     backend.emit("three")
 
-    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
+    #expect(engine.currentWordIndex == 2)
+    #expect(engine.scrollOffset == 0)
   }
 
   @Test @MainActor func voiceSyncStopStopsBackendAndRejectsStaleWordCallbacks() async throws {

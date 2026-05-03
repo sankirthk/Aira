@@ -126,7 +126,7 @@ class OverlayWindowController {
       .sink { [weak self] settings in
         self?.voiceSync.voiceScrollMode = settings.voiceScrollMode
         self?.notchController?.updateSessionBehavior(
-          voiceSyncEnabled: settings.voiceSyncEnabled,
+          voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
           spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
           pauseOnHoverEnabled: settings.pauseOnHoverEnabled
         )
@@ -134,7 +134,7 @@ class OverlayWindowController {
           enabled: settings.spokenWordHighlightingEnabled)
         for pillController in self?.pillControllers ?? [] {
           pillController.updateSessionBehavior(
-            voiceSyncEnabled: settings.voiceSyncEnabled,
+            voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
             spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
             pauseOnHoverEnabled: settings.pauseOnHoverEnabled
           )

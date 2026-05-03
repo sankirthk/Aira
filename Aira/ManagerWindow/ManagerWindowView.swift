@@ -590,7 +590,7 @@ struct ManagerWindowView: View {
           forSlot: overlayController.pillCount + 1
         ),
         countdownDuration: appState.settings.countdownDuration,
-        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
         voiceSyncMode: appState.settings.voiceSyncMode
       )
@@ -639,7 +639,7 @@ struct ManagerWindowView: View {
         script: script,
         appearance: appState.settings.defaultOverlayAppearance,
         countdownDuration: appState.settings.countdownDuration,
-        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
         voiceSyncMode: appState.settings.voiceSyncMode
       )
@@ -649,7 +649,7 @@ struct ManagerWindowView: View {
         appearance: appState.settings.defaultOverlayAppearance,
         countdownDuration: appState.settings.countdownDuration,
         satelliteCount: count,
-        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
         voiceSyncMode: appState.settings.voiceSyncMode
       )
@@ -658,7 +658,7 @@ struct ManagerWindowView: View {
         script: script,
         appearance: appState.settings.defaultOverlayAppearance,
         countdownDuration: appState.settings.countdownDuration,
-        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
         voiceSyncMode: appState.settings.voiceSyncMode,
         satelliteSelections: satelliteSelections

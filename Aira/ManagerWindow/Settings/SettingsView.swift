@@ -2069,23 +2069,17 @@ private struct SystemTabContent: View {
       VStack(alignment: .leading, spacing: 5) {
         Text(mode.settingsTitle)
           .font(.custom("CrimsonText-Regular", size: 17))
-          .foregroundStyle(
-            Color("colorText")
-              .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.35)
-          )
+          .foregroundStyle(Color("colorText"))
         Text(mode.settingsDescription)
           .font(.custom("CrimsonText-Regular", size: 13))
-          .foregroundStyle(
-            Color("colorText")
-              .opacity(appState.settings.voiceSyncEnabled ? 0.62 : 0.28)
-          )
+          .foregroundStyle(Color("colorText").opacity(0.62))
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 14)
       .padding(.vertical, 12)
       .background(
-        isActive && appState.settings.voiceSyncEnabled
+        isActive
           ? Color("colorPrimary").opacity(0.1)
           : Color("colorBackground").opacity(0.75)
       )
@@ -2093,16 +2087,15 @@ private struct SystemTabContent: View {
       .overlay(
         RoundedRectangle(cornerRadius: 14)
           .stroke(
-            isActive && appState.settings.voiceSyncEnabled
+            isActive
               ? Color("colorPrimary")
               : Color("colorText").opacity(0.14),
-            lineWidth: isActive && appState.settings.voiceSyncEnabled ? 3 : 2
+            lineWidth: isActive ? 3 : 2
           )
       )
       .contentShape(RoundedRectangle(cornerRadius: 14))
     }
     .buttonStyle(.plain)
-    .disabled(!appState.settings.voiceSyncEnabled)
     .settingsPointingHandCursor()
   }
 
@@ -2200,22 +2193,6 @@ private struct SystemTabContent: View {
       SettingsPanel {
         SectionTitle(text: "During your Session")
         VStack(alignment: .leading, spacing: 16) {
-          HStack {
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Voice-activated tracking")
-                .font(.custom("CrimsonText-Regular", size: 18))
-                .foregroundStyle(Color("colorText"))
-              Text("Moves only when human speech is recognized and keeps script anchored smoothly.")
-                .font(.custom("CrimsonText-Regular", size: 14))
-                .foregroundStyle(Color("colorText").opacity(0.6))
-            }
-            Spacer()
-            Toggle("", isOn: $appState.settings.voiceSyncEnabled)
-              .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
-              .labelsHidden()
-          }
-
           VStack(alignment: .leading, spacing: 14) {
             HStack {
               VStack(alignment: .leading, spacing: 4) {
@@ -2223,7 +2200,7 @@ private struct SystemTabContent: View {
                   .font(.custom("CrimsonText-Regular", size: 18))
                   .foregroundStyle(Color("colorText"))
                 Text(
-                  "Choose whether speech only highlights words, gates steady scrolling, or tracks the recognized word directly."
+                  "Choose manual-speed scrolling, sound-triggered movement, or word-by-word tracking."
                 )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
@@ -2237,12 +2214,11 @@ private struct SystemTabContent: View {
               }
             }
           }
-          .disabled(!appState.settings.voiceSyncEnabled)
-          .opacity(appState.settings.voiceSyncEnabled ? 1.0 : 0.6)
 
-          // Sensitivity — disabled when voice tracking is off
+          // Sensitivity only affects sound-based scrolling.
           VStack(alignment: .leading, spacing: 10) {
-            systemFieldLabel("Speech Sensitivity")
+            let isSoundBased = appState.settings.voiceScrollMode == .soundBased
+            systemFieldLabel("Sound Sensitivity")
             HStack(spacing: 8) {
               ForEach(SpeechSensitivity.allCases, id: \.self) { level in
                 let isActive = appState.settings.speechSensitivity == level
@@ -2253,12 +2229,12 @@ private struct SystemTabContent: View {
                     .font(.custom("CrimsonText-Regular", size: 17))
                     .foregroundStyle(
                       Color("colorText")
-                        .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.35)
+                        .opacity(isSoundBased ? 1 : 0.35)
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(
-                      isActive && appState.settings.voiceSyncEnabled
+                      isActive && isSoundBased
                         ? Color("colorPrimary").opacity(0.1)
                         : Color("colorBackground").opacity(0.75)
                     )
@@ -2266,24 +2242,26 @@ private struct SystemTabContent: View {
                     .overlay(
                       RoundedRectangle(cornerRadius: 12)
                         .stroke(
-                          isActive && appState.settings.voiceSyncEnabled
+                          isActive && isSoundBased
                             ? Color("colorPrimary")
                             : Color("colorText").opacity(0.14),
-                          lineWidth: isActive && appState.settings.voiceSyncEnabled ? 3 : 2
+                          lineWidth: isActive && isSoundBased ? 3 : 2
                         ))
                 }
                 .buttonStyle(.plain)
-                .disabled(!appState.settings.voiceSyncEnabled)
+                .disabled(!isSoundBased)
               }
             }
-            Text("Keeps the scroll tied to your natural pace instead of forcing a robotic cadence.")
-              .font(.custom("CrimsonText-Regular", size: 14))
-              .foregroundStyle(
-                Color("colorText")
-                  .opacity(appState.settings.voiceSyncEnabled ? 0.64 : 0.3))
+            Text(
+              "Applies only to Sound-based mode. Classic and Word tracking do not use volume to move."
+            )
+            .font(.custom("CrimsonText-Regular", size: 14))
+            .foregroundStyle(
+              Color("colorText")
+                .opacity(isSoundBased ? 0.64 : 0.3))
           }
-          .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.5)
-          .animation(.easeInOut(duration: 0.2), value: appState.settings.voiceSyncEnabled)
+          .opacity(appState.settings.voiceScrollMode == .soundBased ? 1 : 0.5)
+          .animation(.easeInOut(duration: 0.2), value: appState.settings.voiceScrollMode)
 
           Divider().opacity(0.2)
 

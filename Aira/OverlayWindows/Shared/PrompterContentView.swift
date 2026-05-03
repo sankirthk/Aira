@@ -118,6 +118,14 @@ struct PrompterContentView: View {
       || (sessionStarted && voiceSyncEnabled)
   }
 
+  private var usesWordTrackingScroll: Bool {
+    voiceSyncEnabled && voiceSync.voiceScrollMode == .wordTracking
+  }
+
+  private var usesSoundBasedScroll: Bool {
+    voiceSyncEnabled && voiceSync.voiceScrollMode == .soundBased
+  }
+
   private var usesLegacyLineSyncForVoice: Bool {
     false
   }
@@ -138,11 +146,11 @@ struct PrompterContentView: View {
   }
 
   private var isVoiceMotionActive: Bool {
-    (audioMonitor.isSpeaking || voiceSync.isHumanSpeechActive) && !sharedPauseBlocksAutomaticMotion
+    audioMonitor.isSpeaking && !sharedPauseBlocksAutomaticMotion
   }
 
   private var shouldRunVoiceMotion: Bool {
-    ownsSynchronizedScroll && sessionStarted && voiceSyncEnabled && isVoiceMotionActive
+    ownsSynchronizedScroll && sessionStarted && usesSoundBasedScroll && isVoiceMotionActive
       && !isHoverPauseActive
   }
 
@@ -258,7 +266,7 @@ struct PrompterContentView: View {
         updateVisibleWordTrackingWindow()
       }
       .onChange(of: voiceSync.isHumanSpeechActive) { _, speaking in
-        guard sessionStarted, voiceSyncEnabled else { return }
+        guard sessionStarted, usesSoundBasedScroll else { return }
         guard ownsSynchronizedScroll else {
           cinematicController.setSpeaking(false)
           return
@@ -266,7 +274,7 @@ struct PrompterContentView: View {
         cinematicController.setSpeaking(shouldRunVoiceMotion)
       }
       .onChange(of: audioMonitor.isSpeaking) { _, _ in
-        guard sessionStarted, voiceSyncEnabled else { return }
+        guard sessionStarted, usesSoundBasedScroll else { return }
         guard ownsSynchronizedScroll else {
           cinematicController.setSpeaking(false)
           return
@@ -287,7 +295,7 @@ struct PrompterContentView: View {
         let wasHoverPauseActive = isHoverPauseActive
         isPointerInsideOverlay = hovered
         manualScrollDriver.setAutoScrollSuppressed(isHoverPauseActive)
-        if voiceSyncEnabled {
+        if usesSoundBasedScroll {
           cinematicController.setSpeaking(shouldRunVoiceMotion)
         }
         if wasHoverPauseActive && !isHoverPauseActive && !usesDirectPlayheadRendering {
@@ -301,7 +309,7 @@ struct PrompterContentView: View {
           playheadCoordinator.markSessionStarted()
         }
 
-        voiceSync.setRecognitionDrivesScroll(voiceSyncEnabled)
+        voiceSync.setRecognitionDrivesScroll(usesWordTrackingScroll)
 
         if sessionStarted && spokenWordHighlightingEnabled {
           voiceSync.enableRecognitionIfNeeded()
@@ -322,7 +330,7 @@ struct PrompterContentView: View {
         )
         cinematicController.setInitialOffset(renderedScrollOffset)
         cinematicController.onScrollTick = { newOffset in
-          if voiceSyncEnabled {
+          if usesSoundBasedScroll {
             playheadCoordinator.updateProgress(Double(newOffset))
           } else {
             displayedScrollOffset = newOffset
@@ -408,7 +416,7 @@ struct PrompterContentView: View {
         updateManualScrollDriver()
       }
       .onChange(of: voiceSyncEnabled) { _, _ in
-        voiceSync.setRecognitionDrivesScroll(voiceSyncEnabled)
+        voiceSync.setRecognitionDrivesScroll(usesWordTrackingScroll)
         updateManualScrollDriver()
         updateVisibleWordTrackingWindow()
       }
@@ -448,7 +456,7 @@ struct PrompterContentView: View {
         else { return }
         let newOffset = CGFloat(newProgress)
         manualScrollDriver.setCurrentOffset(newOffset)
-        if voiceSyncEnabled && ownsSynchronizedScroll {
+        if usesSoundBasedScroll && ownsSynchronizedScroll {
           cinematicController.setInitialOffset(newOffset)
         }
         if usesSessionPlayheadForManualScroll {
@@ -456,7 +464,7 @@ struct PrompterContentView: View {
             publishCurrentLineIndex()
             syncVoiceTrackingOffset(newOffset)
           }
-        } else if voiceSyncEnabled && (ownsSynchronizedScroll || !syncsSessionScroll) {
+        } else if usesSoundBasedScroll && (ownsSynchronizedScroll || !syncsSessionScroll) {
           syncVoiceTrackingOffset(newOffset)
         }
         updateVisibleWordTrackingWindow()
@@ -475,10 +483,13 @@ struct PrompterContentView: View {
   private func handleWordIndexUpdate(_ newIndex: Int?) {
     guard sessionStarted else { return }
     guard !isHoverPauseActive else { return }
-    guard voiceSyncEnabled else { return }
+    guard usesWordTrackingScroll else { return }
     guard !voiceSync.isPausedByUser else { return }
     guard ownsSynchronizedScroll else { return }
     guard let idx = newIndex, !layoutSnapshot.lineMetrics.isEmpty else { return }
+
+    playheadCoordinator.updateProgress(Double(voiceSync.scrollOffset))
+    manualScrollDriver.setCurrentOffset(voiceSync.scrollOffset)
 
     guard
       let lineIndex = layoutSnapshot.lineMetrics.firstIndex(where: { $0.wordRange.contains(idx) })
@@ -503,7 +514,7 @@ struct PrompterContentView: View {
     }
 
     let exactNormalized = min(anchorY / maxOffset, 1.0)
-    cinematicController.setAnchorOffset(exactNormalized)
+    playheadCoordinator.updateProgress(Double(exactNormalized))
   }
 
   // MARK: - Manual Scroll (trackpad / mouse wheel)
@@ -575,7 +586,7 @@ struct PrompterContentView: View {
   }
 
   private func syncVoiceTrackingOffset(_ offset: CGFloat) {
-    if voiceSyncEnabled {
+    if usesSoundBasedScroll {
       // Passive voice-driven scroll updates should not clear spoken-word visuals.
       // Explicit user scroll/nudge paths still call nudgeScroll directly.
       voiceSync.nudgeScroll(to: offset, resetSpokenTracking: false)
@@ -601,8 +612,12 @@ struct PrompterContentView: View {
   }
 
   private func startVoiceSubsystemIfNeeded() {
-    if voiceSyncEnabled || spokenWordHighlightingEnabled {
+    if voiceSync.voiceScrollMode.usesSpeechRecognition(
+      spokenWordHighlightingEnabled: spokenWordHighlightingEnabled)
+    {
       voiceSync.start()
+    } else if voiceSync.voiceScrollMode.usesSoundBasedMotion {
+      voiceSync.startAudioMonitoring()
     }
   }
 
