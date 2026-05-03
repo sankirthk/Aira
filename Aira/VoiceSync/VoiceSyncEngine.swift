@@ -45,6 +45,8 @@ class VoiceSyncEngine: ObservableObject {
   private var firstTapTimeoutTask: Task<Void, Never>?
   private var firstRecognitionTimeoutTask: Task<Void, Never>?
   private var diagnostics = DiagnosticsState()
+  private let recognitionBackend: SpeechRecognitionBackend?
+  private let tokenLookAhead = 50
 
   enum MatcherMode: Equatable {
     case startup
@@ -53,6 +55,7 @@ class VoiceSyncEngine: ObservableObject {
   }
 
   init(
+    recognitionBackend: SpeechRecognitionBackend? = nil,
     speechAuthorizationStatus: @escaping () -> SFSpeechRecognizerAuthorizationStatus = {
       SFSpeechRecognizer.authorizationStatus()
     },
@@ -60,8 +63,12 @@ class VoiceSyncEngine: ObservableObject {
       AVAudioApplication.shared.recordPermission == .granted
     }
   ) {
+    self.recognitionBackend = recognitionBackend
     self.speechAuthorizationStatus = speechAuthorizationStatus
     self.microphonePermissionGranted = microphonePermissionGranted
+    self.recognitionBackend?.onRecognizedWord = { [weak self] token in
+      self?.handleRecognizedWordToken(token)
+    }
   }
 
   // MARK: - Public API
@@ -431,6 +438,33 @@ class VoiceSyncEngine: ObservableObject {
 
     scrollOffset = offset
 
+  }
+
+  private func handleRecognizedWordToken(_ token: SpokenWordToken) {
+    guard state != .idle || recognitionBackend != nil else { return }
+    guard !isPausedByUser else { return }
+    guard let match = matchRecognizedWordToken(token) else { return }
+
+    currentWordIndex = match.currentWordIndex
+    highlightedWordRange = 0..<match.currentWordIndex
+    visualCurrentWordIndex = match.currentWordIndex
+    visualHighlightedWordRange = 0..<match.currentWordIndex
+    cursorIndex = max(cursorIndex, match.currentWordIndex)
+    visualCursorIndex = max(visualCursorIndex, match.currentWordIndex + 1)
+  }
+
+  private func matchRecognizedWordToken(_ token: SpokenWordToken) -> VoiceSyncMatching.Match? {
+    guard let normalized = VoiceSyncMatching.normalizeToken(token.word) else { return nil }
+    let searchStart = min(max(cursorIndex, 0), scriptWords.count)
+    let lookAhead = min(tokenLookAhead, max(scriptWords.count - searchStart, 0))
+    guard lookAhead > 0 else { return nil }
+    return VoiceSyncMatching.findDetailedMatch(
+      scriptWords: scriptWords,
+      spokenWindow: [normalized],
+      cursorIndex: searchStart,
+      lookAhead: lookAhead,
+      minimumOverlap: 1
+    )
   }
 
   private func normalizedSearchRange() -> Range<Int> {

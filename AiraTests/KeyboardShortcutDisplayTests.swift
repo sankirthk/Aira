@@ -910,6 +910,19 @@ struct VoiceSyncMatchingTests {
     #expect(backend.stopCallCount == 1)
   }
 
+  @Test @MainActor func recognizedWordTokenAdvancesOnlyWithinForwardSearchWindow() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "the intro waits and then the actual cue begins", startingAt: 0.45)
+
+    backend.emit("the", timestamp: 1, confidence: 0.9)
+
+    #expect(engine.currentWordIndex == 5)
+    #expect(engine.highlightedWordRange == 0..<5)
+    #expect(engine.visualCurrentWordIndex == 5)
+    #expect(engine.visualHighlightedWordRange == 0..<5)
+  }
+
   @Test func voiceSyncRecognitionPreprocessingSelectsStrongestChannel() throws {
     let format = AVAudioFormat(
       commonFormat: .pcmFormatFloat32,

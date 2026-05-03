@@ -117,7 +117,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026w | Advancing the current spoken-word underline does not remove the dull foreground color from words that just moved into the spoken prefix | `[x]` |
 | UT-026x | Established Voice-Sync matching searches forward from the engine cursor even when the visible word window has advanced past that cursor | `[x]` |
 | UT-027 | `SpeechRecognitionBackend` can be faked so `VoiceSyncEngine` matching and mode behavior are tested without loading WhisperKit/Core ML | `[x]` |
-| UT-027a | A recognized word token advances the spoken cursor only to the next localized script match and never backwards to a repeated earlier word | `[ ]` |
+| UT-027a | A recognized word token advances the spoken cursor only to the next localized script match and never backwards to a repeated earlier word | `[x]` |
 | UT-027b | Classic scroll mode updates spoken-word highlighting without mutating `VoiceSyncEngine.scrollOffset` | `[ ]` |
 | UT-027c | Word-tracking mode maps the matched current word index to bounded scroll progress | `[ ]` |
 | UT-027d | Voice-Sync teardown stops the recognition backend and rejects stale spoken-word callbacks | `[ ]` |
