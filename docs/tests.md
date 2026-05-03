@@ -124,6 +124,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027e | Sound-based mode does not scroll from recognized words; volume-driven motion remains owned by the audio monitor/cinematic driver | `[x]` |
 | UT-027f | Voice scroll modes expose Settings menu labels/descriptions for Classic, Sound-based, and Word tracking so the persisted modes are user-selectable | `[x]` |
 | UT-027g | Voice scroll mode policy separates manual scrolling, volume-based motion, speech-recognition word tracking, and optional spoken-word highlighting microphone use | `[x]` |
+| UT-027h | Bundled Whisper model resources include tokenizer files required for fully offline word recognition | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 

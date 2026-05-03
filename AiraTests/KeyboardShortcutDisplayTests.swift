@@ -1520,6 +1520,17 @@ struct VoiceSyncMatchingTests {
     #expect(VoiceSyncMatching.normalizeToken("  ") == nil)
   }
 
+  @Test func bundledWhisperModelIncludesTokenizerFilesForOfflineRecognition() throws {
+    let modelURL = try #require(
+      Bundle.main.url(
+        forResource: "openai_whisper-tiny.en",
+        withExtension: nil,
+        subdirectory: "Whisper"
+      ))
+
+    #expect(WhisperSpeechRecognitionBackend.hasRequiredBundledModelFiles(at: modelURL))
+  }
+
 }
 
 @MainActor

@@ -3,6 +3,16 @@ import WhisperKit
 
 @MainActor
 final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
+  nonisolated static let requiredBundledModelFiles = [
+    "AudioEncoder.mlmodelc",
+    "MelSpectrogram.mlmodelc",
+    "TextDecoder.mlmodelc",
+    "config.json",
+    "generation_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+  ]
+
   var onRecognizedWord: (@MainActor (SpokenWordToken) -> Void)?
   var onProcessingChanged: (@MainActor (Bool) -> Void)?
 
@@ -17,6 +27,9 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
     guard whisper == nil else { return }
     guard let modelURL = Self.bundledModelURL() else {
       throw WhisperBackendError.missingBundledModel
+    }
+    guard Self.hasRequiredBundledModelFiles(at: modelURL) else {
+      throw WhisperBackendError.incompleteBundledModel
     }
 
     let config = WhisperKitConfig(
@@ -87,8 +100,16 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
         subdirectory: "Models/Whisper"
       )
   }
+
+  nonisolated static func hasRequiredBundledModelFiles(at modelURL: URL) -> Bool {
+    let fileManager = FileManager.default
+    return requiredBundledModelFiles.allSatisfy { fileName in
+      fileManager.fileExists(atPath: modelURL.appendingPathComponent(fileName).path)
+    }
+  }
 }
 
 enum WhisperBackendError: Error {
   case missingBundledModel
+  case incompleteBundledModel
 }
