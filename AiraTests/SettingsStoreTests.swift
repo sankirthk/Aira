@@ -215,6 +215,14 @@ struct SettingsStoreTests {
     #expect(decoded.voiceScrollMode == .classicScroll)
   }
 
+  @Test func voiceScrollModesExposeSettingsMenuCopy() {
+    #expect(
+      VoiceScrollMode.allCases.map(\.settingsTitle) == [
+        "Classic", "Voice-gated", "Word tracking",
+      ])
+    #expect(VoiceScrollMode.allCases.allSatisfy { !$0.settingsDescription.isEmpty })
+  }
+
   @Test func loadCorruptDataThrows() {
     let (store, defaults, suiteName) = makeSettingsStore()
     defer { cleanupSettings(defaults, suiteName: suiteName) }

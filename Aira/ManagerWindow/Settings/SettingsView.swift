@@ -2059,6 +2059,53 @@ private struct SystemTabContent: View {
       .foregroundStyle(Color("colorText").opacity(0.66))
   }
 
+  @ViewBuilder
+  private func voiceScrollModeButton(_ mode: VoiceScrollMode) -> some View {
+    let isActive = appState.settings.voiceScrollMode == mode
+
+    Button {
+      appState.settings.voiceScrollMode = mode
+    } label: {
+      VStack(alignment: .leading, spacing: 5) {
+        Text(mode.settingsTitle)
+          .font(.custom("CrimsonText-Regular", size: 17))
+          .foregroundStyle(
+            Color("colorText")
+              .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.35)
+          )
+        Text(mode.settingsDescription)
+          .font(.custom("CrimsonText-Regular", size: 13))
+          .foregroundStyle(
+            Color("colorText")
+              .opacity(appState.settings.voiceSyncEnabled ? 0.62 : 0.28)
+          )
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .background(
+        isActive && appState.settings.voiceSyncEnabled
+          ? Color("colorPrimary").opacity(0.1)
+          : Color("colorBackground").opacity(0.75)
+      )
+      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .overlay(
+        RoundedRectangle(cornerRadius: 14)
+          .stroke(
+            isActive && appState.settings.voiceSyncEnabled
+              ? Color("colorPrimary")
+              : Color("colorText").opacity(0.14),
+            lineWidth: isActive && appState.settings.voiceSyncEnabled ? 3 : 2
+          )
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 14))
+    }
+    .buttonStyle(.plain)
+    .disabled(!appState.settings.voiceSyncEnabled)
+    .settingsPointingHandCursor()
+  }
+
   var body: some View {
     VStack(spacing: 16) {
       SettingsPanel {
@@ -2172,16 +2219,22 @@ private struct SystemTabContent: View {
           VStack(alignment: .leading, spacing: 14) {
             HStack {
               VStack(alignment: .leading, spacing: 4) {
-                Text("Voice Follow")
+                Text("Voice scroll mode")
                   .font(.custom("CrimsonText-Regular", size: 18))
                   .foregroundStyle(Color("colorText"))
                 Text(
-                  "Moves with speech, uses your configured points-per-second speed as a base, and keeps the script anchored smoothly."
+                  "Choose whether speech only highlights words, gates steady scrolling, or tracks the recognized word directly."
                 )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
               }
               Spacer()
+            }
+
+            VStack(spacing: 8) {
+              ForEach(VoiceScrollMode.allCases, id: \.self) { mode in
+                voiceScrollModeButton(mode)
+              }
             }
           }
           .disabled(!appState.settings.voiceSyncEnabled)

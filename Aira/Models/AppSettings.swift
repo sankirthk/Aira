@@ -343,6 +343,28 @@ enum VoiceScrollMode: String, Codable, CaseIterable {
   case classicScroll
   case volumeGated
   case wordTracking
+
+  var settingsTitle: String {
+    switch self {
+    case .classicScroll:
+      return "Classic"
+    case .volumeGated:
+      return "Voice-gated"
+    case .wordTracking:
+      return "Word tracking"
+    }
+  }
+
+  var settingsDescription: String {
+    switch self {
+    case .classicScroll:
+      return "Use the configured scroll speed; voice only updates highlighting."
+    case .volumeGated:
+      return "Scroll while speech is active, using the configured speed as the base."
+    case .wordTracking:
+      return "Follow the currently spoken word and adapt to your actual pace."
+    }
+  }
 }
 
 enum AppearanceMode: String, Codable, CaseIterable {
