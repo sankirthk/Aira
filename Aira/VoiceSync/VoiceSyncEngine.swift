@@ -1007,28 +1007,83 @@ struct VoiceSyncRecognitionInput {
   }
 
   static func makeRecognitionSamples(from buffer: AVAudioPCMBuffer) -> [Float]? {
-    guard let monoBuffer = makeRecognitionBuffer(from: buffer),
-      let monoChannel = monoBuffer.floatChannelData?[0],
-      monoBuffer.frameLength > 0
+    guard let monoBuffer = makeRecognitionBuffer(from: buffer) else {
+      return nil
+    }
+
+    guard let convertedBuffer = resampleForRecognitionIfNeeded(monoBuffer) else {
+      return nil
+    }
+    guard let monoChannel = convertedBuffer.floatChannelData?[0],
+      convertedBuffer.frameLength > 0
     else {
       return nil
     }
 
-    let sourceCount = Int(monoBuffer.frameLength)
-    let sourceSamples = UnsafeBufferPointer(start: monoChannel, count: sourceCount)
+    let sampleCount = Int(convertedBuffer.frameLength)
+    let samples = UnsafeBufferPointer(start: monoChannel, count: sampleCount)
+    return Array(samples)
+  }
+
+  private static func resampleForRecognitionIfNeeded(
+    _ monoBuffer: AVAudioPCMBuffer
+  ) -> AVAudioPCMBuffer? {
     guard monoBuffer.format.sampleRate != targetSampleRate else {
-      return Array(sourceSamples)
+      return monoBuffer
+    }
+
+    guard
+      let targetFormat = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32,
+        sampleRate: targetSampleRate,
+        channels: 1,
+        interleaved: false
+      ),
+      let converter = AVAudioConverter(from: monoBuffer.format, to: targetFormat)
+    else {
+      return nil
     }
 
     let ratio = targetSampleRate / monoBuffer.format.sampleRate
-    let destinationCount = max(1, Int(Double(sourceCount) * ratio))
-    return (0..<destinationCount).map { index in
-      let sourcePosition = Double(index) / ratio
-      let lowerIndex = min(Int(sourcePosition), sourceCount - 1)
-      let upperIndex = min(lowerIndex + 1, sourceCount - 1)
-      let fraction = Float(sourcePosition - Double(lowerIndex))
-      return sourceSamples[lowerIndex] * (1 - fraction) + sourceSamples[upperIndex] * fraction
+    let targetCapacity = AVAudioFrameCount(
+      max(1, Int(ceil(Double(monoBuffer.frameLength) * ratio)) + 16)
+    )
+    guard
+      let convertedBuffer = AVAudioPCMBuffer(
+        pcmFormat: targetFormat,
+        frameCapacity: targetCapacity
+      )
+    else {
+      return nil
     }
+
+    var didProvideInput = false
+    let inputBlock: AVAudioConverterInputBlock = { _, status in
+      if didProvideInput {
+        status.pointee = .noDataNow
+        return nil
+      }
+      didProvideInput = true
+      status.pointee = .haveData
+      return monoBuffer
+    }
+
+    var conversionError: NSError?
+    converter.convert(to: convertedBuffer, error: &conversionError, withInputFrom: inputBlock)
+    guard conversionError == nil,
+      convertedBuffer.frameLength > 0
+    else {
+      if let conversionError {
+        AiraLogger.shared.error(
+          conversionError,
+          category: "voice",
+          context: "Failed to resample recognition input"
+        )
+      }
+      return nil
+    }
+
+    return convertedBuffer
   }
 
   private static func recognitionGain(forPeak peak: Float) -> Float {

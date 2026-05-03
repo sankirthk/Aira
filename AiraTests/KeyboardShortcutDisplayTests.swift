@@ -1047,6 +1047,30 @@ struct VoiceSyncMatchingTests {
     #expect(abs(peak - 0.18) < 0.0001)
   }
 
+  @Test func voiceSyncRecognitionPreprocessingResamplesMicAudioToWhisperRate() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 1,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 480)!
+    buffer.frameLength = 480
+
+    let destination = UnsafeMutableBufferPointer(
+      start: buffer.floatChannelData![0],
+      count: Int(buffer.frameLength)
+    )
+    for frameIndex in 0..<Int(buffer.frameLength) {
+      destination[frameIndex] = sin(Float(frameIndex) * 0.03) * 0.05
+    }
+
+    let samples = try #require(VoiceSyncRecognitionInput.makeRecognitionSamples(from: buffer))
+
+    #expect(samples.count >= 150)
+    #expect(samples.count <= 176)
+  }
+
   @Test @MainActor func audioLevelMonitorUsesStrongestCapturedChannel() throws {
     let format = AVAudioFormat(
       commonFormat: .pcmFormatFloat32,
