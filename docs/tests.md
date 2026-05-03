@@ -116,6 +116,11 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026v | Overlay dulling follows the original worktree-start `visualHighlightedWordRange` delta renderer rather than the later committed-prefix path, so prior spoken words render correctly again after the rollback | `[x]` |
 | UT-026w | Advancing the current spoken-word underline does not remove the dull foreground color from words that just moved into the spoken prefix | `[x]` |
 | UT-026x | Established Voice-Sync matching searches forward from the engine cursor even when the visible word window has advanced past that cursor | `[x]` |
+| UT-027 | `SpeechRecognitionBackend` can be faked so `VoiceSyncEngine` matching and mode behavior are tested without loading WhisperKit/Core ML | `[ ]` |
+| UT-027a | A recognized word token advances the spoken cursor only to the next localized script match and never backwards to a repeated earlier word | `[ ]` |
+| UT-027b | Classic scroll mode updates spoken-word highlighting without mutating `VoiceSyncEngine.scrollOffset` | `[ ]` |
+| UT-027c | Word-tracking mode maps the matched current word index to bounded scroll progress | `[ ]` |
+| UT-027d | Voice-Sync teardown stops the recognition backend and rejects stale spoken-word callbacks | `[ ]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 
@@ -334,12 +339,13 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-046 | System tab manual-scroll copy refers to Manual mode / Voice-Sync-off behavior, and the Speech Sensitivity field label matches the surrounding Crimson Text control styling | `[ ]` |
 | MT-047 | Overlay audio beam uses the shared primary color token and no overlay-local `Color(hex:)` helper remains in the Phase 6 window stack | `[ ]` |
 | MT-005 | Pill window is freely movable to a second display | `[ ]` |
-| MT-006 | App bundle size is under 10 MB after Archive build | `[ ]` |
+| MT-006 | App bundle size is measured after Archive build and includes the bundled speech model size | `[ ]` |
 | MT-007 | No outbound telemetry or unrelated network requests during launch → cast → session → quit; only Sparkle appcast/update HTTPS traffic is permitted in direct-distribution builds | `[ ]` |
 | MT-008 | Notarized .dmg passes `spctl --assess --verbose` without warnings | `[ ]` |
 | MT-009 | Voice-Sync scroll tracks spoken words in real time with < 1 second lag | `[ ]` |
 | MT-010 | Script scroll pauses immediately when user stops speaking | `[ ]` |
 | MT-011 | Settings modal matches the mockup chrome: cream Preferences strip, sage active tab in light and dark mode, and small square Light/Dark preview swatches | `[ ]` |
+| MT-049 | Release verification confirms WhisperKit and bundled `openai_whisper-tiny.en` are present, the speech model is loaded from bundle storage, and no model download occurs at runtime | `[ ]` |
 | MT-012 | Manager UI audit sweep: button chrome, script editor, document library controls, and sidebar badges use the shared audited color tokens consistently in light and dark mode | `[ ]` |
 | MT-013 | Settings modal top chrome uses themed surface color in both light and dark mode, App Theme swatches are centered, and System-tab control labels/body copy use Crimson Text while section headings stay Indie Flower | `[ ]` |
 | MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, top chrome uses `#484C49`, Light Paper preview stays cream, notch preview uses `#434343`, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |

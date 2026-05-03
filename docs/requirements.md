@@ -113,7 +113,7 @@ These rules apply across all of Aira's behavior.
 - Aira requires no user account, login, or registration at any point.
 - All scripts, settings, appearance preferences, and API keys remain on the user's device at all times.
 - Aira collects no analytics, telemetry, usage data, or crash reports that leave the device.
-- No network connection is required to use any core authoring or presenter feature. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). App Store builds do not use Sparkle and therefore must not perform updater traffic. If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
+- No network connection is required to use any core authoring or presenter feature. Voice-Sync uses bundled on-device speech recognition assets and must not download speech models at runtime. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). App Store builds do not use Sparkle and therefore must not perform updater traffic. If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
 - Stealth Mode must never fail silently; if the prompter cannot be excluded from screen-share output, the user must be informed before a presenter session begins.
 - Voice-Sync and manual scroll are always independently available; one must never depend on the other being active.
 - The Notch Window and Pill Windows are independent surfaces; the failure or closure of one must not affect the other.
