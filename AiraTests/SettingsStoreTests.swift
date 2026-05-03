@@ -204,6 +204,17 @@ struct SettingsStoreTests {
     }
   }
 
+  @MainActor @Test func voiceScrollModeDefaultsToWordTrackingAndCodableRoundTrips() throws {
+    var settings = AppSettings()
+    #expect(settings.voiceScrollMode == .wordTracking)
+
+    settings.voiceScrollMode = .classicScroll
+    let data = try JSONEncoder().encode(settings)
+    let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+    #expect(decoded.voiceScrollMode == .classicScroll)
+  }
+
   @Test func loadCorruptDataThrows() {
     let (store, defaults, suiteName) = makeSettingsStore()
     defer { cleanupSettings(defaults, suiteName: suiteName) }

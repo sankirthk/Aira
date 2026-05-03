@@ -39,6 +39,7 @@ struct AppSettings: Codable, Equatable {
   var spokenWordHighlightingEnabled: Bool = false
   var pauseOnHoverEnabled: Bool = true
   var voiceSyncMode: VoiceSyncMode = .voice
+  var voiceScrollMode: VoiceScrollMode = .wordTracking
   var speechSensitivity: SpeechSensitivity = .medium
   var autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM {
     didSet {
@@ -80,6 +81,7 @@ struct AppSettings: Codable, Equatable {
     spokenWordHighlightingEnabled: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     voiceSyncMode: VoiceSyncMode = .voice,
+    voiceScrollMode: VoiceScrollMode = .wordTracking,
     speechSensitivity: SpeechSensitivity = .medium,
     autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM,
     screenCaptureExclusionEnabled: Bool = true,
@@ -104,6 +106,7 @@ struct AppSettings: Codable, Equatable {
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.voiceSyncMode = voiceSyncMode
+    self.voiceScrollMode = voiceScrollMode
     self.speechSensitivity = speechSensitivity
     self.autoScrollWPM = ManualScrollConfiguration.clampedWPM(autoScrollWPM)
     self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
@@ -195,6 +198,7 @@ struct AppSettings: Codable, Equatable {
     case spokenWordHighlightingEnabled
     case pauseOnHoverEnabled
     case voiceSyncMode
+    case voiceScrollMode
     case speechSensitivity
     case autoScrollWPM
     case screenCaptureExclusionEnabled
@@ -233,6 +237,9 @@ struct AppSettings: Codable, Equatable {
       try container.decodeIfPresent(Bool.self, forKey: .pauseOnHoverEnabled) ?? true
     voiceSyncMode =
       try container.decodeIfPresent(VoiceSyncMode.self, forKey: .voiceSyncMode) ?? .voice
+    voiceScrollMode =
+      try container.decodeIfPresent(VoiceScrollMode.self, forKey: .voiceScrollMode)
+      ?? .wordTracking
     speechSensitivity =
       try container.decodeIfPresent(SpeechSensitivity.self, forKey: .speechSensitivity) ?? .medium
     autoScrollWPM = ManualScrollConfiguration.clampedWPM(
@@ -281,6 +288,7 @@ struct AppSettings: Codable, Equatable {
     try container.encode(spokenWordHighlightingEnabled, forKey: .spokenWordHighlightingEnabled)
     try container.encode(pauseOnHoverEnabled, forKey: .pauseOnHoverEnabled)
     try container.encode(voiceSyncMode, forKey: .voiceSyncMode)
+    try container.encode(voiceScrollMode, forKey: .voiceScrollMode)
     try container.encode(speechSensitivity, forKey: .speechSensitivity)
     try container.encode(autoScrollWPM, forKey: .autoScrollWPM)
     try container.encode(screenCaptureExclusionEnabled, forKey: .screenCaptureExclusionEnabled)
@@ -329,6 +337,12 @@ enum VoiceSyncMode: String, Codable, CaseIterable {
     var container = encoder.singleValueContainer()
     try container.encode(rawValue)
   }
+}
+
+enum VoiceScrollMode: String, Codable, CaseIterable {
+  case classicScroll
+  case volumeGated
+  case wordTracking
 }
 
 enum AppearanceMode: String, Codable, CaseIterable {
