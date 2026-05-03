@@ -346,6 +346,45 @@ struct KeyboardShortcutDisplayTests {
     #expect(view.intrinsicContentSize.height == baseHeight)
   }
 
+  @Test @MainActor func overlayStyledTextKeepsDullColorWhenCurrentWordAdvancesIntoPrefix() throws {
+    let text = "alpha beta gamma delta epsilon"
+    let attributed = OverlayTextStyle.makeAttributedString(text, appearance: .default)
+    let highlightColor = NSColor.systemRed
+    let view = OverlayStyledTextContainerView()
+
+    view.configure(
+      attributedText: attributed,
+      width: 260,
+      highlightedWordRange: 0..<2,
+      currentWordIndex: 2,
+      highlightColor: highlightColor,
+      underlineColor: .systemBlue,
+      onWordClick: nil
+    )
+
+    view.configure(
+      attributedText: attributed,
+      width: 260,
+      highlightedWordRange: 0..<3,
+      currentWordIndex: 3,
+      highlightColor: highlightColor,
+      underlineColor: .systemBlue,
+      onWordClick: nil
+    )
+
+    let textView = try #require(view.subviews.first as? NSTextView)
+    let layoutManager = try #require(textView.layoutManager)
+    let gammaLocation = (text as NSString).range(of: "gamma").location
+    let color =
+      layoutManager.temporaryAttribute(
+        .foregroundColor,
+        atCharacterIndex: gammaLocation,
+        effectiveRange: nil
+      ) as? NSColor
+
+    #expect(color == highlightColor)
+  }
+
   @Test func overlayStyledTextCurrentWordUnderlineAttributesStaySeparateFromHistory() {
     let underlineColor = NSColor.labelColor
     let attributes = OverlayStyledTextContainerView.currentWordTemporaryAttributes(
@@ -1372,6 +1411,13 @@ struct VoiceSyncMatchingTests {
       VoiceSyncEngine.startupSearchLowerBound(
         cursorIndex: 5,
         visibleWordLowerBound: 0,
+        hasEstablishedMatch: true
+      ) == 5
+    )
+    #expect(
+      VoiceSyncEngine.startupSearchLowerBound(
+        cursorIndex: 5,
+        visibleWordLowerBound: 12,
         hasEstablishedMatch: true
       ) == 5
     )

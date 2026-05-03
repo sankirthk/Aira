@@ -925,7 +925,7 @@ class VoiceSyncEngine: ObservableObject {
   ) -> Int {
     let visibleLowerBound = max(visibleWordLowerBound, 0)
     guard hasEstablishedMatch else { return visibleLowerBound }
-    return max(cursorIndex, visibleLowerBound)
+    return max(cursorIndex, 0)
   }
 
   static func recommendedStrictMatchLookAhead(

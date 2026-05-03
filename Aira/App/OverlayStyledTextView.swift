@@ -186,20 +186,18 @@ final class OverlayStyledTextContainerView: NSView {
     highlightColor: NSColor,
     underlineColor: NSColor
   ) {
-    updateHighlightedWordRange(
-      characterRange: highlightedWordRange.flatMap(characterRange(for:)),
-      highlightColor: highlightColor
-    )
-
     if let highlightedTokenRange {
       layoutManager.removeTemporaryAttribute(
         .underlineStyle, forCharacterRange: highlightedTokenRange)
       layoutManager.removeTemporaryAttribute(
         .underlineColor, forCharacterRange: highlightedTokenRange)
-      layoutManager.removeTemporaryAttribute(
-        .foregroundColor, forCharacterRange: highlightedTokenRange)
       self.highlightedTokenRange = nil
     }
+
+    updateHighlightedWordRange(
+      characterRange: highlightedWordRange.flatMap(characterRange(for:)),
+      highlightColor: highlightColor
+    )
 
     guard let currentWordIndex else {
       textView.needsDisplay = true
