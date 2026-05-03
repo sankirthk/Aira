@@ -239,15 +239,26 @@ struct MenuBarQuickAccessView: View {
       // Hide manager window and become accessory BEFORE presenting overlays —
       // switching policy after panels appear can cause macOS to hide them.
       hideManagerWindowIfNeeded()
-      overlayController.presentSession(
-        script: script,
-        appearance: appState.settings.defaultOverlayAppearance,
-        countdownDuration: appState.settings.countdownDuration,
-        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
-        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
-        voiceSyncMode: appState.settings.voiceSyncMode,
-        pillModes: includePills ? quickCastPillModes : enabledPillModes
-      )
+      if includePills {
+        overlayController.presentMirroredSatelliteSession(
+          script: script,
+          appearance: appState.settings.defaultOverlayAppearance,
+          countdownDuration: appState.settings.countdownDuration,
+          satelliteCount: appState.settings.maxPillCount,
+          voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+          autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+          voiceSyncMode: appState.settings.voiceSyncMode
+        )
+      } else {
+        overlayController.presentSession(
+          script: script,
+          appearance: appState.settings.defaultOverlayAppearance,
+          countdownDuration: appState.settings.countdownDuration,
+          voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+          autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+          voiceSyncMode: appState.settings.voiceSyncMode
+        )
+      }
       dismissMenuBarWindows()
     } catch {
       NSSound.beep()
@@ -281,15 +292,6 @@ struct MenuBarQuickAccessView: View {
   private var voiceControlIsEnabled: Bool {
     MenuBarVoiceControlPresentation.isEnabled(hasActiveSession: appState.sessionActive)
   }
-
-  private var enabledPillModes: [PillContentMode] {
-    appState.settings.enabledPillModes
-  }
-
-  private var quickCastPillModes: [PillContentMode] {
-    appState.settings.pillModes(forRequestedCount: max(appState.settings.maxPillCount, 1))
-  }
-
   private func hideManagerWindowIfNeeded() {
     AppWindowCoordinator.hideManagerWindowForSession()
   }

@@ -213,7 +213,7 @@ Three related live-session issues are currently tracked:
 
 1. Zero-countdown `Cast to Notch` can show a beachball on first launch, with trace logs showing the major stall happens when `VoiceSyncEngine.startEngine()` begins immediately after the first overlay render.
 2. Voice-driven scrolling can fail entirely while the user is already on an active call/meeting app using the microphone.
-3. Session scroll keyboard shortcuts currently move Manual-mode Satellite windows even though those windows are supposed to remain independent of the shared notch/synced playhead.
+3. Session scroll keyboard shortcuts currently move Manual-mode Pill Windows even though those windows are supposed to remain independent of the shared notch/synced playhead.
 
 ### Observed Cause
 
@@ -225,21 +225,21 @@ Three related live-session issues are currently tracked:
   - reentrant `NSHostingView` layout
   - `layoutSubtreeIfNeeded` while already laying out
   - `Invalid tile rect null passed to NSFullScreenSpace`
-- Keyboard shortcut handling is still scoped too broadly across overlay types; Manual Satellites are responding to shared session nudges when they should ignore them.
+- Keyboard shortcut handling is still scoped too broadly across overlay types; Manual Pill Windows are responding to shared session nudges when they should ignore them.
 
 ### Proposed Fix
 
 1. Defer zero-countdown `voiceSync.start()` until after the first overlay render turn instead of starting audio/speech synchronously inside the initial `onAppear` path.
 2. Keep the manager visible until the primary notch overlay is actually ordered front, then switch to accessory/session presentation.
 3. Audit the audio-session / speech-recognition path under active-call conditions so Voice-Sync keeps receiving mic input while another app is also using the microphone.
-4. Tighten keyboard shortcut routing so only the notch and synced overlays sharing the active session playhead respond to scroll shortcuts; Manual Satellites must remain isolated.
+4. Tighten keyboard shortcut routing so only the notch and synced overlays sharing the active session playhead respond to scroll shortcuts; Manual Pill Windows must remain isolated.
 
 ### Follow-Up Testing Needed
 
 1. Cold launch with countdown `0`: no beachball, notch appears first, then voice startup begins.
 2. Zero-countdown launch emits no recursive-layout warnings in the debug log.
 3. Voice-Sync continues advancing while the user is on a live call/meeting app.
-4. Scroll-up / scroll-down shortcuts do not move Manual-mode Satellite windows.
+4. Scroll-up / scroll-down shortcuts do not move Manual-mode Pill Windows.
 
 ### Notes
 

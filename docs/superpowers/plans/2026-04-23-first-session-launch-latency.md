@@ -217,7 +217,7 @@ refreshRenderedLayout(width: viewportWidth)
 launchTrace?.mark("prompter.afterFirstLayout")
 ```
 
-This requires adding `let launchTrace: SessionLaunchTrace?` to `PrompterContentView`, `NotchContentView`, and `PillContentView` initializers only where the trace is needed. For pills, pass `nil` unless tracing Satellite launch is explicitly needed.
+This requires adding `let launchTrace: SessionLaunchTrace?` to `PrompterContentView`, `NotchContentView`, and `PillContentView` initializers only where the trace is needed. For pills, pass `nil` unless tracing Pill Window launch is explicitly needed.
 
 - [x] **Step 5: Mark voice startup**
 

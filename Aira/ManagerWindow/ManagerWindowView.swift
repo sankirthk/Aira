@@ -192,6 +192,9 @@ struct ManagerWindowView: View {
         onCast: {
           castCurrentScriptToNotch()
         },
+        onCastWithSatellite: { satelliteSelections in
+          castCurrentScriptWithSatellite(satelliteSelections: satelliteSelections)
+        },
         onBack: {
           dismissEditor()
         }
@@ -505,10 +508,6 @@ struct ManagerWindowView: View {
     }
   }
 
-  private var enabledPillModes: [PillContentMode] {
-    appState.settings.enabledPillModes
-  }
-
   private func castCurrentScriptToNotch() {
     guard !overlayController.hasActiveNotch else {
       overlayErrorMessage =
@@ -520,7 +519,23 @@ struct ManagerWindowView: View {
       return
     }
 
-    startOverlaySession(with: script)
+    startOverlaySession(with: script, launchIntent: .notchOnly)
+  }
+
+  private func castCurrentScriptWithSatellite(
+    satelliteSelections: [SatelliteLaunchSelection]
+  ) {
+    guard !overlayController.hasActiveNotch else {
+      overlayErrorMessage =
+        "An overlay is already active. End the current session before casting again."
+      return
+    }
+    guard let script = activeScript ?? appState.activeScript else {
+      overlayErrorMessage = "Open a script before casting with Pill Windows."
+      return
+    }
+
+    startOverlaySession(with: script, launchIntent: .assignedSatellites(satelliteSelections))
   }
 
   private func castScriptToNotch(id: UUID) {
@@ -531,7 +546,7 @@ struct ManagerWindowView: View {
     }
     do {
       let script = try appState.loadScript(id: id)
-      startOverlaySession(with: script)
+      startOverlaySession(with: script, launchIntent: .notchOnly)
     } catch {
       AiraLogger.shared.error(
         error, category: "session", context: "Failed to cast script \(id.uuidString) to notch")
@@ -547,7 +562,7 @@ struct ManagerWindowView: View {
 
     do {
       let script = try defaultShortcutScript()
-      startOverlaySession(with: script)
+      startOverlaySession(with: script, launchIntent: .notchOnly)
     } catch {
       AiraLogger.shared.error(
         error, category: "session", context: "Failed to toggle notch shortcut")
@@ -556,10 +571,6 @@ struct ManagerWindowView: View {
   }
 
   private func togglePillShortcut() {
-    guard appState.settings.pillsEnabled else {
-      return
-    }
-
     if overlayController.pillCount >= appState.settings.maxPillCount {
       overlayController.closeLastPill()
       return
@@ -568,14 +579,16 @@ struct ManagerWindowView: View {
     do {
       let script = try defaultShortcutScript()
       guard PillLaunchPolicy.canLaunchPill(with: script) else {
-        overlayErrorMessage = "Add script text before casting to Satellite."
+        overlayErrorMessage = "Add script text before casting to a Pill Window."
         return
       }
 
       let launched = overlayController.addPill(
         mode: .voiceSync,
         script: script,
-        appearance: appState.settings.defaultOverlayAppearance,
+        appearance: appState.settings.effectiveSatelliteAppearance(
+          forSlot: overlayController.pillCount + 1
+        ),
         countdownDuration: appState.settings.countdownDuration,
         voiceSyncEnabled: appState.settings.voiceSyncEnabled,
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
@@ -607,7 +620,10 @@ struct ManagerWindowView: View {
     return try appState.loadScript(id: firstScript.id)
   }
 
-  private func startOverlaySession(with script: Script) {
+  private func startOverlaySession(
+    with script: Script,
+    launchIntent: OverlaySessionLaunchIntent
+  ) {
     guard ScriptEditorSessionLogic.canStartPresenterSession(withBody: script.body) else {
       overlayErrorMessage = "Add script text before casting to the notch."
       return
@@ -617,15 +633,37 @@ struct ManagerWindowView: View {
     // Doing this first ensures panels are ordered-front while the app is already in
     // accessory mode — switching policy AFTER panels appear can cause macOS to hide them.
     miniaturizeManagerWindow()
-    overlayController.presentSession(
-      script: script,
-      appearance: appState.settings.defaultOverlayAppearance,
-      countdownDuration: appState.settings.countdownDuration,
-      voiceSyncEnabled: appState.settings.voiceSyncEnabled,
-      autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
-      voiceSyncMode: appState.settings.voiceSyncMode,
-      pillModes: enabledPillModes
-    )
+    switch launchIntent {
+    case .notchOnly:
+      overlayController.presentSession(
+        script: script,
+        appearance: appState.settings.defaultOverlayAppearance,
+        countdownDuration: appState.settings.countdownDuration,
+        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+        voiceSyncMode: appState.settings.voiceSyncMode
+      )
+    case .mirroredSatellites(let count):
+      overlayController.presentMirroredSatelliteSession(
+        script: script,
+        appearance: appState.settings.defaultOverlayAppearance,
+        countdownDuration: appState.settings.countdownDuration,
+        satelliteCount: count,
+        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+        voiceSyncMode: appState.settings.voiceSyncMode
+      )
+    case .assignedSatellites(let satelliteSelections):
+      overlayController.presentAssignedSatelliteSession(
+        script: script,
+        appearance: appState.settings.defaultOverlayAppearance,
+        countdownDuration: appState.settings.countdownDuration,
+        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+        voiceSyncMode: appState.settings.voiceSyncMode,
+        satelliteSelections: satelliteSelections
+      )
+    }
   }
 
   private func miniaturizeManagerWindow() {
