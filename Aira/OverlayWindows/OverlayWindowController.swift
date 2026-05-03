@@ -124,6 +124,7 @@ class OverlayWindowController {
   private func bindAppState() {
     settingsCancellable = appState?.$settings
       .sink { [weak self] settings in
+        self?.voiceSync.voiceScrollMode = settings.voiceScrollMode
         self?.notchController?.updateSessionBehavior(
           voiceSyncEnabled: settings.voiceSyncEnabled,
           spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
@@ -392,6 +393,7 @@ class OverlayWindowController {
 
   private func prepareSharedSession(script: Script) {
     voiceSync.loadScript(text: script.body)
+    voiceSync.voiceScrollMode = appState?.settings.voiceScrollMode ?? .wordTracking
     audioMonitor.sensitivity = appState?.settings.speechSensitivity ?? .medium
     audioMonitor.reset()
     playheadCoordinator.beginSession()

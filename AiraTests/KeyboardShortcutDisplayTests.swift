@@ -923,6 +923,48 @@ struct VoiceSyncMatchingTests {
     #expect(engine.visualHighlightedWordRange == 0..<5)
   }
 
+  @Test @MainActor func classicScrollModeUpdatesHighlightWithoutChangingScrollOffset() async throws
+  {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four", startingAt: 0.25)
+    engine.voiceScrollMode = .classicScroll
+
+    backend.emit("three")
+
+    #expect(engine.scrollOffset == 0.25)
+    #expect(engine.visualCurrentWordIndex == 2)
+    #expect(engine.visualHighlightedWordRange == 0..<2)
+  }
+
+  @Test @MainActor func wordTrackingModeMapsMatchedWordToScrollProgress() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("three")
+
+    #expect(engine.currentWordIndex == 2)
+    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
+  }
+
+  @Test @MainActor func volumeGatedModeOnlyScrollsWhenSpeechIsActive() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.voiceScrollMode = .volumeGated
+
+    backend.emit("three")
+    #expect(engine.scrollOffset == 0)
+
+    engine.reseedHighlight(to: 0)
+    engine.isHumanSpeechActive = true
+    backend.emit("three")
+
+    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
+  }
+
   @Test func voiceSyncRecognitionPreprocessingSelectsStrongestChannel() throws {
     let format = AVAudioFormat(
       commonFormat: .pcmFormatFloat32,

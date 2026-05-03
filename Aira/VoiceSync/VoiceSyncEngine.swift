@@ -17,6 +17,7 @@ class VoiceSyncEngine: ObservableObject {
   @Published var visualCurrentWordIndex: Int?
   @Published var visualHighlightedWordRange: Range<Int>?
   @Published var isHumanSpeechActive: Bool = false
+  @Published var voiceScrollMode: VoiceScrollMode = .wordTracking
 
   private var audioEngine: AVAudioEngine?
   private var recognitionTask: SFSpeechRecognitionTask?
@@ -451,6 +452,25 @@ class VoiceSyncEngine: ObservableObject {
     visualHighlightedWordRange = 0..<match.currentWordIndex
     cursorIndex = max(cursorIndex, match.currentWordIndex)
     visualCursorIndex = max(visualCursorIndex, match.currentWordIndex + 1)
+
+    switch voiceScrollMode {
+    case .classicScroll:
+      break
+    case .volumeGated:
+      if recognitionDrivesScroll && isHumanSpeechActive {
+        scrollOffset = VoiceSyncMatching.scrollOffset(
+          cursorIndex: cursorIndex,
+          totalWords: scriptWords.count
+        )
+      }
+    case .wordTracking:
+      if recognitionDrivesScroll {
+        scrollOffset = VoiceSyncMatching.scrollOffset(
+          cursorIndex: cursorIndex,
+          totalWords: scriptWords.count
+        )
+      }
+    }
   }
 
   private func matchRecognizedWordToken(_ token: SpokenWordToken) -> VoiceSyncMatching.Match? {
