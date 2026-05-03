@@ -1,6 +1,5 @@
 import AVFoundation
 import AppKit
-import Speech
 import Testing
 
 @testable import Aira
@@ -965,6 +964,20 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
   }
 
+  @Test @MainActor func voiceSyncStopStopsBackendAndRejectsStaleWordCallbacks() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four", startingAt: 0)
+
+    engine.stop()
+    backend.emit("three")
+
+    #expect(backend.stopCallCount == 1)
+    #expect(engine.currentWordIndex == nil)
+    #expect(engine.visualCurrentWordIndex == nil)
+    #expect(engine.scrollOffset == 0)
+  }
+
   @Test func voiceSyncRecognitionPreprocessingSelectsStrongestChannel() throws {
     let format = AVAudioFormat(
       commonFormat: .pcmFormatFloat32,
@@ -1102,22 +1115,16 @@ struct VoiceSyncMatchingTests {
     #expect(engine.visualHighlightedWordRange == 0..<2)
   }
 
-  @Test @MainActor func firstLaunchPermissionCoordinatorRequestsAccessibilityMicAndSpeechOnce()
+  @Test @MainActor func firstLaunchPermissionCoordinatorRequestsAccessibilityAndMicOnce()
     throws
   {
     let (settingsStore, defaults, suiteName) = makeSettingsStore()
     defer { cleanupSettings(defaults, suiteName: suiteName) }
 
-    var speechRequestCount = 0
     var microphoneRequestCount = 0
     var accessibilityPromptCount = 0
     let coordinator = AppPermissionCoordinator(
       settingsStore: settingsStore,
-      speechPermissionState: { .undetermined },
-      requestSpeechPermission: { reply in
-        speechRequestCount += 1
-        reply(.granted)
-      },
       microphonePermissionState: { .undetermined },
       requestMicrophonePermission: { reply in
         microphoneRequestCount += 1
@@ -1133,7 +1140,6 @@ struct VoiceSyncMatchingTests {
     coordinator.requestLaunchPermissionsIfNeeded()
 
     let persisted = try settingsStore.load()
-    #expect(speechRequestCount == 1)
     #expect(microphoneRequestCount == 1)
     #expect(accessibilityPromptCount == 1)
     #expect(persisted.hasCompletedInitialPermissionPrompt)
@@ -1145,15 +1151,10 @@ struct VoiceSyncMatchingTests {
 
     try settingsStore.save(AppSettings(hasCompletedInitialPermissionPrompt: true))
 
-    var speechRequestCount = 0
     var microphoneRequestCount = 0
     var accessibilityPromptCount = 0
     let coordinator = AppPermissionCoordinator(
       settingsStore: settingsStore,
-      speechPermissionState: { .granted },
-      requestSpeechPermission: { _ in
-        speechRequestCount += 1
-      },
       microphonePermissionState: { .granted },
       requestMicrophonePermission: { _ in
         microphoneRequestCount += 1
@@ -1166,7 +1167,6 @@ struct VoiceSyncMatchingTests {
 
     coordinator.requestLaunchPermissionsIfNeeded()
 
-    #expect(speechRequestCount == 0)
     #expect(microphoneRequestCount == 0)
     #expect(accessibilityPromptCount == 1)
   }
@@ -1178,8 +1178,6 @@ struct VoiceSyncMatchingTests {
     var accessibilityPromptCount = 0
     let coordinator = AppPermissionCoordinator(
       settingsStore: settingsStore,
-      speechPermissionState: { .granted },
-      requestSpeechPermission: { _ in },
       microphonePermissionState: { .granted },
       requestMicrophonePermission: { _ in },
       isAccessibilityTrusted: { false },
@@ -1202,15 +1200,10 @@ struct VoiceSyncMatchingTests {
 
     try settingsStore.save(AppSettings(hasCompletedInitialPermissionPrompt: true))
 
-    var speechRequestCount = 0
     var microphoneRequestCount = 0
     var accessibilityPromptCount = 0
     let coordinator = AppPermissionCoordinator(
       settingsStore: settingsStore,
-      speechPermissionState: { .denied },
-      requestSpeechPermission: { _ in
-        speechRequestCount += 1
-      },
       microphonePermissionState: { .undetermined },
       requestMicrophonePermission: { _ in
         microphoneRequestCount += 1
@@ -1223,14 +1216,12 @@ struct VoiceSyncMatchingTests {
 
     coordinator.requestLaunchPermissionsIfNeeded()
 
-    #expect(speechRequestCount == 0)
     #expect(microphoneRequestCount == 1)
     #expect(accessibilityPromptCount == 0)
   }
 
   @Test @MainActor func voiceSyncStartDoesNotPromptWhenLaunchPermissionsMissing() {
     let engine = VoiceSyncEngine(
-      speechAuthorizationStatus: { .denied },
       microphonePermissionGranted: { false }
     )
 

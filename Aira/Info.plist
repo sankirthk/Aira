@@ -8,8 +8,6 @@
 	<string>.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Aira uses the microphone for on-device Voice-Sync scrolling during live teleprompter sessions.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Aira uses on-device speech recognition to follow your script and keep the overlay in sync with your words.</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUEnableInstallerLauncherService</key>

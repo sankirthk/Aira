@@ -836,9 +836,6 @@ All views that need global state receive it via `@EnvironmentObject`. Nested vie
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>Aira uses your microphone to follow along with your script as you speak.</string>
-
-<key>NSSpeechRecognitionUsageDescription</key>
-<string>Aira uses on-device speech recognition to advance your script in sync with your voice. No audio leaves your device.</string>
 ```
 
 **On-device enforcement:** WhisperKit loads the bundled `openai_whisper-tiny.en` model from the app bundle. Voice-Sync must not fall back to cloud speech recognition or trigger a runtime model download. If the bundled model cannot be loaded, Aira disables Voice-Sync for that session and reports the local model-load error.
