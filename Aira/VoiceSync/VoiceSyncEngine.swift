@@ -211,7 +211,7 @@ class VoiceSyncEngine: ObservableObject {
     )
 
     if microphoneGranted {
-      startEngine()
+      prepareRecognitionBackendThenStartEngine()
     }
   }
 
@@ -227,6 +227,24 @@ class VoiceSyncEngine: ObservableObject {
   }
 
   // MARK: - Engine
+
+  private func prepareRecognitionBackendThenStartEngine() {
+    let generation = recognitionGeneration
+    AiraLogger.shared.info("voiceSync.prepareBackend begin", category: "voice")
+    Task { @MainActor [weak self] in
+      guard let self, generation == self.recognitionGeneration else { return }
+      do {
+        try await self.recognitionBackend?.prepare()
+        guard generation == self.recognitionGeneration else { return }
+        AiraLogger.shared.info("voiceSync.prepareBackend completed", category: "voice")
+        self.startEngine()
+      } catch {
+        self.recognitionEnabled = false
+        AiraLogger.shared.error(
+          error, category: "voice", context: "Failed to prepare speech backend")
+      }
+    }
+  }
 
   private func startEngine() {
     AiraLogger.shared.info("voiceSync.startEngine begin", category: "voice")
@@ -302,7 +320,13 @@ class VoiceSyncEngine: ObservableObject {
       state = .running
     }
     isHumanSpeechActive = true
-    guard let match = matchRecognizedWordToken(token) else { return }
+    guard let match = matchRecognizedWordToken(token) else {
+      AiraLogger.shared.info(
+        "voiceSync.wordTokenNoMatch token=\"\(token.word)\" cursorIndex=\(cursorIndex) words=\(scriptWords.count)",
+        category: "voice"
+      )
+      return
+    }
 
     currentWordIndex = match.currentWordIndex
     highlightedWordRange = 0..<match.currentWordIndex
@@ -321,6 +345,10 @@ class VoiceSyncEngine: ObservableObject {
         scrollOffset = VoiceSyncMatching.scrollOffset(
           cursorIndex: cursorIndex,
           totalWords: scriptWords.count
+        )
+        AiraLogger.shared.info(
+          "voiceSync.wordTrackingScroll token=\"\(token.word)\" currentWordIndex=\(match.currentWordIndex) scrollOffset=\(scrollOffset)",
+          category: "voice"
         )
       }
     }

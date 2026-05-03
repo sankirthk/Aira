@@ -40,6 +40,10 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
       download: false
     )
     whisper = try await WhisperKit(config)
+    AiraLogger.shared.info(
+      "whisperBackend.prepared modelPath=\(modelURL.path)",
+      category: "voice"
+    )
   }
 
   func acceptAudio(_ samples: [Float]) async {
@@ -65,10 +69,22 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
     do {
       let options = DecodingOptions(language: "en", wordTimestamps: true)
       let results = try await whisper.transcribe(audioArray: audio, decodeOptions: options)
-      for word in results.flatMap(\.allWords) {
+      let words = results.flatMap(\.allWords)
+      AiraLogger.shared.info(
+        "whisperBackend.transcribed samples=\(audio.count) segments=\(results.count) words=\(words.count)",
+        category: "voice"
+      )
+      if words.isEmpty {
+        AiraLogger.shared.info("whisperBackend.noWordsEmitted", category: "voice")
+      }
+      for word in words {
         let key = "\(word.start)-\(word.word)"
         guard !emittedWords.contains(key) else { continue }
         emittedWords.insert(key)
+        AiraLogger.shared.info(
+          "whisperBackend.emit word=\"\(word.word)\" start=\(word.start) confidence=\(word.probability)",
+          category: "voice"
+        )
         onRecognizedWord?(
           SpokenWordToken(
             word: word.word,
