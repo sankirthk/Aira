@@ -970,6 +970,7 @@ extension AVAudioPCMBuffer {
 }
 
 struct VoiceSyncRecognitionInput {
+  static let minimumInputPeak: Float = 0.004
   static let targetPeak: Float = 0.18
   static let maxGain: Float = 12
   static let targetSampleRate: Double = 16_000
@@ -1011,6 +1012,9 @@ struct VoiceSyncRecognitionInput {
     )
     let sourcePeak = sourceSamples.reduce(into: Float(0)) { peak, sample in
       peak = max(peak, abs(sample))
+    }
+    guard sourcePeak >= minimumInputPeak else {
+      return nil
     }
 
     let monoFormat = AVAudioFormat(

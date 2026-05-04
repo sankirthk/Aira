@@ -1072,6 +1072,29 @@ struct VoiceSyncMatchingTests {
     #expect(abs(peak - 0.18) < 0.0001)
   }
 
+  @Test func voiceSyncRecognitionPreprocessingDropsSubThresholdNoise() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 1,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let roadNoise: [Float] = [0.0008, -0.0011, 0.0013, -0.0009]
+    let destination = UnsafeMutableBufferPointer(
+      start: buffer.floatChannelData![0],
+      count: Int(buffer.frameLength)
+    )
+    for (frameIndex, sample) in roadNoise.enumerated() {
+      destination[frameIndex] = sample
+    }
+
+    #expect(VoiceSyncRecognitionInput.makeRecognitionBuffer(from: buffer) == nil)
+    #expect(VoiceSyncRecognitionInput.makeRecognitionSamples(from: buffer) == nil)
+  }
+
   @Test func voiceSyncRecognitionPreprocessingResamplesMicAudioToWhisperRate() throws {
     let format = AVAudioFormat(
       commonFormat: .pcmFormatFloat32,
