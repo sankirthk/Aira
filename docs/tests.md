@@ -126,6 +126,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027g | Voice scroll mode policy separates manual scrolling, volume-based motion, speech-recognition word tracking, and optional spoken-word highlighting microphone use | `[x]` |
 | UT-027h | Bundled Whisper model resources include tokenizer files required for fully offline word recognition | `[x]` |
 | UT-027i | Voice recognition preprocessing converts native 48 kHz microphone buffers to 16 kHz mono samples before feeding WhisperKit | `[x]` |
+| UT-027j | Word-tracking ignores low-confidence Whisper hallucinations and duplicate overlap tokens instead of jumping to repeated single words far ahead | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 

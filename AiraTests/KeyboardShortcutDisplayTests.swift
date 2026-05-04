@@ -948,6 +948,31 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
   }
 
+  @Test @MainActor func wordTrackingIgnoresLowConfidenceAndDuplicateOverlapTokens() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "I started with clear words alpha beta gamma delta epsilon zeta eta theta I started later",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("(laughing)", confidence: 0.34)
+    #expect(engine.currentWordIndex == nil)
+
+    backend.emit("I", confidence: 0.81)
+    backend.emit("started", confidence: 1.0)
+    #expect(engine.currentWordIndex == 1)
+
+    backend.emit("I", confidence: 0.81)
+    #expect(engine.currentWordIndex == 1)
+
+    backend.emit("with", confidence: 0.99)
+    #expect(engine.currentWordIndex == 2)
+    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 16))
+  }
+
   @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)

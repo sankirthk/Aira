@@ -41,6 +41,7 @@ class VoiceSyncEngine: ObservableObject {
   private var diagnostics = DiagnosticsState()
   private let recognitionBackend: SpeechRecognitionBackend?
   private let tokenLookAhead = 50
+  private let minimumRecognizedWordConfidence: Float = 0.50
   private var acceptsRecognitionCallbacks = false
 
   enum MatcherMode: Equatable {
@@ -356,16 +357,49 @@ class VoiceSyncEngine: ObservableObject {
 
   private func matchRecognizedWordToken(_ token: SpokenWordToken) -> VoiceSyncMatching.Match? {
     guard let normalized = VoiceSyncMatching.normalizeToken(token.word) else { return nil }
+    let confidence = token.confidence ?? 1
+    guard confidence >= minimumRecognizedWordConfidence else {
+      AiraLogger.shared.info(
+        "voiceSync.wordTokenRejected reason=lowConfidence token=\"\(token.word)\" confidence=\(confidence)",
+        category: "voice"
+      )
+      return nil
+    }
+
     let searchStart = min(max(cursorIndex, 0), scriptWords.count)
-    let lookAhead = min(tokenLookAhead, max(scriptWords.count - searchStart, 0))
-    guard lookAhead > 0 else { return nil }
-    return VoiceSyncMatching.findDetailedMatch(
-      scriptWords: scriptWords,
-      spokenWindow: [normalized],
-      cursorIndex: searchStart,
-      lookAhead: lookAhead,
-      minimumOverlap: 1
+    let hasEstablishedMatch = currentWordIndex != nil || highlightedWordRange != nil
+    let matcherMode = matcherMode(
+      hasEstablishedMatch: hasEstablishedMatch,
+      lagWords: max(visibleWordRange.lowerBound - cursorIndex, 0)
     )
+    let visibleWordCount = visibleWordRange.isEmpty ? scriptWords.count : visibleWordRange.count
+    let localizedLookAhead = Self.recommendedStrictMatchLookAhead(
+      visibleWordCount: visibleWordCount,
+      minimumOverlap: 1,
+      mode: matcherMode
+    )
+    let lookAhead = min(tokenLookAhead, localizedLookAhead, max(scriptWords.count - searchStart, 0))
+    guard lookAhead > 0 else { return nil }
+    guard
+      let match = VoiceSyncMatching.findDetailedMatch(
+        scriptWords: scriptWords,
+        spokenWindow: [normalized],
+        cursorIndex: searchStart,
+        lookAhead: lookAhead,
+        minimumOverlap: 1
+      )
+    else { return nil }
+
+    guard
+      Self.isLowOverlapMatchPlausible(
+        matchStartIndex: match.startIndex,
+        searchStart: searchStart,
+        minimumOverlap: 1,
+        mode: matcherMode
+      )
+    else { return nil }
+
+    return match
   }
 
   private func normalizedSearchRange() -> Range<Int> {
