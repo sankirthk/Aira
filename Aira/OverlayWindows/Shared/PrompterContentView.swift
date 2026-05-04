@@ -195,6 +195,10 @@ struct PrompterContentView: View {
                 y: baseContentOffset(for: textGeometry.size.height)
                   - scrollDistance(for: textGeometry.size.height)
               )
+              .animation(
+                usesWordTrackingScroll ? .spring(response: 0.8, dampingFraction: 0.82) : nil,
+                value: renderedScrollOffset
+              )
               .clipped()
               .mask(alignment: .top) {
                 textExitFadeMask(readableHeight: textGeometry.size.height)
@@ -488,12 +492,11 @@ struct PrompterContentView: View {
     guard ownsSynchronizedScroll else { return }
     guard let idx = newIndex, !layoutSnapshot.lineMetrics.isEmpty else { return }
 
-    playheadCoordinator.updateProgress(Double(voiceSync.scrollOffset))
-    manualScrollDriver.setCurrentOffset(voiceSync.scrollOffset)
-
     guard
       let lineIndex = layoutSnapshot.lineMetrics.firstIndex(where: { $0.wordRange.contains(idx) })
     else {
+      playheadCoordinator.updateProgress(Double(voiceSync.scrollOffset))
+      manualScrollDriver.setCurrentOffset(voiceSync.scrollOffset)
       return
     }
 
@@ -515,6 +518,7 @@ struct PrompterContentView: View {
 
     let exactNormalized = min(anchorY / maxOffset, 1.0)
     playheadCoordinator.updateProgress(Double(exactNormalized))
+    manualScrollDriver.setCurrentOffset(CGFloat(exactNormalized))
   }
 
   // MARK: - Manual Scroll (trackpad / mouse wheel)

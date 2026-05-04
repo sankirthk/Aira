@@ -132,6 +132,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027m | Word-tracking recovery does not use far repeated filler words as widened single-token anchors | `[x]` |
 | UT-027n | Whisper backend uses phrase-length transcription chunks, overlapping context, bounded emitted-word cache, and bundled base.en preference with tiny.en fallback | `[x]` |
 | UT-027o | Bundled Whisper resources include both preferred `base.en` and fallback `tiny.en` models with offline tokenizer files | `[x]` |
+| UT-027p | Word-tracking fallback scroll progress uses bounded optical lookahead so the current spoken word is carried into the readable area instead of hugging the bottom edge | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 

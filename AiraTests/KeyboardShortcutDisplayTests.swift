@@ -881,10 +881,24 @@ struct VoiceSyncMatchingTests {
     #expect(match == nil)
   }
 
-  @Test func scrollOffsetIsProportionalToCursorPosition() {
-    let offset = VoiceSyncMatching.scrollOffset(cursorIndex: 25, totalWords: 100)
+  @Test func scrollOffsetCanRemainProportionalWithoutLookahead() {
+    let offset = VoiceSyncMatching.scrollOffset(
+      cursorIndex: 25,
+      totalWords: 100,
+      lookaheadWords: 0
+    )
 
     #expect(offset == 0.25)
+  }
+
+  @Test func scrollOffsetUsesBoundedOpticalLookaheadByDefault() {
+    let offset = VoiceSyncMatching.scrollOffset(cursorIndex: 25, totalWords: 100)
+    let endOffset = VoiceSyncMatching.scrollOffset(cursorIndex: 98, totalWords: 100)
+    let shortScriptOffset = VoiceSyncMatching.scrollOffset(cursorIndex: 0, totalWords: 15)
+
+    #expect(offset == 0.40)
+    #expect(endOffset == 1.0)
+    #expect(shortScriptOffset == 0)
   }
 
   @Test @MainActor func voiceSyncInputTapBufferSizeUsesLowerLatency128Frames() {

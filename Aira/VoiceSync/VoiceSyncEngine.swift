@@ -1362,8 +1362,12 @@ struct VoiceSyncMatching {
     ).map { $0.startIndex + spokenWindow.count }
   }
 
-  static func scrollOffset(cursorIndex: Int, totalWords: Int) -> CGFloat {
-    CGFloat(cursorIndex) / CGFloat(max(totalWords, 1))
+  static func scrollOffset(cursorIndex: Int, totalWords: Int, lookaheadWords: Int = 15) -> CGFloat {
+    let boundedTotalWords = max(totalWords, 1)
+    let boundedLookahead = max(lookaheadWords, 0)
+    let effectiveLookahead = boundedTotalWords >= boundedLookahead * 4 ? boundedLookahead : 0
+    let adjustedIndex = min(max(cursorIndex + effectiveLookahead, 0), boundedTotalWords)
+    return CGFloat(adjustedIndex) / CGFloat(boundedTotalWords)
   }
 
   private static func overlapCount(
