@@ -131,6 +131,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027l | Word-tracking widens its forward recovery window after consecutive plausible missed tokens without lowering the normal confidence threshold | `[x]` |
 | UT-027m | Word-tracking recovery does not use far repeated filler words as widened single-token anchors | `[x]` |
 | UT-027n | Whisper backend uses phrase-length transcription chunks, overlapping context, bounded emitted-word cache, and bundled base.en preference with tiny.en fallback | `[x]` |
+| UT-027o | Bundled Whisper resources include both preferred `base.en` and fallback `tiny.en` models with offline tokenizer files | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 
@@ -355,7 +356,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-009 | Voice-Sync scroll tracks spoken words in real time with < 1 second lag | `[ ]` |
 | MT-010 | Script scroll pauses immediately when user stops speaking | `[ ]` |
 | MT-011 | Settings modal matches the mockup chrome: cream Preferences strip, sage active tab in light and dark mode, and small square Light/Dark preview swatches | `[ ]` |
-| MT-049 | Release verification confirms WhisperKit and bundled `openai_whisper-tiny.en` are present, the speech model is loaded from bundle storage, and no model download occurs at runtime | `[x]` |
+| MT-049 | Release verification confirms WhisperKit and bundled `openai_whisper-base.en` plus fallback `openai_whisper-tiny.en` are present, the speech model is loaded from bundle storage, and no model download occurs at runtime | `[x]` |
 | MT-012 | Manager UI audit sweep: button chrome, script editor, document library controls, and sidebar badges use the shared audited color tokens consistently in light and dark mode | `[ ]` |
 | MT-013 | Settings modal top chrome uses themed surface color in both light and dark mode, App Theme swatches are centered, and System-tab control labels/body copy use Crimson Text while section headings stay Indie Flower | `[ ]` |
 | MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, top chrome uses `#484C49`, Light Paper preview stays cream, notch preview uses `#434343`, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |

@@ -1641,15 +1641,21 @@ struct VoiceSyncMatchingTests {
     #expect(VoiceSyncMatching.normalizeToken("  ") == nil)
   }
 
-  @Test func bundledWhisperModelIncludesTokenizerFilesForOfflineRecognition() throws {
-    let modelURL = try #require(
-      Bundle.main.url(
-        forResource: "openai_whisper-tiny.en",
-        withExtension: nil,
-        subdirectory: "Whisper"
-      ))
+  @Test func bundledWhisperModelsIncludeTokenizerFilesForOfflineRecognition() throws {
+    let bundleURL = try #require(
+      Bundle.main.url(forResource: "WhisperModels", withExtension: "bundle"))
+    let bundle = try #require(Bundle(url: bundleURL))
 
-    #expect(WhisperSpeechRecognitionBackend.hasRequiredBundledModelFiles(at: modelURL))
+    for modelName in WhisperSpeechRecognitionBackend.preferredBundledModelNames {
+      let modelURL = try #require(
+        bundle.url(
+          forResource: modelName,
+          withExtension: nil,
+          subdirectory: "Whisper"
+        ))
+
+      #expect(WhisperSpeechRecognitionBackend.hasRequiredBundledModelFiles(at: modelURL))
+    }
   }
 
 }

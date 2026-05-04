@@ -133,7 +133,7 @@ func test_presentSession_sameScriptTwice_resumesFromLastOffset()
 
 ### 4.2 On-device speech recognition — REQ-006
 
-- WhisperKit must load the bundled `openai_whisper-tiny.en` model from app resources with downloads disabled.
+- WhisperKit must load bundled app resources with downloads disabled, preferring `openai_whisper-base.en` and falling back to `openai_whisper-tiny.en`.
 - Do not add a fallback that sends audio to Apple's servers or downloads a model at runtime. If the bundled model cannot load, surface an error state; do not degrade to cloud recognition.
 - Audio capture (`AVAudioEngine` input tap) must be stopped and released in `VoiceSyncEngine.stop()`. Verify this is called by every `endSession()` path, including closure-based session endings from overlay context menus.
 

@@ -114,6 +114,9 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
 
   private static func bundledModelURL() -> URL? {
     for modelName in preferredBundledModelNames {
+      if let url = bundledModelResourceURL(for: modelName) {
+        return url
+      }
       if let url = Bundle.main.url(
         forResource: modelName,
         withExtension: nil,
@@ -130,6 +133,19 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
       }
     }
     return nil
+  }
+
+  private static func bundledModelResourceURL(for modelName: String) -> URL? {
+    guard
+      let bundleURL = Bundle.main.url(forResource: "WhisperModels", withExtension: "bundle"),
+      let bundle = Bundle(url: bundleURL)
+    else { return nil }
+
+    return bundle.url(
+      forResource: modelName,
+      withExtension: nil,
+      subdirectory: "Whisper"
+    )
   }
 
   nonisolated static func hasRequiredBundledModelFiles(at modelURL: URL) -> Bool {

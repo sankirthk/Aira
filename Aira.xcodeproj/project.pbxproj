@@ -10,8 +10,6 @@
 		A1B2C3D42F7A000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D42F7A000000000003 /* Sparkle */; };
 		C04900012F90000000000001 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = C04900012F90000000000003 /* WhisperKit */; };
 		C04900012F90000000000004 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = C04900012F90000000000003 /* WhisperKit */; };
-		C04900012F90000000000006 /* Aira/Models/Whisper in Resources */ = {isa = PBXBuildFile; fileRef = C04900012F90000000000005 /* Aira/Models/Whisper */; };
-		C04900012F90000000000007 /* Aira/Models/Whisper in Resources */ = {isa = PBXBuildFile; fileRef = C04900012F90000000000005 /* Aira/Models/Whisper */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,7 +26,7 @@
 		3F3577A92F6F97F20024E0B8 /* Aira.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aira.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3F4F7E6E2F6FB72D008A1C02 /* AiraTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AiraTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000012F80000000000001 /* AiraAppStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AiraAppStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C04900012F90000000000005 /* Aira/Models/Whisper */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Aira/Models/Whisper; sourceTree = "<group>"; };
+		C04900012F90000000000005 /* WhisperModels.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = Aira/Models/WhisperModels.bundle; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -100,7 +98,7 @@
 			children = (
 				3F3577AB2F6F97F20024E0B8 /* Aira */,
 				3F4F7E6F2F6FB72D008A1C02 /* AiraTests */,
-				C04900012F90000000000005 /* Aira/Models/Whisper */,
+				C04900012F90000000000005 /* WhisperModels.bundle */,
 				3F3577AA2F6F97F20024E0B8 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -240,7 +238,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C04900012F90000000000006 /* Aira/Models/Whisper in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -255,7 +252,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C04900012F90000000000007 /* Aira/Models/Whisper in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
