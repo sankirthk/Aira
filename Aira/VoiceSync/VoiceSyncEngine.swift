@@ -42,6 +42,9 @@ class VoiceSyncEngine: ObservableObject {
   private let recognitionBackend: SpeechRecognitionBackend?
   private let tokenLookAhead = 50
   private let minimumRecognizedWordConfidence: Float = 0.50
+  private let minimumRecoveryTokenConfidence: Float = 0.35
+  private let recoveryMissThreshold = 2
+  private var consecutiveRecognitionMissCount = 0
   private var acceptsRecognitionCallbacks = false
 
   enum MatcherMode: Equatable {
@@ -84,6 +87,7 @@ class VoiceSyncEngine: ObservableObject {
     isHumanSpeechActive = false
     visualCursorIndex = cursorIndex
     previousPartialTokens = []
+    consecutiveRecognitionMissCount = 0
     acceptsRecognitionCallbacks = true
   }
 
@@ -131,6 +135,7 @@ class VoiceSyncEngine: ObservableObject {
     visibleWordRange = 0..<0
     visualCursorIndex = 0
     previousPartialTokens = []
+    consecutiveRecognitionMissCount = 0
     diagnostics = DiagnosticsState()
     acceptsRecognitionCallbacks = false
   }
@@ -160,6 +165,7 @@ class VoiceSyncEngine: ObservableObject {
       visualHighlightedWordRange = nil
       visualCursorIndex = cursorIndex
       previousPartialTokens = []
+      consecutiveRecognitionMissCount = 0
     }
   }
 
@@ -174,6 +180,7 @@ class VoiceSyncEngine: ObservableObject {
       visualHighlightedWordRange = nil
       visualCursorIndex = cursorIndex
       previousPartialTokens = []
+      consecutiveRecognitionMissCount = 0
     }
   }
 
@@ -194,6 +201,7 @@ class VoiceSyncEngine: ObservableObject {
     visualCurrentWordIndex = clampedIndex
     visualHighlightedWordRange = 0..<clampedIndex
     previousPartialTokens = []
+    consecutiveRecognitionMissCount = 0
   }
 
   func requestManualLineNudge(direction: CGFloat) {
@@ -322,6 +330,7 @@ class VoiceSyncEngine: ObservableObject {
     }
     isHumanSpeechActive = true
     guard let match = matchRecognizedWordToken(token) else {
+      recordRecognitionMissIfNeeded(for: token)
       AiraLogger.shared.info(
         "voiceSync.wordTokenNoMatch token=\"\(token.word)\" cursorIndex=\(cursorIndex) words=\(scriptWords.count)",
         category: "voice"
@@ -329,6 +338,7 @@ class VoiceSyncEngine: ObservableObject {
       return
     }
 
+    consecutiveRecognitionMissCount = 0
     currentWordIndex = match.currentWordIndex
     highlightedWordRange = 0..<match.currentWordIndex
     visualCurrentWordIndex = match.currentWordIndex
@@ -378,7 +388,15 @@ class VoiceSyncEngine: ObservableObject {
       minimumOverlap: 1,
       mode: matcherMode
     )
-    let lookAhead = min(tokenLookAhead, localizedLookAhead, max(scriptWords.count - searchStart, 0))
+    let recoveryLookAhead = Self.recommendedRecoveryMatchLookAhead(
+      visibleWordCount: visibleWordCount,
+      consecutiveMisses: consecutiveRecognitionMissCount
+    )
+    let effectiveLookAhead =
+      consecutiveRecognitionMissCount >= recoveryMissThreshold
+      ? max(localizedLookAhead, recoveryLookAhead)
+      : localizedLookAhead
+    let lookAhead = min(tokenLookAhead, effectiveLookAhead, max(scriptWords.count - searchStart, 0))
     guard lookAhead > 0 else { return nil }
     guard
       let match = VoiceSyncMatching.findDetailedMatch(
@@ -400,6 +418,13 @@ class VoiceSyncEngine: ObservableObject {
     else { return nil }
 
     return match
+  }
+
+  private func recordRecognitionMissIfNeeded(for token: SpokenWordToken) {
+    guard currentWordIndex != nil || highlightedWordRange != nil else { return }
+    guard VoiceSyncMatching.normalizeToken(token.word) != nil else { return }
+    guard (token.confidence ?? 1) >= minimumRecoveryTokenConfidence else { return }
+    consecutiveRecognitionMissCount += 1
   }
 
   private func normalizedSearchRange() -> Range<Int> {
@@ -868,6 +893,15 @@ class VoiceSyncEngine: ObservableObject {
         return min(max(normalizedVisibleCount / 6, 6) + (lagBonus / 2), 10)
       }
     }
+  }
+
+  static func recommendedRecoveryMatchLookAhead(
+    visibleWordCount: Int,
+    consecutiveMisses: Int
+  ) -> Int {
+    let normalizedVisibleCount = max(visibleWordCount, 0)
+    let missBonus = min(max(consecutiveMisses, 0) * 2, 10)
+    return min(max(normalizedVisibleCount / 3, 12) + missBonus, 24)
   }
 
   static func recommendedVisualMatchLookAhead(

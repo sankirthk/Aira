@@ -973,6 +973,25 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 16))
   }
 
+  @Test @MainActor func wordTrackingWidensRecoveryAfterConsecutiveMisses() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "one two three four five six seven eight nine ten eleven twelve thirteen fourteen",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("one", confidence: 0.9)
+    backend.emit("two", confidence: 0.42)
+    backend.emit("three", confidence: 0.43)
+    backend.emit("eleven", confidence: 0.9)
+
+    #expect(engine.currentWordIndex == 10)
+    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 10, totalWords: 14))
+  }
+
   @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
