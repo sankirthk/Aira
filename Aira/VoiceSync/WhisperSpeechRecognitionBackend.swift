@@ -12,6 +12,13 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
     "tokenizer.json",
     "tokenizer_config.json",
   ]
+  nonisolated static let preferredBundledModelNames = [
+    "openai_whisper-base.en",
+    "openai_whisper-tiny.en",
+  ]
+  nonisolated static let transcriptionChunkSize = 48_000
+  nonisolated static let transcriptionOverlapSize = 24_000
+  nonisolated static let maximumEmittedWordCacheSize = 1_000
 
   var onRecognizedWord: (@MainActor (SpokenWordToken) -> Void)?
   var onProcessingChanged: (@MainActor (Bool) -> Void)?
@@ -20,8 +27,6 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
   private var audioAccumulator: [Float] = []
   private var emittedWords: Set<String> = []
   private var isProcessing = false
-  private let chunkSize = 16_000
-  private let overlapSize = 8_000
 
   func prepare() async throws {
     guard whisper == nil else { return }
@@ -48,7 +53,7 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
 
   func acceptAudio(_ samples: [Float]) async {
     audioAccumulator.append(contentsOf: samples)
-    guard audioAccumulator.count >= chunkSize else { return }
+    guard audioAccumulator.count >= Self.transcriptionChunkSize else { return }
     await transcribePendingAudio()
   }
 
@@ -80,6 +85,9 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
       for word in words {
         let key = "\(word.start)-\(word.word)"
         guard !emittedWords.contains(key) else { continue }
+        if emittedWords.count >= Self.maximumEmittedWordCacheSize {
+          emittedWords.removeAll(keepingCapacity: true)
+        }
         emittedWords.insert(key)
         AiraLogger.shared.info(
           "whisperBackend.emit word=\"\(word.word)\" start=\(word.start) confidence=\(word.probability)",
@@ -97,24 +105,31 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
       AiraLogger.shared.error(error, category: "voice", context: "Whisper transcription failed")
     }
 
-    if audioAccumulator.count > overlapSize {
-      audioAccumulator.removeFirst(audioAccumulator.count - overlapSize)
+    if audioAccumulator.count > Self.transcriptionOverlapSize {
+      audioAccumulator.removeFirst(audioAccumulator.count - Self.transcriptionOverlapSize)
     }
     isProcessing = false
     onProcessingChanged?(false)
   }
 
   private static func bundledModelURL() -> URL? {
-    Bundle.main.url(
-      forResource: "openai_whisper-tiny.en",
-      withExtension: nil,
-      subdirectory: "Whisper"
-    )
-      ?? Bundle.main.url(
-        forResource: "openai_whisper-tiny.en",
+    for modelName in preferredBundledModelNames {
+      if let url = Bundle.main.url(
+        forResource: modelName,
+        withExtension: nil,
+        subdirectory: "Whisper"
+      ) {
+        return url
+      }
+      if let url = Bundle.main.url(
+        forResource: modelName,
         withExtension: nil,
         subdirectory: "Models/Whisper"
-      )
+      ) {
+        return url
+      }
+    }
+    return nil
   }
 
   nonisolated static func hasRequiredBundledModelFiles(at modelURL: URL) -> Bool {

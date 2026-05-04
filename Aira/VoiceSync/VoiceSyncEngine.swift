@@ -407,6 +407,13 @@ class VoiceSyncEngine: ObservableObject {
         minimumOverlap: 1
       )
     else { return nil }
+    guard
+      Self.canUseSingleTokenMatch(
+        normalizedToken: normalized,
+        matchStartIndex: match.startIndex,
+        searchStart: searchStart
+      )
+    else { return nil }
 
     guard
       Self.isLowOverlapMatchPlausible(
@@ -418,6 +425,15 @@ class VoiceSyncEngine: ObservableObject {
     else { return nil }
 
     return match
+  }
+
+  private static func canUseSingleTokenMatch(
+    normalizedToken: String,
+    matchStartIndex: Int,
+    searchStart: Int
+  ) -> Bool {
+    guard VoiceSyncMatching.stopWords.contains(normalizedToken) else { return true }
+    return matchStartIndex - searchStart <= 1
   }
 
   private func recordRecognitionMissIfNeeded(for token: SpokenWordToken) {
@@ -1165,6 +1181,22 @@ struct VoiceSyncRecognitionInput {
 }
 
 struct VoiceSyncMatching {
+  static let stopWords: Set<String> = [
+    "a",
+    "an",
+    "and",
+    "in",
+    "is",
+    "it",
+    "of",
+    "so",
+    "that",
+    "the",
+    "to",
+    "uh",
+    "um",
+  ]
+
   struct RecognizedWord: Equatable {
     let token: String
     let confidence: Float

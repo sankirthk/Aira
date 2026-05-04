@@ -992,6 +992,36 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 10, totalWords: 14))
   }
 
+  @Test @MainActor func wordTrackingRecoveryDoesNotJumpToFarRepeatedFillerWords() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "start alpha beta gamma delta epsilon zeta eta theta the iota kappa lambda and final",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("start", confidence: 0.9)
+    backend.emit("missed", confidence: 0.42)
+    backend.emit("accented", confidence: 0.43)
+    backend.emit("the", confidence: 0.95)
+    backend.emit("and", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.scrollOffset == 0)
+  }
+
+  @Test func whisperBackendUsesPhraseLengthChunksAndBoundedDeduplication() {
+    #expect(WhisperSpeechRecognitionBackend.transcriptionChunkSize == 48_000)
+    #expect(WhisperSpeechRecognitionBackend.transcriptionOverlapSize == 24_000)
+    #expect(WhisperSpeechRecognitionBackend.maximumEmittedWordCacheSize == 1_000)
+    #expect(
+      WhisperSpeechRecognitionBackend.preferredBundledModelNames.first == "openai_whisper-base.en")
+    #expect(
+      WhisperSpeechRecognitionBackend.preferredBundledModelNames.contains("openai_whisper-tiny.en"))
+  }
+
   @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
