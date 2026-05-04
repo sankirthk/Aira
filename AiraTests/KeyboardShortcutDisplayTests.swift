@@ -813,6 +813,32 @@ struct KeyboardShortcutDisplayTests {
     #expect(pointsPerWord < 72.0 / 7.0)
     #expect(PrompterScrollMath.pointsPerWord(lineMetrics: []) == 0)
   }
+
+  @Test func wordTrackingProgressAdvancesAtRenderedLineEnd() {
+    let lineMetrics = [
+      LineMetric(y: 0, height: 24, wordRange: 0..<3, text: "one two three"),
+      LineMetric(y: 48, height: 24, wordRange: 3..<3, text: ""),
+      LineMetric(y: 96, height: 24, wordRange: 3..<6, text: "four five six"),
+    ]
+
+    let progress = PrompterScrollMath.wordTrackingProgress(
+      currentWordIndex: 2,
+      lineMetrics: lineMetrics,
+      contentHeight: 240,
+      viewportHeight: 120,
+      baseContentOffset: 40
+    )
+    let middleProgress = PrompterScrollMath.wordTrackingProgress(
+      currentWordIndex: 1,
+      lineMetrics: lineMetrics,
+      contentHeight: 240,
+      viewportHeight: 120,
+      baseContentOffset: 40
+    )
+
+    #expect(progress == 0.8)
+    #expect(middleProgress == 0)
+  }
 }
 
 struct VoiceSyncMatchingTests {

@@ -493,30 +493,18 @@ struct PrompterContentView: View {
     guard let idx = newIndex, !layoutSnapshot.lineMetrics.isEmpty else { return }
 
     guard
-      let lineIndex = layoutSnapshot.lineMetrics.firstIndex(where: { $0.wordRange.contains(idx) })
+      let exactNormalized = PrompterScrollMath.wordTrackingProgress(
+        currentWordIndex: idx,
+        lineMetrics: layoutSnapshot.lineMetrics,
+        contentHeight: contentHeight,
+        viewportHeight: viewportHeight,
+        baseContentOffset: baseContentOffset(for: viewportHeight)
+      )
     else {
       playheadCoordinator.updateProgress(Double(voiceSync.scrollOffset))
       manualScrollDriver.setCurrentOffset(voiceSync.scrollOffset)
       return
     }
-
-    let maxOffset = max(contentHeight - viewportHeight, 0)
-    guard maxOffset > 0 else { return }
-
-    let trueAnchorLine = layoutSnapshot.lineMetrics[lineIndex]
-
-    // If blank lines follow this line, advance the anchor to the first speakable
-    // line after the gap (≥3 blank lines). The cinematic controller's aggressive
-    // catch-up will then traverse the gap quickly once speech resumes.
-    var anchorY = trueAnchorLine.y
-    let lookahead = layoutSnapshot.lineMetrics[(lineIndex + 1)...]
-    if let nextSpeakableIdx = lookahead.firstIndex(where: { !$0.wordRange.isEmpty }),
-      nextSpeakableIdx - lineIndex >= 2
-    {
-      anchorY = layoutSnapshot.lineMetrics[nextSpeakableIdx].y
-    }
-
-    let exactNormalized = min(anchorY / maxOffset, 1.0)
     playheadCoordinator.updateProgress(Double(exactNormalized))
     manualScrollDriver.setCurrentOffset(CGFloat(exactNormalized))
   }
@@ -1211,6 +1199,40 @@ enum PrompterScrollMath {
 
     guard totalSpeakableLineHeight > 0, totalSpeakableWords > 0 else { return 0 }
     return totalSpeakableLineHeight / Double(totalSpeakableWords)
+  }
+
+  static func wordTrackingProgress(
+    currentWordIndex: Int,
+    lineMetrics: [LineMetric],
+    contentHeight: CGFloat,
+    viewportHeight: CGFloat,
+    baseContentOffset: CGFloat
+  ) -> CGFloat? {
+    guard
+      let lineIndex = lineMetrics.firstIndex(where: { $0.wordRange.contains(currentWordIndex) })
+    else { return nil }
+
+    let maxOffset = max(contentHeight - viewportHeight, 0)
+    guard maxOffset > 0 else { return nil }
+
+    let currentLine = lineMetrics[lineIndex]
+    let nextSpeakableIndex =
+      lineIndex + 1 < lineMetrics.endIndex
+      ? lineMetrics[(lineIndex + 1)...].firstIndex(where: { !$0.wordRange.isEmpty })
+      : nil
+    var anchorY = currentLine.y
+
+    if let nextSpeakableIndex,
+      currentWordIndex >= currentLine.wordRange.upperBound - 1
+    {
+      anchorY = lineMetrics[nextSpeakableIndex].y
+    } else if let nextSpeakableIndex,
+      baseContentOffset + currentLine.y - maxOffset > viewportHeight * 0.68
+    {
+      anchorY = lineMetrics[nextSpeakableIndex].y
+    }
+
+    return min(anchorY / maxOffset, 1.0)
   }
 }
 
