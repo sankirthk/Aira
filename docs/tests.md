@@ -154,6 +154,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030n | Expanding the spoken-word dull prefix across repeated temporary-attribute updates does not alter intrinsic height, covering the incremental prefix-update path used during live classic/voice highlighting | `[x]` |
 | UT-030o | Exact word-tracking scroll progress places line-end and final-paragraph targets in the upper reading band instead of leaving only the lower half of the sentence visible | `[x]` |
 | UT-030ad | Audio level monitoring uses speech-focused activation thresholds, and reseeding/highlighting updates the same current-word cursor used by Whisper word tracking | `[x]` |
+| UT-030ae | Voice-sync startup uses the plain capture input path without enabling platform voice-processing DSP, avoiding repeated downlink timestamp faults while keeping software audio thresholds active | `[x]` |
 | UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
 | UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
 | UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |

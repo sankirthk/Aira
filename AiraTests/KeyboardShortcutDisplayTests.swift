@@ -1302,6 +1302,10 @@ struct VoiceSyncMatchingTests {
     #expect(AudioLevelMonitor.speakingThreshold(for: .high) == 0.12)
   }
 
+  @Test @MainActor func voiceSyncUsesPlainCaptureInputPathByDefault() {
+    #expect(VoiceSyncEngine.enablesPlatformVoiceProcessingDSP == false)
+  }
+
   @Test @MainActor func voiceSyncReseedHighlightPreservesScrollOffsetAndUpdatesCurrentAnchor() {
     let engine = VoiceSyncEngine()
     engine.loadScript(text: "one two three four five six", startingAt: 0.75)

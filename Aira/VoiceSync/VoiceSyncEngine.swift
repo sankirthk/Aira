@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 class VoiceSyncEngine: ObservableObject {
   static let inputTapBufferSize: AVAudioFrameCount = 128
+  static let enablesPlatformVoiceProcessingDSP = false
 
   @Published var state: EngineState = .idle
   @Published var isPausedByUser: Bool = false
@@ -241,14 +242,19 @@ class VoiceSyncEngine: ObservableObject {
     observeAudioEngineConfigurationChanges(engine)
 
     let inputNode = engine.inputNode
-    do {
-      try inputNode.setVoiceProcessingEnabled(true)
-      AiraLogger.shared.info("voiceSync.voiceProcessing enabled=true", category: "voice")
-    } catch {
+    if Self.enablesPlatformVoiceProcessingDSP {
+      do {
+        try inputNode.setVoiceProcessingEnabled(true)
+        AiraLogger.shared.info("voiceSync.voiceProcessing enabled=true", category: "voice")
+      } catch {
+        AiraLogger.shared.info(
+          "voiceSync.voiceProcessing enabled=false error=\"\(error.localizedDescription)\"",
+          category: "voice"
+        )
+      }
+    } else {
       AiraLogger.shared.info(
-        "voiceSync.voiceProcessing enabled=false error=\"\(error.localizedDescription)\"",
-        category: "voice"
-      )
+        "voiceSync.voiceProcessing enabled=false reason=captureOnly", category: "voice")
     }
 
     let inputFormat = inputNode.inputFormat(forBus: 0)
