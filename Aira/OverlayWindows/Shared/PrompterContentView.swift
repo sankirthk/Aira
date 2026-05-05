@@ -1221,18 +1221,29 @@ enum PrompterScrollMath {
       ? lineMetrics[(lineIndex + 1)...].firstIndex(where: { !$0.wordRange.isEmpty })
       : nil
     var anchorY = currentLine.y
+    var usesUpperReadingBand = false
 
     if let nextSpeakableIndex,
       currentWordIndex >= currentLine.wordRange.upperBound - 1
     {
       anchorY = lineMetrics[nextSpeakableIndex].y
+      usesUpperReadingBand = true
     } else if let nextSpeakableIndex,
       baseContentOffset + currentLine.y - maxOffset > viewportHeight * 0.68
     {
       anchorY = lineMetrics[nextSpeakableIndex].y
+      usesUpperReadingBand = true
     }
 
-    return min(anchorY / maxOffset, 1.0)
+    let targetOffset: CGFloat
+    if usesUpperReadingBand {
+      let upperReadingBandY = viewportHeight * 0.2
+      targetOffset = anchorY + baseContentOffset - upperReadingBandY
+    } else {
+      targetOffset = anchorY
+    }
+
+    return min(max(targetOffset / maxOffset, 0), 1.0)
   }
 }
 

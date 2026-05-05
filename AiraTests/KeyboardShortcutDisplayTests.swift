@@ -836,8 +836,44 @@ struct KeyboardShortcutDisplayTests {
       baseContentOffset: 40
     )
 
-    #expect(progress == 0.8)
+    #expect(progress == 14.0 / 15.0)
     #expect(middleProgress == 0)
+  }
+
+  @Test func wordTrackingProgressKeepsLineEndTargetInUpperReadingBand() {
+    let lineMetrics = [
+      LineMetric(y: 0, height: 24, wordRange: 0..<3, text: "one two three"),
+      LineMetric(y: 48, height: 24, wordRange: 3..<3, text: ""),
+      LineMetric(y: 96, height: 24, wordRange: 3..<6, text: "four five six"),
+    ]
+
+    let progress = PrompterScrollMath.wordTrackingProgress(
+      currentWordIndex: 2,
+      lineMetrics: lineMetrics,
+      contentHeight: 240,
+      viewportHeight: 120,
+      baseContentOffset: 40
+    )
+
+    #expect(progress == 14.0 / 15.0)
+  }
+
+  @Test func wordTrackingProgressCanClampToRevealFinalParagraph() {
+    let lineMetrics = [
+      LineMetric(y: 0, height: 24, wordRange: 0..<4, text: "first paragraph ends here"),
+      LineMetric(y: 56, height: 24, wordRange: 4..<4, text: ""),
+      LineMetric(y: 132, height: 24, wordRange: 4..<7, text: "final paragraph starts"),
+    ]
+
+    let progress = PrompterScrollMath.wordTrackingProgress(
+      currentWordIndex: 3,
+      lineMetrics: lineMetrics,
+      contentHeight: 240,
+      viewportHeight: 120,
+      baseContentOffset: 40
+    )
+
+    #expect(progress == 1.0)
   }
 }
 
