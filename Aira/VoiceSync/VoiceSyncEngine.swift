@@ -36,7 +36,9 @@ class VoiceSyncEngine: ObservableObject {
   private var firstTapTimeoutTask: Task<Void, Never>?
   private var firstRecognitionTimeoutTask: Task<Void, Never>?
   private var diagnostics = DiagnosticsState()
-  private let recognitionBackend: SpeechRecognitionBackend?
+  private let wordTrackingRecognitionBackend: SpeechRecognitionBackend?
+  private let highlightRecognitionBackend: SpeechRecognitionBackend?
+  private var previousPartialTokens: [String] = []
   private let tokenLookAhead = 50
   private let minimumRecognizedWordConfidence: Float = 0.50
   private let recentSpokenWordLimit = 3
@@ -58,17 +60,62 @@ class VoiceSyncEngine: ObservableObject {
       AVAudioApplication.shared.recordPermission == .granted
     }
   ) {
-    self.recognitionBackend = recognitionBackend ?? WhisperSpeechRecognitionBackend()
+    let wordTrackingBackend = recognitionBackend ?? WhisperSpeechRecognitionBackend()
+    self.wordTrackingRecognitionBackend = wordTrackingBackend
+    self.highlightRecognitionBackend = recognitionBackend ?? AppleSpeechRecognitionBackend()
     self.microphonePermissionGranted = microphonePermissionGranted
-    self.recognitionBackend?.onRecognizedWord = { [weak self] token in
-      self?.handleRecognizedWordToken(token)
+    configureRecognitionBackendCallbacks()
+  }
+
+  init(
+    recognitionBackend: SpeechRecognitionBackend? = nil,
+    highlightRecognitionBackend: SpeechRecognitionBackend?,
+    microphonePermissionGranted: @escaping () -> Bool = {
+      AVAudioApplication.shared.recordPermission == .granted
     }
-    self.recognitionBackend?.onProcessingChanged = { [weak self] isProcessing in
+  ) {
+    let wordTrackingBackend = recognitionBackend ?? WhisperSpeechRecognitionBackend()
+    self.wordTrackingRecognitionBackend = wordTrackingBackend
+    self.highlightRecognitionBackend =
+      highlightRecognitionBackend ?? recognitionBackend ?? AppleSpeechRecognitionBackend()
+    self.microphonePermissionGranted = microphonePermissionGranted
+    configureRecognitionBackendCallbacks()
+  }
+
+  private func configureRecognitionBackendCallbacks() {
+    let handleProcessingChanged: @MainActor (Bool) -> Void = { [weak self] isProcessing in
       guard let self else { return }
       if isProcessing {
         self.isHumanSpeechActive = true
       }
     }
+    for backend in uniqueRecognitionBackends {
+      backend.onRecognizedWord = { [weak self] token in
+        self?.handleRecognizedWordToken(token)
+      }
+      (backend as? PartialSpeechRecognitionBackend)?.onRecognizedWords = {
+        [weak self] words, isFinal in
+        self?.handleRecognizedWords(words, isFinal: isFinal)
+      }
+      backend.onProcessingChanged = handleProcessingChanged
+    }
+  }
+
+  private var activeRecognitionBackend: SpeechRecognitionBackend? {
+    voiceScrollMode == .wordTracking ? wordTrackingRecognitionBackend : highlightRecognitionBackend
+  }
+
+  private var uniqueRecognitionBackends: [SpeechRecognitionBackend] {
+    var backends: [SpeechRecognitionBackend] = []
+    let configuredBackends = [
+      wordTrackingRecognitionBackend,
+      highlightRecognitionBackend,
+    ].compactMap { $0 }
+    for backend in configuredBackends {
+      guard !backends.contains(where: { $0 === backend }) else { continue }
+      backends.append(backend)
+    }
+    return backends
   }
 
   // MARK: - Public API
@@ -83,6 +130,7 @@ class VoiceSyncEngine: ObservableObject {
     highlightedWordRange = nil
     isHumanSpeechActive = false
     recentSpokenWords = []
+    previousPartialTokens = []
     acceptsRecognitionCallbacks = true
   }
 
@@ -109,7 +157,9 @@ class VoiceSyncEngine: ObservableObject {
     firstRecognitionTimeoutTask = nil
     silenceDeadlineTask?.cancel()
     silenceDeadlineTask = nil
-    recognitionBackend?.stop()
+    for backend in uniqueRecognitionBackends {
+      backend.stop()
+    }
     audioEngine?.stop()
     audioEngine?.inputNode.removeTap(onBus: 0)
     audioEngine = nil
@@ -127,6 +177,7 @@ class VoiceSyncEngine: ObservableObject {
     scriptWords = []
     visibleWordRange = 0..<0
     recentSpokenWords = []
+    previousPartialTokens = []
     diagnostics = DiagnosticsState()
     acceptsRecognitionCallbacks = false
   }
@@ -153,6 +204,7 @@ class VoiceSyncEngine: ObservableObject {
       currentWordIndex = nil
       highlightedWordRange = nil
       recentSpokenWords = []
+      previousPartialTokens = []
     }
   }
 
@@ -164,6 +216,7 @@ class VoiceSyncEngine: ObservableObject {
       currentWordIndex = nil
       highlightedWordRange = nil
       recentSpokenWords = []
+      previousPartialTokens = []
     }
   }
 
@@ -181,6 +234,7 @@ class VoiceSyncEngine: ObservableObject {
     currentWordIndex = clampedIndex
     highlightedWordRange = 0..<clampedIndex
     recentSpokenWords = []
+    previousPartialTokens = []
   }
 
   func requestManualLineNudge(direction: CGFloat) {
@@ -222,7 +276,7 @@ class VoiceSyncEngine: ObservableObject {
     Task { @MainActor [weak self] in
       guard let self, generation == self.recognitionGeneration else { return }
       do {
-        try await self.recognitionBackend?.prepare()
+        try await self.activeRecognitionBackend?.prepare()
         guard generation == self.recognitionGeneration else { return }
         AiraLogger.shared.info("voiceSync.prepareBackend completed", category: "voice")
         self.startEngine()
@@ -272,7 +326,7 @@ class VoiceSyncEngine: ObservableObject {
         let samples = VoiceSyncRecognitionInput.makeRecognitionSamples(from: buffer)
       {
         Task { @MainActor [weak self] in
-          await self?.recognitionBackend?.acceptAudio(samples)
+          await self?.activeRecognitionBackend?.acceptAudio(samples)
         }
       }
       Task { @MainActor [weak self] in
@@ -304,7 +358,7 @@ class VoiceSyncEngine: ObservableObject {
     Task { @MainActor [weak self] in
       guard let self, generation == self.recognitionGeneration else { return }
       do {
-        try await self.recognitionBackend?.prepare()
+        try await self.activeRecognitionBackend?.prepare()
       } catch {
         AiraLogger.shared.error(
           error, category: "voice", context: "Failed to prepare speech backend")
@@ -314,8 +368,141 @@ class VoiceSyncEngine: ObservableObject {
 
   // MARK: - Word Matching
 
+  private func handleRecognizedWords(
+    _ recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    isFinal: Bool
+  ) {
+    defer {
+      if isFinal {
+        previousPartialTokens = []
+      }
+    }
+
+    guard acceptsRecognitionCallbacks else { return }
+    guard voiceScrollMode != .wordTracking else { return }
+    guard !isPausedByUser else { return }
+    guard !recognizedWords.isEmpty else { return }
+
+    scheduleSilenceDeadline()
+    recordRecognitionDiagnostics(recognizedWords: recognizedWords, isFinal: isFinal)
+    if state == .paused {
+      state = .running
+    }
+    isHumanSpeechActive = true
+
+    let searchRange = normalizedSearchRange()
+    logSearchWindowStateIfNeeded(recognizedWords: recognizedWords, searchRange: searchRange)
+    guard !searchRange.isEmpty else { return }
+    processHighlightPartialDelta(recognizedWords, searchRange: searchRange)
+  }
+
+  private func processHighlightPartialDelta(
+    _ recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    searchRange: Range<Int>
+  ) {
+    let partialTokens = recognizedWords.map(\.token)
+    let stablePrefixCount = VoiceSyncMatching.commonPrefixLength(
+      lhs: previousPartialTokens,
+      rhs: partialTokens
+    )
+
+    let hasEstablishedMatch = currentWordIndex != nil || !previousPartialTokens.isEmpty
+    let searchLowerBound = min(
+      max(
+        Self.startupSearchLowerBound(
+          cursorIndex: cursorIndex,
+          visibleWordLowerBound: searchRange.lowerBound,
+          hasEstablishedMatch: hasEstablishedMatch
+        ),
+        0
+      ),
+      scriptWords.count
+    )
+    let searchUpperBound = min(max(searchRange.upperBound, searchLowerBound), scriptWords.count)
+    let visualSearchRange = searchLowerBound..<searchUpperBound
+
+    guard !visualSearchRange.isEmpty else {
+      previousPartialTokens = partialTokens
+      return
+    }
+
+    let matcherMode = matcherMode(
+      hasEstablishedMatch: hasEstablishedMatch,
+      lagWords: max(visibleWordRange.lowerBound - cursorIndex, 0)
+    )
+
+    if matcherMode == .startup,
+      let startupSeedMatch = Self.startupSeedMatch(
+        scriptWords: scriptWords,
+        recognizedWords: recognizedWords,
+        searchRange: visualSearchRange
+      )
+    {
+      publishHighlightOnlyMatch(startupSeedMatch)
+      previousPartialTokens = partialTokens
+      return
+    }
+
+    var nextCursor = cursorIndex
+    var lastMatch: VoiceSyncMatching.Match?
+    for token in partialTokens.dropFirst(stablePrefixCount) {
+      let searchStart = min(
+        max(
+          Self.startupSearchLowerBound(
+            cursorIndex: nextCursor,
+            visibleWordLowerBound: searchRange.lowerBound,
+            hasEstablishedMatch: hasEstablishedMatch
+          ),
+          visualSearchRange.lowerBound
+        ),
+        visualSearchRange.upperBound
+      )
+      let lookAhead = min(
+        max(visualSearchRange.upperBound - searchStart, 0),
+        Self.recommendedVisualMatchLookAhead(
+          visibleWordCount: visualSearchRange.count,
+          mode: matcherMode
+        )
+      )
+      guard lookAhead > 0 else { continue }
+      guard
+        let match = VoiceSyncMatching.findDetailedMatch(
+          scriptWords: scriptWords,
+          spokenWindow: [token],
+          cursorIndex: searchStart,
+          lookAhead: lookAhead,
+          minimumOverlap: 1
+        )
+      else { continue }
+      guard
+        Self.isLowOverlapMatchPlausible(
+          matchStartIndex: match.startIndex,
+          searchStart: searchStart,
+          minimumOverlap: 1,
+          mode: matcherMode
+        )
+      else { continue }
+
+      nextCursor = match.currentWordIndex + 1
+      lastMatch = match
+    }
+
+    cursorIndex = nextCursor
+    if let lastMatch {
+      publishHighlightOnlyMatch(lastMatch)
+    }
+    previousPartialTokens = partialTokens
+  }
+
+  private func publishHighlightOnlyMatch(_ match: VoiceSyncMatching.Match) {
+    currentWordIndex = match.currentWordIndex
+    highlightedWordRange = 0..<match.currentWordIndex
+    cursorIndex = max(cursorIndex, match.currentWordIndex + 1)
+  }
+
   private func handleRecognizedWordToken(_ token: SpokenWordToken) {
     guard acceptsRecognitionCallbacks else { return }
+    guard voiceScrollMode == .wordTracking else { return }
     guard !isPausedByUser else { return }
     scheduleSilenceDeadline()
     recordRecognitionTokenDiagnostics(token)
@@ -533,6 +720,28 @@ class VoiceSyncEngine: ObservableObject {
         "voiceSync.recognition firstToken word=\"\(token.word)\" t=\(diagnosticElapsedText())",
         category: "voice"
       )
+    }
+  }
+
+  private func recordRecognitionDiagnostics(
+    recognizedWords: [VoiceSyncMatching.RecognizedWord],
+    isFinal: Bool
+  ) {
+    diagnostics.recognitionPartialCount += 1
+    if diagnostics.recognitionPartialCount <= 3 {
+      let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
+      AiraLogger.shared.info(
+        "voiceSync.recognition applePartial seq=\(diagnostics.recognitionPartialCount) isFinal=\(isFinal) words=\(recognizedWords.count) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+        category: "voice"
+      )
+    }
+    if !diagnostics.didLogFirstRecognitionPartial {
+      diagnostics.didLogFirstRecognitionPartial = true
+      firstRecognitionTimeoutTask?.cancel()
+      firstRecognitionTimeoutTask = nil
+    }
+    if isFinal {
+      diagnostics.didLogFirstRecognitionFinal = true
     }
   }
 

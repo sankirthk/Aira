@@ -13,8 +13,9 @@ private final class ShortcutActionRecorder {
 }
 
 @MainActor
-private final class FakeSpeechRecognitionBackend: SpeechRecognitionBackend {
+private final class FakeSpeechRecognitionBackend: PartialSpeechRecognitionBackend {
   var onRecognizedWord: (@MainActor (SpokenWordToken) -> Void)?
+  var onRecognizedWords: (@MainActor ([VoiceSyncMatching.RecognizedWord], Bool) -> Void)?
   var onProcessingChanged: (@MainActor (Bool) -> Void)?
   private(set) var prepareCallCount = 0
   private(set) var acceptedAudio: [[Float]] = []
@@ -34,6 +35,13 @@ private final class FakeSpeechRecognitionBackend: SpeechRecognitionBackend {
 
   func emit(_ word: String, timestamp: TimeInterval = 0, confidence: Float? = 0.9) {
     onRecognizedWord?(SpokenWordToken(word: word, timestamp: timestamp, confidence: confidence))
+  }
+
+  func emitPartial(_ words: [String], isFinal: Bool = false, confidence: Float = 0.9) {
+    onRecognizedWords?(
+      words.map { VoiceSyncMatching.RecognizedWord(token: $0, confidence: confidence) },
+      isFinal
+    )
   }
 }
 
@@ -1003,7 +1011,7 @@ struct VoiceSyncMatchingTests {
     engine.loadScript(text: "one two three four", startingAt: 0.25)
     engine.voiceScrollMode = .classicScroll
 
-    backend.emit("three")
+    backend.emitPartial(["three"])
 
     #expect(engine.scrollOffset == 0.25)
     #expect(engine.currentWordIndex == 2)
@@ -1191,15 +1199,44 @@ struct VoiceSyncMatchingTests {
     engine.loadScript(text: "one two three four", startingAt: 0)
     engine.voiceScrollMode = .soundBased
 
-    backend.emit("three")
+    backend.emitPartial(["three"])
     #expect(engine.scrollOffset == 0)
 
     engine.reseedHighlight(to: 0)
     engine.isHumanSpeechActive = true
-    backend.emit("three")
+    backend.emitPartial(["three"])
 
     #expect(engine.currentWordIndex == 2)
     #expect(engine.scrollOffset == 0)
+  }
+
+  @Test @MainActor func voiceRecognitionSourcePolicySplitsHighlightAndWordTrackingBackends()
+    async throws
+  {
+    let wordTrackingBackend = FakeSpeechRecognitionBackend()
+    let highlightBackend = FakeSpeechRecognitionBackend()
+    let highlightEngine = VoiceSyncEngine(
+      recognitionBackend: wordTrackingBackend,
+      highlightRecognitionBackend: highlightBackend
+    )
+    highlightEngine.voiceScrollMode = .classicScroll
+
+    highlightEngine.enableRecognitionIfNeeded()
+    await Task.yield()
+
+    #expect(highlightBackend.prepareCallCount == 1)
+    #expect(wordTrackingBackend.prepareCallCount == 0)
+
+    let wordEngine = VoiceSyncEngine(
+      recognitionBackend: wordTrackingBackend,
+      highlightRecognitionBackend: highlightBackend
+    )
+    wordEngine.voiceScrollMode = .wordTracking
+
+    wordEngine.enableRecognitionIfNeeded()
+    await Task.yield()
+
+    #expect(wordTrackingBackend.prepareCallCount == 1)
   }
 
   @Test @MainActor func voiceSyncStopStopsBackendAndRejectsStaleWordCallbacks() async throws {

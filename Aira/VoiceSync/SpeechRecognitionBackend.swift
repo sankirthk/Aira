@@ -15,3 +15,10 @@ protocol SpeechRecognitionBackend: AnyObject {
   func acceptAudio(_ samples: [Float]) async
   func stop()
 }
+
+@MainActor
+protocol PartialSpeechRecognitionBackend: SpeechRecognitionBackend {
+  var onRecognizedWords: (@MainActor ([VoiceSyncMatching.RecognizedWord], Bool) -> Void)? {
+    get set
+  }
+}

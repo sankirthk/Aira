@@ -158,6 +158,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030af | Whisper recognition keeps a 3-second sliding context window but triggers inference every 0.5 seconds of new 16 kHz audio, with bounded emitted-token deduplication across overlapping windows | `[x]` |
 | UT-030ag | Whisper word tracking keeps single-token matches local, allows deep jumps only after a three-word spoken phrase, and clears spoken context when the user manually reseeds by clicking a word | `[x]` |
 | UT-030ah | Whisper word tracking rejects deep jumps for repeated low-information stop-word phrases while preserving meaningful phrase recovery | `[x]` |
+| UT-030ai | Voice recognition source policy routes Classic and Sound-based spoken-word highlighting through Apple's speech backend, and Word Tracking through WhisperKit only | `[x]` |
 | UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
 | UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
 | UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |
