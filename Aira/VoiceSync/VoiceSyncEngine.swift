@@ -40,6 +40,7 @@ class VoiceSyncEngine: ObservableObject {
   private let tokenLookAhead = 50
   private let minimumRecognizedWordConfidence: Float = 0.50
   private let recentSpokenWordLimit = 3
+  private let robustSingleTokenLookAhead = 4
   private let robustLocalLookAhead = 15
   private let robustDeepLookAhead = 200
   private var recentSpokenWords: [String] = []
@@ -370,6 +371,7 @@ class VoiceSyncEngine: ObservableObject {
       scriptWords: scriptWords,
       recentSpokenWords: recentSpokenWords,
       currentIndex: searchStart,
+      singleTokenLookAhead: robustSingleTokenLookAhead,
       localLookAhead: min(robustLocalLookAhead, tokenLookAhead),
       deepLookAhead: robustDeepLookAhead
     )
@@ -411,7 +413,6 @@ class VoiceSyncEngine: ObservableObject {
         if self.state == .running {
           self.state = .paused
           self.isHumanSpeechActive = false
-          self.highlightedWordRange = nil
         }
       }
     }
@@ -1143,15 +1144,29 @@ struct VoiceSyncMatching {
     scriptWords: [String],
     recentSpokenWords: [String],
     currentIndex: Int,
+    singleTokenLookAhead: Int = 4,
     localLookAhead: Int = 15,
     deepLookAhead: Int = 200
   ) -> Match? {
     guard !scriptWords.isEmpty, let latestWord = recentSpokenWords.last else { return nil }
 
     let searchStart = min(max(currentIndex, 0), scriptWords.count)
+    let localPhrase = Array(recentSpokenWords.suffix(min(recentSpokenWords.count, 3)))
     let localSearchEnd = min(searchStart + max(localLookAhead, 0), scriptWords.count)
-    if searchStart < localSearchEnd {
+    if localPhrase.count >= 2, searchStart < localSearchEnd {
       for index in searchStart..<localSearchEnd {
+        guard scriptWords[index] == localPhrase[0] else { continue }
+        guard index + localPhrase.count <= scriptWords.count else { continue }
+        let scriptPhrase = scriptWords[index..<(index + localPhrase.count)]
+        if Array(scriptPhrase) == localPhrase {
+          return Match(startIndex: index, overlap: localPhrase.count)
+        }
+      }
+    }
+
+    let singleTokenSearchEnd = min(searchStart + max(singleTokenLookAhead, 0), scriptWords.count)
+    if searchStart < singleTokenSearchEnd {
+      for index in searchStart..<singleTokenSearchEnd {
         guard scriptWords[index] == latestWord else { continue }
         let distance = index - searchStart
         if distance > 1 && stopWords.contains(latestWord) { continue }
@@ -1161,6 +1176,7 @@ struct VoiceSyncMatching {
 
     guard recentSpokenWords.count >= 3 else { return nil }
     let spokenPhrase = Array(recentSpokenWords.suffix(3))
+    guard isDeepSearchPhraseMeaningful(spokenPhrase) else { return nil }
     let deepSearchEnd = min(searchStart + max(deepLookAhead, 0), scriptWords.count)
     guard searchStart < deepSearchEnd else { return nil }
 
@@ -1174,6 +1190,10 @@ struct VoiceSyncMatching {
     }
 
     return nil
+  }
+
+  private static func isDeepSearchPhraseMeaningful(_ spokenPhrase: [String]) -> Bool {
+    spokenPhrase.filter { !stopWords.contains($0) }.count >= 2
   }
 
   static func findMatch(

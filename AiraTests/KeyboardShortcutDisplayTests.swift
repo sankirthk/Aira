@@ -1073,6 +1073,39 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 17, totalWords: 19))
   }
 
+  @Test func robustMatcherRejectsDeepStopWordPhraseJump() {
+    let scriptWords = VoiceSyncMatching.tokenize(
+      "start anchor " + (1...24).map { "gap\($0)" }.joined(separator: " ")
+        + " and then the real section"
+    )
+
+    let match = VoiceSyncMatching.findRobustMatch(
+      scriptWords: scriptWords,
+      recentSpokenWords: ["and", "then", "the"],
+      currentIndex: 0,
+      localLookAhead: 8,
+      deepLookAhead: 80
+    )
+
+    #expect(match == nil)
+  }
+
+  @Test func robustMatcherRejectsDistantSingleTokenDuplicateInsideLocalWindow() {
+    let scriptWords = VoiceSyncMatching.tokenize(
+      "start one two three four five six seven eight target after"
+    )
+
+    let match = VoiceSyncMatching.findRobustMatch(
+      scriptWords: scriptWords,
+      recentSpokenWords: ["target"],
+      currentIndex: 0,
+      localLookAhead: 12,
+      deepLookAhead: 80
+    )
+
+    #expect(match == nil)
+  }
+
   @Test @MainActor func wordTrackingRecoveryDoesNotJumpToFarRepeatedFillerWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
