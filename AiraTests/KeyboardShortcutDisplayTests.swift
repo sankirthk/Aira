@@ -994,8 +994,6 @@ struct VoiceSyncMatchingTests {
 
     #expect(engine.currentWordIndex == 5)
     #expect(engine.highlightedWordRange == 0..<5)
-    #expect(engine.visualCurrentWordIndex == 5)
-    #expect(engine.visualHighlightedWordRange == 0..<5)
   }
 
   @Test @MainActor func classicScrollModeUpdatesHighlightWithoutChangingScrollOffset() async throws
@@ -1008,8 +1006,8 @@ struct VoiceSyncMatchingTests {
     backend.emit("three")
 
     #expect(engine.scrollOffset == 0.25)
-    #expect(engine.visualCurrentWordIndex == 2)
-    #expect(engine.visualHighlightedWordRange == 0..<2)
+    #expect(engine.currentWordIndex == 2)
+    #expect(engine.highlightedWordRange == 0..<2)
   }
 
   @Test @MainActor func wordTrackingModeMapsMatchedWordToScrollProgress() async throws {
@@ -1125,7 +1123,6 @@ struct VoiceSyncMatchingTests {
 
     #expect(backend.stopCallCount == 1)
     #expect(engine.currentWordIndex == nil)
-    #expect(engine.visualCurrentWordIndex == nil)
     #expect(engine.scrollOffset == 0)
   }
 
@@ -1299,7 +1296,13 @@ struct VoiceSyncMatchingTests {
     #expect(monitor.level >= 0.2)
   }
 
-  @Test @MainActor func voiceSyncReseedHighlightPreservesScrollOffsetAndUpdatesVisualAnchor() {
+  @Test @MainActor func audioLevelMonitorUsesSpeechFocusedSpeakingThresholds() {
+    #expect(AudioLevelMonitor.speakingThreshold(for: .low) == 0.35)
+    #expect(AudioLevelMonitor.speakingThreshold(for: .medium) == 0.20)
+    #expect(AudioLevelMonitor.speakingThreshold(for: .high) == 0.12)
+  }
+
+  @Test @MainActor func voiceSyncReseedHighlightPreservesScrollOffsetAndUpdatesCurrentAnchor() {
     let engine = VoiceSyncEngine()
     engine.loadScript(text: "one two three four five six", startingAt: 0.75)
 
@@ -1307,10 +1310,8 @@ struct VoiceSyncMatchingTests {
     engine.reseedHighlight(to: 2)
 
     #expect(engine.scrollOffset == originalOffset)
-    #expect(engine.currentWordIndex == nil)
-    #expect(engine.highlightedWordRange == nil)
-    #expect(engine.visualCurrentWordIndex == 2)
-    #expect(engine.visualHighlightedWordRange == 0..<2)
+    #expect(engine.currentWordIndex == 2)
+    #expect(engine.highlightedWordRange == 0..<2)
   }
 
   @Test @MainActor func firstLaunchPermissionCoordinatorRequestsAccessibilityAndMicOnce()
@@ -1446,8 +1447,6 @@ struct VoiceSyncMatchingTests {
     #expect(controller.voiceSync.scrollOffset == 0)
     #expect(controller.voiceSync.currentWordIndex == nil)
     #expect(controller.voiceSync.highlightedWordRange == nil)
-    #expect(controller.voiceSync.visualCurrentWordIndex == nil)
-    #expect(controller.voiceSync.visualHighlightedWordRange == nil)
     #expect(controller.voiceSync.isHumanSpeechActive == false)
     #expect(controller.voiceSync.manualLineNudgeID == 0)
     #expect(controller.voiceSync.manualLineNudgeDirection == 0)

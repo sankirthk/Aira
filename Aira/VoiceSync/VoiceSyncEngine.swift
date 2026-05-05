@@ -13,8 +13,6 @@ class VoiceSyncEngine: ObservableObject {
   @Published var manualLineNudgeDirection: CGFloat = 0
   @Published var currentWordIndex: Int?
   @Published var highlightedWordRange: Range<Int>?
-  @Published var visualCurrentWordIndex: Int?
-  @Published var visualHighlightedWordRange: Range<Int>?
   @Published var isHumanSpeechActive: Bool = false
   @Published var voiceScrollMode: VoiceScrollMode = .wordTracking
 
@@ -25,7 +23,6 @@ class VoiceSyncEngine: ObservableObject {
 
   private var scriptWords: [String] = []
   private var cursorIndex: Int = 0
-  private var visualCursorIndex: Int = 0
   private var visibleWordRange: Range<Int> = 0..<0
   private let silenceThresholdNanoseconds: UInt64 = 500_000_000
   private let firstTapTimeoutNanoseconds: UInt64 = 2_000_000_000
@@ -33,7 +30,6 @@ class VoiceSyncEngine: ObservableObject {
   private let diagnosticAudioFloor: Float = 0.003
   private var recognitionEnabled: Bool = false
   private var recognitionDrivesScroll: Bool = true
-  private var previousPartialTokens: [String] = []
   private var recognitionGeneration: UInt64 = 0
   private var audioEngineConfigurationObserver: NSObjectProtocol?
   private var firstTapTimeoutTask: Task<Void, Never>?
@@ -82,11 +78,7 @@ class VoiceSyncEngine: ObservableObject {
     isPausedByUser = false
     currentWordIndex = nil
     highlightedWordRange = nil
-    visualCurrentWordIndex = nil
-    visualHighlightedWordRange = nil
     isHumanSpeechActive = false
-    visualCursorIndex = cursorIndex
-    previousPartialTokens = []
     consecutiveRecognitionMissCount = 0
     acceptsRecognitionCallbacks = true
   }
@@ -125,16 +117,12 @@ class VoiceSyncEngine: ObservableObject {
     manualLineNudgeDirection = 0
     currentWordIndex = nil
     highlightedWordRange = nil
-    visualCurrentWordIndex = nil
-    visualHighlightedWordRange = nil
     isHumanSpeechActive = false
     audioLevelMonitor?.reset()
     recognitionEnabled = false
     recognitionDrivesScroll = true
     scriptWords = []
     visibleWordRange = 0..<0
-    visualCursorIndex = 0
-    previousPartialTokens = []
     consecutiveRecognitionMissCount = 0
     diagnostics = DiagnosticsState()
     acceptsRecognitionCallbacks = false
@@ -161,10 +149,6 @@ class VoiceSyncEngine: ObservableObject {
     if resetSpokenTracking {
       currentWordIndex = nil
       highlightedWordRange = nil
-      visualCurrentWordIndex = nil
-      visualHighlightedWordRange = nil
-      visualCursorIndex = cursorIndex
-      previousPartialTokens = []
       consecutiveRecognitionMissCount = 0
     }
   }
@@ -176,10 +160,6 @@ class VoiceSyncEngine: ObservableObject {
     if resetSpokenTracking {
       currentWordIndex = nil
       highlightedWordRange = nil
-      visualCurrentWordIndex = nil
-      visualHighlightedWordRange = nil
-      visualCursorIndex = cursorIndex
-      previousPartialTokens = []
       consecutiveRecognitionMissCount = 0
     }
   }
@@ -195,12 +175,8 @@ class VoiceSyncEngine: ObservableObject {
 
     let clampedIndex = min(max(wordIndex, 0), scriptWords.count - 1)
     cursorIndex = clampedIndex
-    visualCursorIndex = clampedIndex
-    currentWordIndex = nil
-    highlightedWordRange = nil
-    visualCurrentWordIndex = clampedIndex
-    visualHighlightedWordRange = 0..<clampedIndex
-    previousPartialTokens = []
+    currentWordIndex = clampedIndex
+    highlightedWordRange = 0..<clampedIndex
     consecutiveRecognitionMissCount = 0
   }
 
@@ -265,6 +241,16 @@ class VoiceSyncEngine: ObservableObject {
     observeAudioEngineConfigurationChanges(engine)
 
     let inputNode = engine.inputNode
+    do {
+      try inputNode.setVoiceProcessingEnabled(true)
+      AiraLogger.shared.info("voiceSync.voiceProcessing enabled=true", category: "voice")
+    } catch {
+      AiraLogger.shared.info(
+        "voiceSync.voiceProcessing enabled=false error=\"\(error.localizedDescription)\"",
+        category: "voice"
+      )
+    }
+
     let inputFormat = inputNode.inputFormat(forBus: 0)
     let format = inputNode.outputFormat(forBus: 0)
     AiraLogger.shared.info(
@@ -341,10 +327,7 @@ class VoiceSyncEngine: ObservableObject {
     consecutiveRecognitionMissCount = 0
     currentWordIndex = match.currentWordIndex
     highlightedWordRange = 0..<match.currentWordIndex
-    visualCurrentWordIndex = match.currentWordIndex
-    visualHighlightedWordRange = 0..<match.currentWordIndex
     cursorIndex = max(cursorIndex, match.currentWordIndex)
-    visualCursorIndex = max(visualCursorIndex, match.currentWordIndex + 1)
 
     switch voiceScrollMode {
     case .classicScroll:
@@ -458,130 +441,6 @@ class VoiceSyncEngine: ObservableObject {
     )
     let upper = min(max(visibleWordRange.upperBound, lower), scriptWords.count)
     return lower..<upper
-  }
-
-  private func processVisualPartialDelta(
-    _ recognizedWords: [VoiceSyncMatching.RecognizedWord],
-    searchRange: Range<Int>
-  ) {
-    let partialTokens = recognizedWords.map(\.token)
-    let stablePrefixCount = VoiceSyncMatching.commonPrefixLength(
-      lhs: previousPartialTokens,
-      rhs: partialTokens
-    )
-
-    let hasEstablishedVisualMatch = visualCurrentWordIndex != nil || !previousPartialTokens.isEmpty
-    let visualSearchLowerBound = min(
-      max(
-        Self.startupSearchLowerBound(
-          cursorIndex: visualCursorIndex,
-          visibleWordLowerBound: searchRange.lowerBound,
-          hasEstablishedMatch: hasEstablishedVisualMatch
-        ),
-        0
-      ),
-      scriptWords.count
-    )
-    let visualSearchUpperBound = min(
-      max(searchRange.upperBound, visualSearchLowerBound), scriptWords.count)
-    let visualSearchRange = visualSearchLowerBound..<visualSearchUpperBound
-
-    guard !visualSearchRange.isEmpty else {
-      previousPartialTokens = partialTokens
-      return
-    }
-
-    let visualMatcherMode = matcherMode(
-      hasEstablishedMatch: hasEstablishedVisualMatch,
-      lagWords: max(visibleWordRange.lowerBound - visualCursorIndex, 0)
-    )
-    let visibleLowerBound = searchRange.lowerBound
-
-    if visualMatcherMode == .startup,
-      let startupSeedMatch = Self.startupSeedMatch(
-        scriptWords: scriptWords,
-        recognizedWords: recognizedWords,
-        searchRange: visualSearchRange
-      )
-    {
-      visualCursorIndex = startupSeedMatch.currentWordIndex + 1
-      visualCurrentWordIndex = startupSeedMatch.currentWordIndex
-      visualHighlightedWordRange = 0..<startupSeedMatch.currentWordIndex
-      logVisualHighlightPublish(index: startupSeedMatch.currentWordIndex, source: "startupSeed")
-      previousPartialTokens = partialTokens
-      return
-    }
-
-    var nextVisualCursor = visualCursorIndex
-    var lastMatchedVisualIndex: Int?
-
-    for token in partialTokens.dropFirst(stablePrefixCount) {
-      let searchStart = min(
-        max(
-          Self.startupSearchLowerBound(
-            cursorIndex: nextVisualCursor,
-            visibleWordLowerBound: visibleLowerBound,
-            hasEstablishedMatch: hasEstablishedVisualMatch
-          ),
-          visualSearchRange.lowerBound
-        ),
-        visualSearchRange.upperBound
-      )
-      let remainingLookAhead = min(
-        max(visualSearchRange.upperBound - searchStart, 0),
-        Self.recommendedVisualMatchLookAhead(
-          visibleWordCount: visualSearchRange.count,
-          mode: visualMatcherMode
-        )
-      )
-      guard remainingLookAhead > 0 else { continue }
-      guard
-        let match = VoiceSyncMatching.findDetailedMatch(
-          scriptWords: scriptWords,
-          spokenWindow: [token],
-          cursorIndex: searchStart,
-          lookAhead: remainingLookAhead,
-          minimumOverlap: 1
-        )
-      else { continue }
-
-      guard
-        Self.isLowOverlapMatchPlausible(
-          matchStartIndex: match.startIndex,
-          searchStart: searchStart,
-          minimumOverlap: 1,
-          mode: visualMatcherMode
-        )
-      else { continue }
-
-      logVisualCandidateIfNeeded(
-        token: token,
-        searchStart: searchStart,
-        lookAhead: remainingLookAhead,
-        match: match,
-        mode: visualMatcherMode
-      )
-
-      nextVisualCursor = match.currentWordIndex + 1
-      lastMatchedVisualIndex = match.currentWordIndex
-
-      // In voice-driven mode, keep immediate per-word updates so follow feels
-      // live. In classical highlight-only mode, publish once per partial below
-      // to avoid redraw bursts that can make scrolling look jerky.
-      if recognitionDrivesScroll {
-        visualCurrentWordIndex = match.currentWordIndex
-        visualHighlightedWordRange = 0..<match.currentWordIndex
-        logVisualHighlightPublish(index: match.currentWordIndex, source: "partialDelta")
-      }
-    }
-
-    visualCursorIndex = nextVisualCursor
-    if !recognitionDrivesScroll, let lastMatchedVisualIndex {
-      visualCurrentWordIndex = lastMatchedVisualIndex
-      visualHighlightedWordRange = 0..<lastMatchedVisualIndex
-      logVisualHighlightPublish(index: lastMatchedVisualIndex, source: "highlightOnly")
-    }
-    previousPartialTokens = partialTokens
   }
 
   private func scheduleSilenceDeadline() {
@@ -728,11 +587,9 @@ class VoiceSyncEngine: ObservableObject {
     var didLogFirstRecognitionFinal = false
     var didLogFirstStartupSeed = false
     var didLogFirstStrictMatch = false
-    var didLogFirstVisualPublish = false
     var didLogFirstScrollPublish = false
     var didLogFirstSearchWindow = false
     var didLogFirstStartupSeedMiss = false
-    var didLogFirstVisualCandidate = false
     var recognitionPartialCount = 0
   }
 
@@ -764,7 +621,7 @@ class VoiceSyncEngine: ObservableObject {
     diagnostics.didLogFirstStartupSeedMiss = true
     let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
     AiraLogger.shared.info(
-      "voiceSync.startupSeed miss search=\(searchRange.lowerBound)..<\(searchRange.upperBound) cursor=\(cursorIndex) visualCursor=\(visualCursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      "voiceSync.startupSeed miss search=\(searchRange.lowerBound)..<\(searchRange.upperBound) cursor=\(cursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
       category: "voice"
     )
   }
@@ -790,31 +647,7 @@ class VoiceSyncEngine: ObservableObject {
     guard diagnostics.recognitionPartialCount <= 3 else { return }
     let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
     AiraLogger.shared.info(
-      "voiceSync.searchWindow seq=\(diagnostics.recognitionPartialCount) cursor=\(cursorIndex) visualCursor=\(visualCursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
-      category: "voice"
-    )
-  }
-
-  private func logVisualCandidateIfNeeded(
-    token: String,
-    searchStart: Int,
-    lookAhead: Int,
-    match: VoiceSyncMatching.Match,
-    mode: MatcherMode
-  ) {
-    guard !diagnostics.didLogFirstVisualCandidate else { return }
-    diagnostics.didLogFirstVisualCandidate = true
-    AiraLogger.shared.info(
-      "voiceSync.visualCandidate token=\"\(token)\" mode=\(mode.debugName) searchStart=\(searchStart) lookAhead=\(lookAhead) matchStart=\(match.startIndex) currentWordIndex=\(match.currentWordIndex) t=\(diagnosticElapsedText())",
-      category: "voice"
-    )
-  }
-
-  private func logVisualHighlightPublish(index: Int, source: String) {
-    guard !diagnostics.didLogFirstVisualPublish else { return }
-    diagnostics.didLogFirstVisualPublish = true
-    AiraLogger.shared.info(
-      "voiceSync.publish visual index=\(index) source=\(source) t=\(diagnosticElapsedText())",
+      "voiceSync.searchWindow seq=\(diagnostics.recognitionPartialCount) cursor=\(cursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
       category: "voice"
     )
   }

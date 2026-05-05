@@ -48,15 +48,19 @@ class AudioLevelMonitor: ObservableObject {
     thresholdCrossedTime = nil
   }
 
-  private var speakingThreshold: Float {
+  static func speakingThreshold(for sensitivity: SpeechSensitivity) -> Float {
     switch sensitivity {
     case .low:
-      return 0.20
+      return 0.35
     case .medium:
-      return 0.11
+      return 0.20
     case .high:
-      return 0.06
+      return 0.12
     }
+  }
+
+  private var speakingThreshold: Float {
+    Self.speakingThreshold(for: sensitivity)
   }
 
   private var activationHoldTime: TimeInterval {

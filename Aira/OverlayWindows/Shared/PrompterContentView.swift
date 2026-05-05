@@ -855,7 +855,7 @@ struct PrompterContentView: View {
   private var visibleHighlightWordRange: Range<Int>? {
     guard spokenWordHighlightingEnabled else { return nil }
     return PrompterHighlightWindow.clampedHighlightRange(
-      voiceSync.visualHighlightedWordRange,
+      voiceSync.highlightedWordRange,
       toVisibleWordRange: visibleWordRange
     )
   }
@@ -863,7 +863,7 @@ struct PrompterContentView: View {
   private var visibleCurrentWordIndex: Int? {
     guard spokenWordHighlightingEnabled else { return nil }
     return PrompterHighlightWindow.clampedCurrentWordIndex(
-      voiceSync.visualCurrentWordIndex,
+      voiceSync.currentWordIndex,
       toVisibleWordRange: visibleWordRange
     )
   }
