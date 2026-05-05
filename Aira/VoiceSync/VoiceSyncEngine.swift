@@ -39,9 +39,10 @@ class VoiceSyncEngine: ObservableObject {
   private let recognitionBackend: SpeechRecognitionBackend?
   private let tokenLookAhead = 50
   private let minimumRecognizedWordConfidence: Float = 0.50
-  private let minimumRecoveryTokenConfidence: Float = 0.35
-  private let recoveryMissThreshold = 2
-  private var consecutiveRecognitionMissCount = 0
+  private let recentSpokenWordLimit = 3
+  private let robustLocalLookAhead = 15
+  private let robustDeepLookAhead = 200
+  private var recentSpokenWords: [String] = []
   private var acceptsRecognitionCallbacks = false
 
   enum MatcherMode: Equatable {
@@ -80,7 +81,7 @@ class VoiceSyncEngine: ObservableObject {
     currentWordIndex = nil
     highlightedWordRange = nil
     isHumanSpeechActive = false
-    consecutiveRecognitionMissCount = 0
+    recentSpokenWords = []
     acceptsRecognitionCallbacks = true
   }
 
@@ -124,7 +125,7 @@ class VoiceSyncEngine: ObservableObject {
     recognitionDrivesScroll = true
     scriptWords = []
     visibleWordRange = 0..<0
-    consecutiveRecognitionMissCount = 0
+    recentSpokenWords = []
     diagnostics = DiagnosticsState()
     acceptsRecognitionCallbacks = false
   }
@@ -150,7 +151,7 @@ class VoiceSyncEngine: ObservableObject {
     if resetSpokenTracking {
       currentWordIndex = nil
       highlightedWordRange = nil
-      consecutiveRecognitionMissCount = 0
+      recentSpokenWords = []
     }
   }
 
@@ -161,7 +162,7 @@ class VoiceSyncEngine: ObservableObject {
     if resetSpokenTracking {
       currentWordIndex = nil
       highlightedWordRange = nil
-      consecutiveRecognitionMissCount = 0
+      recentSpokenWords = []
     }
   }
 
@@ -178,7 +179,7 @@ class VoiceSyncEngine: ObservableObject {
     cursorIndex = clampedIndex
     currentWordIndex = clampedIndex
     highlightedWordRange = 0..<clampedIndex
-    consecutiveRecognitionMissCount = 0
+    recentSpokenWords = []
   }
 
   func requestManualLineNudge(direction: CGFloat) {
@@ -322,7 +323,6 @@ class VoiceSyncEngine: ObservableObject {
     }
     isHumanSpeechActive = true
     guard let match = matchRecognizedWordToken(token) else {
-      recordRecognitionMissIfNeeded(for: token)
       AiraLogger.shared.info(
         "voiceSync.wordTokenNoMatch token=\"\(token.word)\" cursorIndex=\(cursorIndex) words=\(scriptWords.count)",
         category: "voice"
@@ -330,7 +330,6 @@ class VoiceSyncEngine: ObservableObject {
       return
     }
 
-    consecutiveRecognitionMissCount = 0
     currentWordIndex = match.currentWordIndex
     highlightedWordRange = 0..<match.currentWordIndex
     cursorIndex = max(cursorIndex, match.currentWordIndex)
@@ -364,72 +363,23 @@ class VoiceSyncEngine: ObservableObject {
       )
       return nil
     }
+    appendRecentSpokenWord(normalized)
 
     let searchStart = min(max(cursorIndex, 0), scriptWords.count)
-    let hasEstablishedMatch = currentWordIndex != nil || highlightedWordRange != nil
-    let matcherMode = matcherMode(
-      hasEstablishedMatch: hasEstablishedMatch,
-      lagWords: max(visibleWordRange.lowerBound - cursorIndex, 0)
+    return VoiceSyncMatching.findRobustMatch(
+      scriptWords: scriptWords,
+      recentSpokenWords: recentSpokenWords,
+      currentIndex: searchStart,
+      localLookAhead: min(robustLocalLookAhead, tokenLookAhead),
+      deepLookAhead: robustDeepLookAhead
     )
-    let visibleWordCount = visibleWordRange.isEmpty ? scriptWords.count : visibleWordRange.count
-    let localizedLookAhead = Self.recommendedStrictMatchLookAhead(
-      visibleWordCount: visibleWordCount,
-      minimumOverlap: 1,
-      mode: matcherMode
-    )
-    let recoveryLookAhead = Self.recommendedRecoveryMatchLookAhead(
-      visibleWordCount: visibleWordCount,
-      consecutiveMisses: consecutiveRecognitionMissCount
-    )
-    let effectiveLookAhead =
-      consecutiveRecognitionMissCount >= recoveryMissThreshold
-      ? max(localizedLookAhead, recoveryLookAhead)
-      : localizedLookAhead
-    let lookAhead = min(tokenLookAhead, effectiveLookAhead, max(scriptWords.count - searchStart, 0))
-    guard lookAhead > 0 else { return nil }
-    guard
-      let match = VoiceSyncMatching.findDetailedMatch(
-        scriptWords: scriptWords,
-        spokenWindow: [normalized],
-        cursorIndex: searchStart,
-        lookAhead: lookAhead,
-        minimumOverlap: 1
-      )
-    else { return nil }
-    guard
-      Self.canUseSingleTokenMatch(
-        normalizedToken: normalized,
-        matchStartIndex: match.startIndex,
-        searchStart: searchStart
-      )
-    else { return nil }
-
-    guard
-      Self.isLowOverlapMatchPlausible(
-        matchStartIndex: match.startIndex,
-        searchStart: searchStart,
-        minimumOverlap: 1,
-        mode: matcherMode
-      )
-    else { return nil }
-
-    return match
   }
 
-  private static func canUseSingleTokenMatch(
-    normalizedToken: String,
-    matchStartIndex: Int,
-    searchStart: Int
-  ) -> Bool {
-    guard VoiceSyncMatching.stopWords.contains(normalizedToken) else { return true }
-    return matchStartIndex - searchStart <= 1
-  }
-
-  private func recordRecognitionMissIfNeeded(for token: SpokenWordToken) {
-    guard currentWordIndex != nil || highlightedWordRange != nil else { return }
-    guard VoiceSyncMatching.normalizeToken(token.word) != nil else { return }
-    guard (token.confidence ?? 1) >= minimumRecoveryTokenConfidence else { return }
-    consecutiveRecognitionMissCount += 1
+  private func appendRecentSpokenWord(_ normalized: String) {
+    recentSpokenWords.append(normalized)
+    if recentSpokenWords.count > recentSpokenWordLimit {
+      recentSpokenWords.removeFirst(recentSpokenWords.count - recentSpokenWordLimit)
+    }
   }
 
   private func normalizedSearchRange() -> Range<Int> {
@@ -1032,8 +982,12 @@ struct VoiceSyncMatching {
     "that",
     "the",
     "to",
+    "for",
+    "i",
+    "on",
     "uh",
     "um",
+    "you",
   ]
 
   struct RecognizedWord: Equatable {
@@ -1183,6 +1137,43 @@ struct VoiceSyncMatching {
     }
 
     return bestMatch
+  }
+
+  static func findRobustMatch(
+    scriptWords: [String],
+    recentSpokenWords: [String],
+    currentIndex: Int,
+    localLookAhead: Int = 15,
+    deepLookAhead: Int = 200
+  ) -> Match? {
+    guard !scriptWords.isEmpty, let latestWord = recentSpokenWords.last else { return nil }
+
+    let searchStart = min(max(currentIndex, 0), scriptWords.count)
+    let localSearchEnd = min(searchStart + max(localLookAhead, 0), scriptWords.count)
+    if searchStart < localSearchEnd {
+      for index in searchStart..<localSearchEnd {
+        guard scriptWords[index] == latestWord else { continue }
+        let distance = index - searchStart
+        if distance > 1 && stopWords.contains(latestWord) { continue }
+        return Match(startIndex: index, overlap: 1)
+      }
+    }
+
+    guard recentSpokenWords.count >= 3 else { return nil }
+    let spokenPhrase = Array(recentSpokenWords.suffix(3))
+    let deepSearchEnd = min(searchStart + max(deepLookAhead, 0), scriptWords.count)
+    guard searchStart < deepSearchEnd else { return nil }
+
+    for index in searchStart..<deepSearchEnd {
+      guard scriptWords[index] == spokenPhrase[0] else { continue }
+      guard index + spokenPhrase.count <= scriptWords.count else { return nil }
+      let scriptPhrase = scriptWords[index..<(index + spokenPhrase.count)]
+      if Array(scriptPhrase) == spokenPhrase {
+        return Match(startIndex: index, overlap: spokenPhrase.count)
+      }
+    }
+
+    return nil
   }
 
   static func findMatch(

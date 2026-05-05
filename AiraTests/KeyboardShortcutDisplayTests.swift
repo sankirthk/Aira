@@ -1047,12 +1047,12 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 16))
   }
 
-  @Test @MainActor func wordTrackingWidensRecoveryAfterConsecutiveMisses() async throws {
+  @Test @MainActor func wordTrackingRecoveryRequiresPhraseForDeepJump() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
     engine.loadScript(
       text:
-        "one two three four five six seven eight nine ten eleven twelve thirteen fourteen",
+        "one two three four five six seven eight alpha beta gamma delta epsilon zeta eta nine ten eleven after",
       startingAt: 0
     )
     engine.voiceScrollMode = .wordTracking
@@ -1062,8 +1062,15 @@ struct VoiceSyncMatchingTests {
     backend.emit("three", confidence: 0.43)
     backend.emit("eleven", confidence: 0.9)
 
-    #expect(engine.currentWordIndex == 10)
-    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 10, totalWords: 14))
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.scrollOffset == 0)
+
+    backend.emit("nine", confidence: 0.9)
+    backend.emit("ten", confidence: 0.9)
+    backend.emit("eleven", confidence: 0.9)
+
+    #expect(engine.currentWordIndex == 17)
+    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 17, totalWords: 19))
   }
 
   @Test @MainActor func wordTrackingRecoveryDoesNotJumpToFarRepeatedFillerWords() async throws {
@@ -1084,6 +1091,53 @@ struct VoiceSyncMatchingTests {
 
     #expect(engine.currentWordIndex == 0)
     #expect(engine.scrollOffset == 0)
+  }
+
+  @Test @MainActor func wordTrackingSingleTokenRecoveryStaysLocalButPhraseCanJumpDeep()
+    async throws
+  {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "start alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi unique bridge target after",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("start", confidence: 0.9)
+    backend.emit("missed", confidence: 0.42)
+    backend.emit("accented", confidence: 0.43)
+    backend.emit("target", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.scrollOffset == 0)
+
+    backend.emit("unique", confidence: 0.95)
+    backend.emit("bridge", confidence: 0.95)
+    backend.emit("target", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 17)
+    #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 17, totalWords: 19))
+  }
+
+  @Test @MainActor func manualReseedClearsWhisperPhraseContextBeforeNextToken() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    let gap = (1...24).map { "gap\($0)" }.joined(separator: " ")
+    engine.loadScript(
+      text: "old one start anchor \(gap) old one two after",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("old", confidence: 0.95)
+    backend.emit("one", confidence: 0.95)
+    engine.reseedHighlight(to: 3)
+    backend.emit("two", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 3)
+    #expect(engine.highlightedWordRange == 0..<3)
   }
 
   @Test func whisperBackendUsesSlidingPhraseContextAndBoundedDeduplication() {
