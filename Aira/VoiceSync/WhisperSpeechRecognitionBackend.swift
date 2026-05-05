@@ -16,17 +16,22 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
     "openai_whisper-base.en",
     "openai_whisper-tiny.en",
   ]
-  nonisolated static let transcriptionChunkSize = 48_000
-  nonisolated static let transcriptionOverlapSize = 24_000
-  nonisolated static let maximumEmittedWordCacheSize = 1_000
+  nonisolated static let maximumContextSamples = 48_000
+  nonisolated static let transcriptionTriggerSamples = 8_000
+  nonisolated static let sampleRate = 16_000.0
+  nonisolated static let maximumEmittedTokenCacheSize = 500
+  nonisolated static let emittedTokenCacheTrimCount = 100
 
   var onRecognizedWord: (@MainActor (SpokenWordToken) -> Void)?
   var onProcessingChanged: (@MainActor (Bool) -> Void)?
 
   private var whisper: WhisperKit?
   private var audioAccumulator: [Float] = []
-  private var emittedWords: Set<String> = []
+  private var emittedTokens: [SpokenWordToken] = []
   private var isProcessing = false
+  private var unprocessedSamplesCount = 0
+  private var totalAcceptedSamples = 0
+  private var bufferTimeOffset: TimeInterval = 0
 
   func prepare() async throws {
     guard whisper == nil else { return }
@@ -53,13 +58,18 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
 
   func acceptAudio(_ samples: [Float]) async {
     audioAccumulator.append(contentsOf: samples)
-    guard audioAccumulator.count >= Self.transcriptionChunkSize else { return }
+    totalAcceptedSamples += samples.count
+    unprocessedSamplesCount += samples.count
+    guard unprocessedSamplesCount >= Self.transcriptionTriggerSamples else { return }
     await transcribePendingAudio()
   }
 
   func stop() {
     audioAccumulator = []
-    emittedWords = []
+    emittedTokens = []
+    unprocessedSamplesCount = 0
+    totalAcceptedSamples = 0
+    bufferTimeOffset = 0
     isProcessing = false
     whisper = nil
     onProcessingChanged?(false)
@@ -70,6 +80,8 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
     isProcessing = true
     onProcessingChanged?(true)
     let audio = audioAccumulator
+    let currentBufferTimeOffset = bufferTimeOffset
+    let acceptedSamplesAtSnapshot = totalAcceptedSamples
 
     do {
       let options = DecodingOptions(language: "en", wordTimestamps: true)
@@ -83,33 +95,47 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
         AiraLogger.shared.info("whisperBackend.noWordsEmitted", category: "voice")
       }
       for word in words {
-        let key = "\(word.start)-\(word.word)"
-        guard !emittedWords.contains(key) else { continue }
-        if emittedWords.count >= Self.maximumEmittedWordCacheSize {
-          emittedWords.removeAll(keepingCapacity: true)
+        let absoluteStart = currentBufferTimeOffset + TimeInterval(word.start)
+        guard !isDuplicateEmission(word: word.word, timestamp: absoluteStart) else { continue }
+        let token = SpokenWordToken(
+          word: word.word,
+          timestamp: absoluteStart,
+          confidence: word.probability
+        )
+        emittedTokens.append(token)
+        if emittedTokens.count > Self.maximumEmittedTokenCacheSize {
+          emittedTokens.removeFirst(min(Self.emittedTokenCacheTrimCount, emittedTokens.count))
         }
-        emittedWords.insert(key)
         AiraLogger.shared.info(
-          "whisperBackend.emit word=\"\(word.word)\" start=\(word.start) confidence=\(word.probability)",
+          "whisperBackend.emit word=\"\(word.word)\" start=\(absoluteStart) confidence=\(word.probability)",
           category: "voice"
         )
-        onRecognizedWord?(
-          SpokenWordToken(
-            word: word.word,
-            timestamp: TimeInterval(word.start),
-            confidence: word.probability
-          )
-        )
+        onRecognizedWord?(token)
       }
     } catch {
       AiraLogger.shared.error(error, category: "voice", context: "Whisper transcription failed")
     }
 
-    if audioAccumulator.count > Self.transcriptionOverlapSize {
-      audioAccumulator.removeFirst(audioAccumulator.count - Self.transcriptionOverlapSize)
+    if audioAccumulator.count > Self.maximumContextSamples {
+      let excess = audioAccumulator.count - Self.maximumContextSamples
+      audioAccumulator.removeFirst(excess)
+      bufferTimeOffset += TimeInterval(excess) / Self.sampleRate
     }
+    unprocessedSamplesCount = max(totalAcceptedSamples - acceptedSamplesAtSnapshot, 0)
     isProcessing = false
     onProcessingChanged?(false)
+  }
+
+  private func isDuplicateEmission(word: String, timestamp: TimeInterval) -> Bool {
+    let normalizedWord = Self.normalizedWord(word)
+    guard !normalizedWord.isEmpty else { return false }
+    return emittedTokens.contains { token in
+      Self.normalizedWord(token.word) == normalizedWord && abs(token.timestamp - timestamp) < 1.0
+    }
+  }
+
+  private static func normalizedWord(_ word: String) -> String {
+    word.lowercased().trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
   }
 
   private static func bundledModelURL() -> URL? {

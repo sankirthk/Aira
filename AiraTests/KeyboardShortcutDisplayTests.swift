@@ -1086,10 +1086,12 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == 0)
   }
 
-  @Test func whisperBackendUsesPhraseLengthChunksAndBoundedDeduplication() {
-    #expect(WhisperSpeechRecognitionBackend.transcriptionChunkSize == 48_000)
-    #expect(WhisperSpeechRecognitionBackend.transcriptionOverlapSize == 24_000)
-    #expect(WhisperSpeechRecognitionBackend.maximumEmittedWordCacheSize == 1_000)
+  @Test func whisperBackendUsesSlidingPhraseContextAndBoundedDeduplication() {
+    #expect(WhisperSpeechRecognitionBackend.maximumContextSamples == 48_000)
+    #expect(WhisperSpeechRecognitionBackend.transcriptionTriggerSamples == 8_000)
+    #expect(WhisperSpeechRecognitionBackend.sampleRate == 16_000)
+    #expect(WhisperSpeechRecognitionBackend.maximumEmittedTokenCacheSize == 500)
+    #expect(WhisperSpeechRecognitionBackend.emittedTokenCacheTrimCount == 100)
     #expect(
       WhisperSpeechRecognitionBackend.preferredBundledModelNames.first == "openai_whisper-base.en")
     #expect(
