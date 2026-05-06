@@ -70,6 +70,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-019l | `MenuBarStatusItemController` status item uses template rendering so macOS can switch between black and white automatically — REQ-021 | `[x]` |
 | UT-019m | Menu bar quick-access popover dismisses only for outside interactions, not clicks inside the popover or on the status-item button itself — REQ-021 | `[x]` |
 | UT-019n | Menu bar quick-access uses status-bar-level, all-Spaces popover behavior and launches the selected radio-row script from the primary Notch / Notch + Pills buttons — REQ-014, REQ-021 | `[x]` |
+| UT-019o | Menu bar quick-access derives presenter voice-motion enablement from `voiceScrollMode`, matching Manager launch behavior instead of using the stale legacy voice-sync toggle — REQ-014, REQ-039 | `[x]` |
 
 ### App Updater (Tasks T-043a, T-043b, T-043c, T-043d, T-043e)
 

@@ -2436,6 +2436,23 @@ struct MenuBarScriptSelectionPresentationTests {
   }
 }
 
+struct MenuBarLaunchSettingsTests {
+  @Test func voiceDrivenScrollFollowsVoiceScrollModeInsteadOfLegacyToggle() {
+    var settings = AppSettings(
+      voiceSyncEnabled: false,
+      voiceScrollMode: .wordTracking
+    )
+
+    #expect(MenuBarLaunchSettings.voiceDrivenScrollEnabled(for: settings))
+
+    settings.voiceScrollMode = .soundBased
+    #expect(MenuBarLaunchSettings.voiceDrivenScrollEnabled(for: settings))
+
+    settings.voiceScrollMode = .classicScroll
+    #expect(!MenuBarLaunchSettings.voiceDrivenScrollEnabled(for: settings))
+  }
+}
+
 struct NotchTextFadeGeometryTests {
   @Test func fadeHeightClampsToReadableViewport() {
     let regularHeight = NotchTextFadeGeometry.fadeHeight(

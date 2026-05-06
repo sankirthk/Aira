@@ -294,7 +294,8 @@ struct MenuBarQuickAccessView: View {
           appearance: appState.settings.defaultOverlayAppearance,
           countdownDuration: appState.settings.countdownDuration,
           satelliteCount: appState.settings.maxPillCount,
-          voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+          voiceSyncEnabled: MenuBarLaunchSettings.voiceDrivenScrollEnabled(
+            for: appState.settings),
           autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
           voiceSyncMode: appState.settings.voiceSyncMode
         )
@@ -303,7 +304,8 @@ struct MenuBarQuickAccessView: View {
           script: script,
           appearance: appState.settings.defaultOverlayAppearance,
           countdownDuration: appState.settings.countdownDuration,
-          voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+          voiceSyncEnabled: MenuBarLaunchSettings.voiceDrivenScrollEnabled(
+            for: appState.settings),
           autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
           voiceSyncMode: appState.settings.voiceSyncMode
         )
@@ -409,5 +411,11 @@ enum MenuBarScriptSelectionPresentation {
     return includesPills
       ? "Cast \(selectedScript.title) to Notch + Pills"
       : "Cast \(selectedScript.title) to Notch"
+  }
+}
+
+enum MenuBarLaunchSettings {
+  static func voiceDrivenScrollEnabled(for settings: AppSettings) -> Bool {
+    settings.voiceDrivenScrollEnabled
   }
 }
