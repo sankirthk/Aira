@@ -282,9 +282,9 @@ private struct ScriptCardCastSplitButton: View {
         .padding(.vertical, 10)
         .padding(.leading, 12)
         .padding(.trailing, 6)
+        .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .contentShape(Rectangle())
 
       Rectangle()
         .fill(Color.white.opacity(0.28))
@@ -295,11 +295,11 @@ private struct ScriptCardCastSplitButton: View {
       } label: {
         Image(systemName: "chevron.down")
           .font(.system(size: 9, weight: .semibold))
-          .frame(width: 26)
+          .frame(width: 32)
           .padding(.vertical, 10)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
-      .contentShape(Rectangle())
       .popover(isPresented: $isCastMenuPresented, arrowEdge: .bottom) {
         Button {
           isCastMenuPresented = false
