@@ -68,25 +68,24 @@ final class AiraLogger {
 
   @MainActor
   func exportInteractively() {
-    prepareLogFileIfNeeded()
-
     let panel = NSSavePanel()
     panel.canCreateDirectories = true
     panel.nameFieldStringValue = "Aira-DebugLog-\(Self.exportDateString()).log"
     panel.allowedContentTypes = [.plainText]
 
-    guard panel.runModal() == .OK, let destinationURL = panel.url else {
-      return
-    }
-
-    do {
-      if fileManager.fileExists(atPath: destinationURL.path) {
-        try fileManager.removeItem(at: destinationURL)
+    // Use begin(_:) instead of runModal() — runModal blocks the run loop and
+    // fails to accept input in sandboxed App Store builds without a key window.
+    panel.begin { [weak self] response in
+      guard response == .OK, let destinationURL = panel.url, let self else { return }
+      do {
+        if self.fileManager.fileExists(atPath: destinationURL.path) {
+          try self.fileManager.removeItem(at: destinationURL)
+        }
+        try self.fileManager.copyItem(at: self.logFileURL, to: destinationURL)
+        self.info("Exported debug log to \(destinationURL.path)", category: "logging")
+      } catch {
+        self.error(error, category: "logging", context: "Failed to export debug log")
       }
-      try fileManager.copyItem(at: logFileURL, to: destinationURL)
-      info("Exported debug log to \(destinationURL.path)", category: "logging")
-    } catch {
-      self.error(error, category: "logging", context: "Failed to export debug log")
     }
   }
 
