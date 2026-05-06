@@ -23,9 +23,17 @@ enum AppWindowCoordinator {
     }
 
     window.identifier = transientMenuBarWindowIdentifier
+    guard Self.shouldHideTransientTitlebar(styleMask: window.styleMask) else {
+      return
+    }
+
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.toolbar = nil
+  }
+
+  nonisolated static func shouldHideTransientTitlebar(styleMask: NSWindow.StyleMask) -> Bool {
+    styleMask.contains(.titled)
   }
 
   @MainActor

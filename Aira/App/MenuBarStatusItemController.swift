@@ -130,14 +130,12 @@ final class MenuBarStatusItemController: NSObject {
     hasCompletedLaunch && !hasStatusItem
   }
 
-  nonisolated static func promotedQuickAccessWindowLevel(from level: NSWindow.Level)
-    -> NSWindow.Level
-  {
-    NSWindow.Level(rawValue: max(level.rawValue, NSWindow.Level.statusBar.rawValue))
+  nonisolated static func quickAccessWindowLevel() -> NSWindow.Level {
+    .popUpMenu
   }
 
   nonisolated static func quickAccessCollectionBehavior() -> NSWindow.CollectionBehavior {
-    [.canJoinAllSpaces, .fullScreenAuxiliary, .moveToActiveSpace]
+    [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
   }
 
   nonisolated static func statusItemUsesTemplateRendering() -> Bool {
@@ -425,8 +423,8 @@ final class MenuBarStatusItemController: NSObject {
 
   private func configureQuickAccessPanel(_ panel: NSPanel) {
     AppWindowCoordinator.markTransientMenuBarWindow(panel)
-    panel.level = Self.promotedQuickAccessWindowLevel(from: panel.level)
-    panel.collectionBehavior.formUnion(Self.quickAccessCollectionBehavior())
+    panel.level = Self.quickAccessWindowLevel()
+    panel.collectionBehavior = Self.quickAccessCollectionBehavior()
   }
 
   private func statusItemButtonFrame(_ button: NSStatusBarButton) -> NSRect {

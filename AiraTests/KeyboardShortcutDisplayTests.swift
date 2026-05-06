@@ -2263,6 +2263,16 @@ struct AppWindowCoordinatorTests {
       ) == false
     )
   }
+
+  @Test func transientMenuBarChromeHidingOnlyAppliesToTitledWindows() {
+    #expect(AppWindowCoordinator.shouldHideTransientTitlebar(styleMask: [.titled]))
+    #expect(AppWindowCoordinator.shouldHideTransientTitlebar(styleMask: [.borderless]) == false)
+    #expect(
+      AppWindowCoordinator.shouldHideTransientTitlebar(styleMask: [
+        .borderless, .nonactivatingPanel,
+      ]) == false
+    )
+  }
 }
 
 struct MenuBarVoiceControlPresentationTests {
@@ -2328,13 +2338,8 @@ struct MenuBarStatusItemControllerTests {
     )
   }
 
-  @Test func promotesQuickAccessPanelWindowLevelToAtLeastStatusBar() {
-    #expect(
-      MenuBarStatusItemController.promotedQuickAccessWindowLevel(from: .normal) == .statusBar
-    )
-    #expect(
-      MenuBarStatusItemController.promotedQuickAccessWindowLevel(from: .statusBar) == .statusBar
-    )
+  @Test func quickAccessPanelUsesPopUpMenuWindowLevel() {
+    #expect(MenuBarStatusItemController.quickAccessWindowLevel() == .popUpMenu)
   }
 
   @Test func quickAccessPanelCollectionBehaviorFollowsActiveSpaceAndFullscreenApps() {
@@ -2342,7 +2347,8 @@ struct MenuBarStatusItemControllerTests {
 
     #expect(behavior.contains(.canJoinAllSpaces))
     #expect(behavior.contains(.fullScreenAuxiliary))
-    #expect(behavior.contains(.moveToActiveSpace))
+    #expect(behavior.contains(.ignoresCycle))
+    #expect(behavior.contains(.moveToActiveSpace) == false)
   }
 
   @Test func quickAccessPanelUsesNonactivatingBorderlessStyle() {
