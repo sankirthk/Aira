@@ -237,6 +237,12 @@ class VoiceSyncEngine: ObservableObject {
     }
   }
 
+  func updatePassiveScrollOffset(to offset: CGFloat) {
+    let clamped = min(max(offset, 0), 1)
+    scrollOffset = clamped
+    highestWordTrackingScrollOffset = max(highestWordTrackingScrollOffset, clamped)
+  }
+
   func updateVisibleWordRange(_ range: Range<Int>) {
     let lower = min(max(range.lowerBound, 0), scriptWords.count)
     let upper = min(max(range.upperBound, lower), scriptWords.count)
@@ -272,6 +278,10 @@ class VoiceSyncEngine: ObservableObject {
     )
 
     if microphoneGranted {
+      if voiceScrollMode == .wordTracking {
+        startEngine()
+        return
+      }
       prepareRecognitionBackendThenStartEngine()
     }
   }

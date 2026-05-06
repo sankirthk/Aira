@@ -1371,6 +1371,35 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == 0)
   }
 
+  @Test @MainActor func soundBasedPassiveScrollDoesNotMoveHighlightCursor() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four five", startingAt: 0)
+    engine.voiceScrollMode = .soundBased
+
+    backend.emitPartial(["one"])
+    engine.updatePassiveScrollOffset(to: 0.85)
+    backend.emitPartial(["one", "two"])
+
+    #expect(engine.currentWordIndex == 1)
+    #expect(engine.highlightedWordRange == 0..<1)
+    #expect(engine.scrollOffset == 0.85)
+  }
+
+  @Test @MainActor func passiveScrollOffsetDoesNotClearExistingHighlightState() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.voiceScrollMode = .soundBased
+
+    backend.emitPartial(["one", "two"])
+    engine.updatePassiveScrollOffset(to: 0.5)
+
+    #expect(engine.currentWordIndex == 1)
+    #expect(engine.highlightedWordRange == 0..<1)
+    #expect(engine.scrollOffset == 0.5)
+  }
+
   @Test @MainActor func voiceRecognitionSourcePolicySplitsHighlightAndWordTrackingBackends()
     async throws
   {

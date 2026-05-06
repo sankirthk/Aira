@@ -597,8 +597,9 @@ struct PrompterContentView: View {
   private func syncVoiceTrackingOffset(_ offset: CGFloat) {
     if usesSoundBasedScroll {
       // Passive voice-driven scroll updates should not clear spoken-word visuals.
-      // Explicit user scroll/nudge paths still call nudgeScroll directly.
-      voiceSync.nudgeScroll(to: offset, resetSpokenTracking: false)
+      // They also must not move the recognition cursor; Apple highlighting
+      // should keep following spoken words, not the volume-based scroll offset.
+      voiceSync.updatePassiveScrollOffset(to: offset)
     }
   }
 

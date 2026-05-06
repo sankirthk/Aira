@@ -166,6 +166,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030an | Spoken-word highlight matching accepts content words up to two positions ahead while keeping stop-word jumps constrained to one position | `[x]` |
 | UT-030ao | Word-tracking recovery accepts 2+ word clean phrases inside the visible forward window, rejects phrase matches beyond that window, and clamps scroll to monotonic forward progress | `[x]` |
 | UT-030ap | Word-tracking physical playhead progress blocks backward correction after line-end overshoot while permitting explicit backward reseed | `[x]` |
+| UT-030aq | Sound-based passive scroll offset updates preserve the Apple speech highlight cursor and existing dull-prefix state, so volume-driven motion cannot starve spoken-word highlighting | `[x]` |
 | UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
 | UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
 | UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |
