@@ -2328,21 +2328,41 @@ struct MenuBarStatusItemControllerTests {
     )
   }
 
-  @Test func promotesPopoverWindowLevelToAtLeastFloating() {
+  @Test func promotesQuickAccessPanelWindowLevelToAtLeastStatusBar() {
     #expect(
-      MenuBarStatusItemController.promotedPopoverWindowLevel(from: .normal) == .statusBar
+      MenuBarStatusItemController.promotedQuickAccessWindowLevel(from: .normal) == .statusBar
     )
     #expect(
-      MenuBarStatusItemController.promotedPopoverWindowLevel(from: .statusBar) == .statusBar
+      MenuBarStatusItemController.promotedQuickAccessWindowLevel(from: .statusBar) == .statusBar
     )
   }
 
-  @Test func popoverCollectionBehaviorFollowsActiveSpaceAndFullscreenApps() {
-    let behavior = MenuBarStatusItemController.popoverCollectionBehavior()
+  @Test func quickAccessPanelCollectionBehaviorFollowsActiveSpaceAndFullscreenApps() {
+    let behavior = MenuBarStatusItemController.quickAccessCollectionBehavior()
 
     #expect(behavior.contains(.canJoinAllSpaces))
     #expect(behavior.contains(.fullScreenAuxiliary))
     #expect(behavior.contains(.moveToActiveSpace))
+  }
+
+  @Test func quickAccessPanelUsesNonactivatingBorderlessStyle() {
+    let styleMask = MenuBarStatusItemController.quickAccessPanelStyleMask()
+
+    #expect(styleMask.contains(.borderless))
+    #expect(styleMask.contains(.nonactivatingPanel))
+  }
+
+  @Test func quickAccessPanelFrameAnchorsNearStatusItemInsideVisibleScreen() {
+    let frame = MenuBarStatusItemController.quickAccessPanelFrame(
+      buttonFrame: NSRect(x: 920, y: 870, width: 32, height: 24),
+      panelSize: NSSize(width: 360, height: 420),
+      visibleFrame: NSRect(x: 0, y: 0, width: 1_000, height: 900),
+      margin: 8
+    )
+
+    #expect(frame.maxX <= 992)
+    #expect(frame.minX >= 8)
+    #expect(frame.maxY < 870)
   }
 
   @Test func statusItemUsesTemplateRenderingForAutomaticBlackWhiteSwitching() {

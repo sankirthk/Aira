@@ -2,9 +2,10 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
+final class MenuBarStatusItemController: NSObject {
   private var statusItem: NSStatusItem?
-  private var popover = NSPopover()
+  private var quickAccessPanel: NSPanel?
+  private var quickAccessHostingController: NSViewController?
   private var appState: AppState?
   private var overlayController: OverlayWindowController?
   private var preferredColorSchemeProvider: (() -> ColorScheme?)?
@@ -14,8 +15,6 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
 
   override init() {
     super.init()
-    popover = Self.makePopover()
-    popover.delegate = self
     NotificationCenter.default.addObserver(
       self,
       selector: #selector(handleApplicationDidFinishLaunching),
@@ -54,8 +53,9 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
       .preferredColorScheme(preferredColorSchemeProvider?())
 
     let hostingController = NSHostingController(rootView: rootView)
-    popover.contentViewController = hostingController
-    popover.contentSize = hostingController.view.fittingSize
+    quickAccessHostingController = hostingController
+    quickAccessPanel?.contentViewController = hostingController
+    quickAccessPanel?.setContentSize(hostingController.view.fittingSize)
   }
 
   @objc private func handleApplicationDidFinishLaunching() {
@@ -77,15 +77,12 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
   }
 
   private func togglePopover(from button: NSStatusBarButton) {
-    resetPopoverIfNeeded()
     updatePopoverContent()
 
-    if popover.isShown {
+    if quickAccessPanel?.isVisible == true {
       closePopover()
     } else {
-      activateAppForPopover()
-      popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-      markPopoverWindowAsTransient()
+      showQuickAccessPanel(from: button)
       installPopoverDismissMonitors()
     }
   }
@@ -112,19 +109,6 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     statusItem?.menu = nil
   }
 
-  private func resetPopoverIfNeeded() {
-    let hasAttachedWindow = popover.contentViewController?.view.window != nil
-    guard Self.shouldRebuildPopover(isShown: popover.isShown, hasAttachedWindow: hasAttachedWindow)
-    else {
-      return
-    }
-
-    popover.performClose(nil)
-    popover.contentViewController = nil
-    popover = Self.makePopover()
-    popover.delegate = self
-  }
-
   @objc private func openAiraFromMenu() {
     AppWindowCoordinator.closeAllTransientMenuBarWindows()
     AppWindowCoordinator.restoreManagerWindow()
@@ -133,18 +117,6 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
   @objc private func quitFromMenu() {
     AppWindowCoordinator.closeAllTransientMenuBarWindows()
     NSApp.terminate(nil)
-  }
-
-  private func markPopoverWindowAsTransient() {
-    let resolveWindow: @MainActor () -> NSWindow? = { [weak self] in
-      self?.popover.contentViewController?.view.window
-    }
-
-    configurePopoverHostWindow(resolveWindow())
-
-    Task { @MainActor in
-      configurePopoverHostWindow(resolveWindow())
-    }
   }
 
   nonisolated static func shouldRebuildPopover(isShown: Bool, hasAttachedWindow: Bool) -> Bool {
@@ -158,11 +130,13 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     hasCompletedLaunch && !hasStatusItem
   }
 
-  nonisolated static func promotedPopoverWindowLevel(from level: NSWindow.Level) -> NSWindow.Level {
+  nonisolated static func promotedQuickAccessWindowLevel(from level: NSWindow.Level)
+    -> NSWindow.Level
+  {
     NSWindow.Level(rawValue: max(level.rawValue, NSWindow.Level.statusBar.rawValue))
   }
 
-  nonisolated static func popoverCollectionBehavior() -> NSWindow.CollectionBehavior {
+  nonisolated static func quickAccessCollectionBehavior() -> NSWindow.CollectionBehavior {
     [.canJoinAllSpaces, .fullScreenAuxiliary, .moveToActiveSpace]
   }
 
@@ -178,11 +152,26 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     isPopoverShown && !interactionInsidePopover && !interactionOnStatusItem
   }
 
-  private static func makePopover() -> NSPopover {
-    let popover = NSPopover()
-    popover.behavior = .transient
-    popover.animates = true
-    return popover
+  nonisolated static func quickAccessPanelStyleMask() -> NSWindow.StyleMask {
+    [.borderless, .nonactivatingPanel]
+  }
+
+  nonisolated static func quickAccessPanelFrame(
+    buttonFrame: NSRect,
+    panelSize: NSSize,
+    visibleFrame: NSRect,
+    margin: CGFloat = 8
+  ) -> NSRect {
+    let x = min(
+      max(buttonFrame.midX - panelSize.width / 2, visibleFrame.minX + margin),
+      visibleFrame.maxX - panelSize.width - margin
+    )
+    let belowY = buttonFrame.minY - panelSize.height - margin
+    let y =
+      belowY >= visibleFrame.minY + margin
+      ? belowY
+      : min(buttonFrame.maxY + margin, visibleFrame.maxY - panelSize.height - margin)
+    return NSRect(origin: CGPoint(x: x, y: y), size: panelSize)
   }
 
   private func createStatusItemIfNeeded() {
@@ -304,7 +293,7 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
 
   private func closePopover() {
     removePopoverDismissMonitors()
-    popover.performClose(nil)
+    quickAccessPanel?.orderOut(nil)
   }
 
   private func installPopoverDismissMonitors() {
@@ -344,7 +333,7 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     let onStatusItem = interactionIsOnStatusItem(event)
     guard
       Self.shouldDismissPopoverForOutsideInteraction(
-        isPopoverShown: popover.isShown,
+        isPopoverShown: quickAccessPanel?.isVisible == true,
         interactionInsidePopover: insidePopover,
         interactionOnStatusItem: onStatusItem
       )
@@ -356,7 +345,7 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
   }
 
   private func interactionIsInsidePopover(_ event: NSEvent) -> Bool {
-    guard let popoverWindow = popover.contentViewController?.view.window else {
+    guard let popoverWindow = quickAccessPanel else {
       return false
     }
 
@@ -399,18 +388,56 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     }
   }
 
-  private func configurePopoverHostWindow(_ window: NSWindow?) {
-    guard let window else {
-      return
+  private func showQuickAccessPanel(from button: NSStatusBarButton) {
+    guard let hostingController = quickAccessHostingController else { return }
+    let panel = Self.makeQuickAccessPanel()
+    quickAccessPanel = panel
+    panel.contentViewController = hostingController
+    panel.setContentSize(hostingController.view.fittingSize)
+    configureQuickAccessPanel(panel)
+    panel.setFrame(
+      Self.quickAccessPanelFrame(
+        buttonFrame: statusItemButtonFrame(button),
+        panelSize: panel.frame.size,
+        visibleFrame: button.window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+      ),
+      display: true
+    )
+    activateAppForPopover()
+    panel.orderFrontRegardless()
+    panel.makeKey()
+  }
+
+  private static func makeQuickAccessPanel() -> NSPanel {
+    let panel = MenuBarQuickAccessPanel(
+      contentRect: .zero,
+      styleMask: quickAccessPanelStyleMask(),
+      backing: .buffered,
+      defer: false
+    )
+    panel.isReleasedWhenClosed = false
+    panel.hasShadow = true
+    panel.backgroundColor = .clear
+    panel.isOpaque = false
+    panel.hidesOnDeactivate = false
+    return panel
+  }
+
+  private func configureQuickAccessPanel(_ panel: NSPanel) {
+    AppWindowCoordinator.markTransientMenuBarWindow(panel)
+    panel.level = Self.promotedQuickAccessWindowLevel(from: panel.level)
+    panel.collectionBehavior.formUnion(Self.quickAccessCollectionBehavior())
+  }
+
+  private func statusItemButtonFrame(_ button: NSStatusBarButton) -> NSRect {
+    guard let window = button.window else {
+      return .zero
     }
-
-    AppWindowCoordinator.markTransientMenuBarWindow(window)
-    window.level = Self.promotedPopoverWindowLevel(from: window.level)
-    window.collectionBehavior.formUnion(Self.popoverCollectionBehavior())
-    window.orderFrontRegardless()
+    return window.convertToScreen(button.convert(button.bounds, to: nil))
   }
+}
 
-  func popoverDidClose(_ notification: Notification) {
-    removePopoverDismissMonitors()
-  }
+private final class MenuBarQuickAccessPanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
 }
