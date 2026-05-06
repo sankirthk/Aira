@@ -3,6 +3,8 @@ import ApplicationServices
 
 @MainActor
 final class KeyboardShortcutMonitor {
+  static let eventTapOptions: CGEventTapOptions = .listenOnly
+
   struct Binding {
     let shortcut: String
     let suppressAutoRepeat: Bool
@@ -74,7 +76,7 @@ final class KeyboardShortcutMonitor {
       let eventTap = CGEvent.tapCreate(
         tap: .cgSessionEventTap,
         place: .headInsertEventTap,
-        options: .defaultTap,
+        options: Self.eventTapOptions,
         eventsOfInterest: CGEventMask(mask),
         callback: callback,
         userInfo: userInfo

@@ -327,6 +327,7 @@ class OverlayWindowController {
   }
 
   func endSession() {
+    let shouldRestoreManagerWindow = hasActiveOverlays
     AiraLogger.shared.info(
       "Ended session notchActive=\(notchController != nil) pillCount=\(pillControllers.count)",
       category: "session"
@@ -343,6 +344,9 @@ class OverlayWindowController {
     pillControllers = []
     stopSessionKeyboardMonitors()
     appState?.setPresenterSessionState(isActive: false, scriptIDs: [])
+    if shouldRestoreManagerWindow {
+      AppWindowCoordinator.restoreManagerWindow()
+    }
   }
 
   func closeLastPill() {

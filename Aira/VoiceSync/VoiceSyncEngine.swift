@@ -47,6 +47,7 @@ class VoiceSyncEngine: ObservableObject {
   private let robustDeepLookAhead = 200
   private var recentSpokenWords: [String] = []
   private var acceptsRecognitionCallbacks = false
+  private var resumesAudioCaptureAfterUserPause = false
 
   enum MatcherMode: Equatable {
     case startup
@@ -126,6 +127,7 @@ class VoiceSyncEngine: ObservableObject {
     visibleWordRange = 0..<scriptWords.count
     scrollOffset = offset
     isPausedByUser = false
+    resumesAudioCaptureAfterUserPause = false
     currentWordIndex = nil
     highlightedWordRange = nil
     isHumanSpeechActive = false
@@ -166,6 +168,7 @@ class VoiceSyncEngine: ObservableObject {
     cursorIndex = 0
     scrollOffset = 0
     isPausedByUser = false
+    resumesAudioCaptureAfterUserPause = false
     manualLineNudgeID = 0
     manualLineNudgeDirection = 0
     currentWordIndex = nil
@@ -184,6 +187,11 @@ class VoiceSyncEngine: ObservableObject {
 
   func togglePause() {
     isPausedByUser.toggle()
+    if isPausedByUser {
+      muteMicrophoneCaptureForUserPause()
+    } else {
+      resumeMicrophoneCaptureAfterUserPauseIfNeeded()
+    }
   }
 
   func enableRecognitionIfNeeded() {
@@ -352,6 +360,40 @@ class VoiceSyncEngine: ObservableObject {
     }
   }
 
+  private func muteMicrophoneCaptureForUserPause() {
+    let hadAudioCapture = audioEngine != nil || state == .running
+    resumesAudioCaptureAfterUserPause = hadAudioCapture
+    guard hadAudioCapture else { return }
+
+    recognitionGeneration &+= 1
+    removeDiagnosticsObservers()
+    firstTapTimeoutTask?.cancel()
+    firstTapTimeoutTask = nil
+    firstRecognitionTimeoutTask?.cancel()
+    firstRecognitionTimeoutTask = nil
+    silenceDeadlineTask?.cancel()
+    silenceDeadlineTask = nil
+    for backend in uniqueRecognitionBackends {
+      backend.stop()
+    }
+    audioEngine?.inputNode.removeTap(onBus: 0)
+    audioEngine?.stop()
+    audioEngine = nil
+    isHumanSpeechActive = false
+    audioLevelMonitor?.reset()
+    state = .paused
+  }
+
+  private func resumeMicrophoneCaptureAfterUserPauseIfNeeded() {
+    guard resumesAudioCaptureAfterUserPause else { return }
+    resumesAudioCaptureAfterUserPause = false
+    if recognitionEnabled {
+      startWithRecognitionIfAuthorized()
+    } else {
+      startMonitoringIfAuthorized()
+    }
+  }
+
   private func prepareRecognitionBackendIfNeeded() {
     guard recognitionEnabled else { return }
     let generation = recognitionGeneration
@@ -406,91 +448,23 @@ class VoiceSyncEngine: ObservableObject {
       rhs: partialTokens
     )
 
-    let hasEstablishedMatch = currentWordIndex != nil || !previousPartialTokens.isEmpty
-    let searchLowerBound = min(
-      max(
-        Self.startupSearchLowerBound(
-          cursorIndex: cursorIndex,
-          visibleWordLowerBound: searchRange.lowerBound,
-          hasEstablishedMatch: hasEstablishedMatch
-        ),
-        0
-      ),
-      scriptWords.count
-    )
-    let searchUpperBound = min(max(searchRange.upperBound, searchLowerBound), scriptWords.count)
-    let visualSearchRange = searchLowerBound..<searchUpperBound
-
-    guard !visualSearchRange.isEmpty else {
+    guard !scriptWords.isEmpty else {
       previousPartialTokens = partialTokens
       return
     }
 
-    let matcherMode = matcherMode(
-      hasEstablishedMatch: hasEstablishedMatch,
-      lagWords: max(visibleWordRange.lowerBound - cursorIndex, 0)
-    )
-
-    if matcherMode == .startup,
-      let startupSeedMatch = Self.startupSeedMatch(
-        scriptWords: scriptWords,
-        recognizedWords: recognizedWords,
-        searchRange: visualSearchRange
-      )
-    {
-      publishHighlightOnlyMatch(startupSeedMatch)
-      previousPartialTokens = partialTokens
-      return
-    }
-
-    var nextCursor = cursorIndex
-    var lastMatch: VoiceSyncMatching.Match?
     for token in partialTokens.dropFirst(stablePrefixCount) {
-      let searchStart = min(
-        max(
-          Self.startupSearchLowerBound(
-            cursorIndex: nextCursor,
-            visibleWordLowerBound: searchRange.lowerBound,
-            hasEstablishedMatch: hasEstablishedMatch
-          ),
-          visualSearchRange.lowerBound
-        ),
-        visualSearchRange.upperBound
-      )
-      let lookAhead = min(
-        max(visualSearchRange.upperBound - searchStart, 0),
-        Self.recommendedVisualMatchLookAhead(
-          visibleWordCount: visualSearchRange.count,
-          mode: matcherMode
-        )
-      )
-      guard lookAhead > 0 else { continue }
       guard
-        let match = VoiceSyncMatching.findDetailedMatch(
+        let match = VoiceSyncMatching.findSequentialMatch(
           scriptWords: scriptWords,
-          spokenWindow: [token],
-          cursorIndex: searchStart,
-          lookAhead: lookAhead,
-          minimumOverlap: 1
-        )
-      else { continue }
-      guard
-        Self.isLowOverlapMatchPlausible(
-          matchStartIndex: match.startIndex,
-          searchStart: searchStart,
-          minimumOverlap: 1,
-          mode: matcherMode
+          spokenWord: token,
+          currentIndex: cursorIndex
         )
       else { continue }
 
-      nextCursor = match.currentWordIndex + 1
-      lastMatch = match
+      publishHighlightOnlyMatch(match)
     }
 
-    cursorIndex = nextCursor
-    if let lastMatch {
-      publishHighlightOnlyMatch(lastMatch)
-    }
     previousPartialTokens = partialTokens
   }
 
@@ -520,7 +494,7 @@ class VoiceSyncEngine: ObservableObject {
 
     currentWordIndex = match.currentWordIndex
     highlightedWordRange = 0..<match.currentWordIndex
-    cursorIndex = max(cursorIndex, match.currentWordIndex)
+    cursorIndex = max(cursorIndex, match.currentWordIndex + 1)
 
     switch voiceScrollMode {
     case .classicScroll:
@@ -530,7 +504,7 @@ class VoiceSyncEngine: ObservableObject {
     case .wordTracking:
       if recognitionDrivesScroll {
         scrollOffset = VoiceSyncMatching.scrollOffset(
-          cursorIndex: cursorIndex,
+          cursorIndex: match.currentWordIndex,
           totalWords: scriptWords.count
         )
         AiraLogger.shared.info(
@@ -551,16 +525,10 @@ class VoiceSyncEngine: ObservableObject {
       )
       return nil
     }
-    appendRecentSpokenWord(normalized)
-
-    let searchStart = min(max(cursorIndex, 0), scriptWords.count)
-    return VoiceSyncMatching.findRobustMatch(
+    return VoiceSyncMatching.findSequentialMatch(
       scriptWords: scriptWords,
-      recentSpokenWords: recentSpokenWords,
-      currentIndex: searchStart,
-      singleTokenLookAhead: robustSingleTokenLookAhead,
-      localLookAhead: min(robustLocalLookAhead, tokenLookAhead),
-      deepLookAhead: robustDeepLookAhead
+      spokenWord: normalized,
+      currentIndex: cursorIndex
     )
   }
 
@@ -1399,6 +1367,21 @@ struct VoiceSyncMatching {
     }
 
     return nil
+  }
+
+  static func findSequentialMatch(
+    scriptWords: [String],
+    spokenWord: String,
+    currentIndex: Int
+  ) -> Match? {
+    guard
+      !scriptWords.isEmpty,
+      let normalized = normalizeToken(spokenWord)
+    else { return nil }
+
+    let index = min(max(currentIndex, 0), scriptWords.count - 1)
+    guard scriptWords[index] == normalized else { return nil }
+    return Match(startIndex: index, overlap: 1)
   }
 
   private static func isDeepSearchPhraseMeaningful(_ spokenPhrase: [String]) -> Bool {

@@ -151,6 +151,10 @@ struct KeyboardShortcutDisplayTests {
     #expect(KeyboardShortcutMonitor.shouldTriggerBinding(scrollBinding, isAutoRepeat: true))
   }
 
+  @Test @MainActor func sessionKeyboardMonitorUsesPassiveEventTapSoEscapeCanReachSystem() {
+    #expect(KeyboardShortcutMonitor.eventTapOptions == .listenOnly)
+  }
+
   @Test func lineNudgeMathUsesSingleRenderedLine() {
     let delta = PrompterScrollMath.lineNudgeOffset(
       maxOffset: 400,
@@ -1000,6 +1004,12 @@ struct VoiceSyncMatchingTests {
 
     backend.emit("the", timestamp: 1, confidence: 0.9)
 
+    #expect(engine.currentWordIndex == nil)
+    #expect(engine.highlightedWordRange == nil)
+
+    engine.reseedHighlight(to: 5)
+    backend.emit("the", timestamp: 2, confidence: 0.9)
+
     #expect(engine.currentWordIndex == 5)
     #expect(engine.highlightedWordRange == 0..<5)
   }
@@ -1011,7 +1021,8 @@ struct VoiceSyncMatchingTests {
     engine.loadScript(text: "one two three four", startingAt: 0.25)
     engine.voiceScrollMode = .classicScroll
 
-    backend.emitPartial(["three"])
+    backend.emitPartial(["two"])
+    backend.emitPartial(["two", "three"])
 
     #expect(engine.scrollOffset == 0.25)
     #expect(engine.currentWordIndex == 2)
@@ -1024,10 +1035,51 @@ struct VoiceSyncMatchingTests {
     engine.loadScript(text: "one two three four", startingAt: 0)
     engine.voiceScrollMode = .wordTracking
 
+    backend.emit("one")
+    backend.emit("two")
     backend.emit("three")
 
     #expect(engine.currentWordIndex == 2)
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
+  }
+
+  @Test func sequentialMatcherOnlyAcceptsCurrentCursorWord() {
+    let scriptWords = VoiceSyncMatching.tokenize("one two three four")
+
+    #expect(
+      VoiceSyncMatching.findSequentialMatch(
+        scriptWords: scriptWords,
+        spokenWord: "three",
+        currentIndex: 0
+      ) == nil
+    )
+    #expect(
+      VoiceSyncMatching.findSequentialMatch(
+        scriptWords: scriptWords,
+        spokenWord: "one",
+        currentIndex: 0
+      ) == .init(startIndex: 0, overlap: 1)
+    )
+  }
+
+  @Test @MainActor func userPauseMutesActiveRecognitionBackend() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(
+      recognitionBackend: backend,
+      microphonePermissionGranted: { false }
+    )
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.enableRecognitionIfNeeded()
+    await Task.yield()
+
+    engine.state = .running
+    engine.isHumanSpeechActive = true
+    engine.togglePause()
+
+    #expect(engine.isPausedByUser)
+    #expect(engine.state == .paused)
+    #expect(!engine.isHumanSpeechActive)
+    #expect(backend.stopCallCount == 1)
   }
 
   @Test @MainActor func wordTrackingIgnoresLowConfidenceAndDuplicateOverlapTokens() async throws {
@@ -1073,6 +1125,7 @@ struct VoiceSyncMatchingTests {
     #expect(engine.currentWordIndex == 0)
     #expect(engine.scrollOffset == 0)
 
+    engine.reseedHighlight(to: 15)
     backend.emit("nine", confidence: 0.9)
     backend.emit("ten", confidence: 0.9)
     backend.emit("eleven", confidence: 0.9)
@@ -1154,6 +1207,7 @@ struct VoiceSyncMatchingTests {
     #expect(engine.currentWordIndex == 0)
     #expect(engine.scrollOffset == 0)
 
+    engine.reseedHighlight(to: 15)
     backend.emit("unique", confidence: 0.95)
     backend.emit("bridge", confidence: 0.95)
     backend.emit("target", confidence: 0.95)
@@ -1174,11 +1228,13 @@ struct VoiceSyncMatchingTests {
 
     backend.emit("old", confidence: 0.95)
     backend.emit("one", confidence: 0.95)
-    engine.reseedHighlight(to: 3)
+    engine.reseedHighlight(to: 28)
+    backend.emit("old", confidence: 0.95)
+    backend.emit("one", confidence: 0.95)
     backend.emit("two", confidence: 0.95)
 
-    #expect(engine.currentWordIndex == 3)
-    #expect(engine.highlightedWordRange == 0..<3)
+    #expect(engine.currentWordIndex == 30)
+    #expect(engine.highlightedWordRange == 0..<30)
   }
 
   @Test func whisperBackendUsesSlidingPhraseContextAndBoundedDeduplication() {
@@ -1199,12 +1255,12 @@ struct VoiceSyncMatchingTests {
     engine.loadScript(text: "one two three four", startingAt: 0)
     engine.voiceScrollMode = .soundBased
 
-    backend.emitPartial(["three"])
+    backend.emitPartial(["one", "two", "three"])
     #expect(engine.scrollOffset == 0)
 
     engine.reseedHighlight(to: 0)
     engine.isHumanSpeechActive = true
-    backend.emitPartial(["three"])
+    backend.emitPartial(["one", "two", "three"])
 
     #expect(engine.currentWordIndex == 2)
     #expect(engine.scrollOffset == 0)
