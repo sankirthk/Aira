@@ -887,6 +887,32 @@ struct KeyboardShortcutDisplayTests {
 
     #expect(progress == 1.0)
   }
+
+  @Test func monotonicWordTrackingProgressBlocksBackwardCorrectionUntilManualReseed() {
+    let correction = PrompterScrollMath.monotonicWordTrackingProgress(
+      exactProgress: 0.42,
+      currentProgress: 0.50,
+      highestProgress: 0.50,
+      lastWordIndex: 8,
+      currentWordIndex: 9
+    )
+
+    #expect(correction.targetProgress == 0.50)
+    #expect(correction.highestProgress == 0.50)
+    #expect(correction.lastWordIndex == 9)
+
+    let reseed = PrompterScrollMath.monotonicWordTrackingProgress(
+      exactProgress: 0.20,
+      currentProgress: 0.50,
+      highestProgress: 0.50,
+      lastWordIndex: 9,
+      currentWordIndex: 3
+    )
+
+    #expect(reseed.targetProgress == 0.20)
+    #expect(reseed.highestProgress == 0.20)
+    #expect(reseed.lastWordIndex == 3)
+  }
 }
 
 struct VoiceSyncMatchingTests {

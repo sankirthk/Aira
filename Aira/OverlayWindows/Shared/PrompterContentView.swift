@@ -40,6 +40,8 @@ struct PrompterContentView: View {
   @State private var cinematicController = CinematicScrollController()
   @State private var manualScrollDriver = ManualScrollDriver()
   @State private var deferredVoiceStartupTask: Task<Void, Never>?
+  @State private var highestWordTrackingPlayheadProgress: CGFloat = 0
+  @State private var lastWordTrackingIndex: Int?
 
   private let embeddedAudioIndicatorLaneHeight: CGFloat = 44
   private let embeddedAudioIndicatorTopGap: CGFloat = 10
@@ -386,6 +388,8 @@ struct PrompterContentView: View {
       }
       .onChange(of: script.id) { _, _ in
         displayedScrollOffset = 0
+        highestWordTrackingPlayheadProgress = 0
+        lastWordTrackingIndex = nil
         sessionStarted = countdownDuration == 0
         manualScrollDriver.reset(to: 0)
         playheadCoordinator.updateProgress(0)
@@ -505,8 +509,21 @@ struct PrompterContentView: View {
       manualScrollDriver.setCurrentOffset(voiceSync.scrollOffset)
       return
     }
-    playheadCoordinator.updateProgress(Double(exactNormalized))
-    manualScrollDriver.setCurrentOffset(CGFloat(exactNormalized))
+
+    let monotonicProgress = PrompterScrollMath.monotonicWordTrackingProgress(
+      exactProgress: exactNormalized,
+      currentProgress: CGFloat(playheadCoordinator.progress),
+      highestProgress: highestWordTrackingPlayheadProgress,
+      lastWordIndex: lastWordTrackingIndex,
+      currentWordIndex: idx
+    )
+    let targetProgress = monotonicProgress.targetProgress
+    highestWordTrackingPlayheadProgress = monotonicProgress.highestProgress
+    lastWordTrackingIndex = monotonicProgress.lastWordIndex
+    let currentProgress = CGFloat(playheadCoordinator.progress)
+    guard abs(currentProgress - targetProgress) > 0.0001 else { return }
+    playheadCoordinator.updateProgress(Double(targetProgress))
+    manualScrollDriver.setCurrentOffset(targetProgress)
   }
 
   // MARK: - Manual Scroll (trackpad / mouse wheel)
@@ -1168,6 +1185,12 @@ final class SessionScrollCoordinator: ObservableObject {
 }
 
 enum PrompterScrollMath {
+  struct MonotonicWordTrackingProgress: Equatable {
+    let targetProgress: CGFloat
+    let highestProgress: CGFloat
+    let lastWordIndex: Int
+  }
+
   static func lineHeight(fontSize: CGFloat, lineSpacing: CGFloat) -> CGFloat {
     max(fontSize + OverlayLineSpacingConfiguration.clamped(lineSpacing), 1)
   }
@@ -1244,6 +1267,32 @@ enum PrompterScrollMath {
     }
 
     return min(max(targetOffset / maxOffset, 0), 1.0)
+  }
+
+  static func monotonicWordTrackingProgress(
+    exactProgress: CGFloat,
+    currentProgress: CGFloat,
+    highestProgress: CGFloat,
+    lastWordIndex: Int?,
+    currentWordIndex: Int
+  ) -> MonotonicWordTrackingProgress {
+    let clampedExact = min(max(exactProgress, 0), 1)
+    let clampedCurrent = min(max(currentProgress, 0), 1)
+    let clampedHighest = min(max(highestProgress, 0), 1)
+    if lastWordIndex.map({ currentWordIndex < $0 }) ?? false {
+      return MonotonicWordTrackingProgress(
+        targetProgress: clampedExact,
+        highestProgress: clampedExact,
+        lastWordIndex: currentWordIndex
+      )
+    }
+
+    let target = max(clampedExact, clampedCurrent, clampedHighest)
+    return MonotonicWordTrackingProgress(
+      targetProgress: target,
+      highestProgress: target,
+      lastWordIndex: currentWordIndex
+    )
   }
 }
 
