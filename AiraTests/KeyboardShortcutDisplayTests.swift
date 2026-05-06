@@ -2068,21 +2068,12 @@ struct AppWindowCoordinatorTests {
     )
   }
 
-  @Test func managerWindowChromeRepairRestoresFullStandardTitlebarMask() {
-    let repaired = AppWindowCoordinator.repairedManagerWindowStyleMask([])
-
-    #expect(repaired.contains(.titled))
-    #expect(repaired.contains(.closable))
-    #expect(repaired.contains(.miniaturizable))
-    #expect(repaired.contains(.resizable))
-  }
-
-  @Test func managerWindowChromeRepairPreservesExistingNonStandardStyleBits() {
-    let repaired = AppWindowCoordinator.repairedManagerWindowStyleMask([.fullSizeContentView])
-
-    #expect(repaired.contains(.fullSizeContentView))
-    #expect(repaired.contains(.titled))
-    #expect(repaired.contains(.closable))
+  @Test func sessionWindowTransitionPreservesFullscreenManagerWindow() {
+    #expect(AppWindowCoordinator.shouldPreserveManagerWindowForSession(styleMask: [.fullScreen]))
+    #expect(
+      !AppWindowCoordinator.shouldPreserveManagerWindowForSession(styleMask: [
+        .titled, .closable,
+      ]))
   }
 
   @Test func managerRestoreFallbackRejectsUntaggedTitledRegularWindows() {
