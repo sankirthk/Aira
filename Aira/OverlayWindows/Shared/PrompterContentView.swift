@@ -871,7 +871,13 @@ struct PrompterContentView: View {
   }
 
   private var visibleHighlightWordRange: Range<Int>? {
-    guard spokenWordHighlightingEnabled else { return nil }
+    guard
+      PrompterHighlightWindow.isEnabledForScript(
+        requested: spokenWordHighlightingEnabled,
+        scriptID: script.id,
+        activeScriptID: voiceSync.activeScriptID
+      )
+    else { return nil }
     return PrompterHighlightWindow.clampedHighlightRange(
       voiceSync.highlightedWordRange,
       toVisibleWordRange: visibleWordRange
@@ -879,7 +885,13 @@ struct PrompterContentView: View {
   }
 
   private var visibleCurrentWordIndex: Int? {
-    guard spokenWordHighlightingEnabled else { return nil }
+    guard
+      PrompterHighlightWindow.isEnabledForScript(
+        requested: spokenWordHighlightingEnabled,
+        scriptID: script.id,
+        activeScriptID: voiceSync.activeScriptID
+      )
+    else { return nil }
     return PrompterHighlightWindow.clampedCurrentWordIndex(
       voiceSync.currentWordIndex,
       toVisibleWordRange: visibleWordRange
@@ -1076,6 +1088,16 @@ enum OverlayWheelDeduplicationPolicy {
 }
 
 enum PrompterHighlightWindow {
+  static func isEnabledForScript(
+    requested: Bool,
+    scriptID: UUID,
+    activeScriptID: UUID?
+  ) -> Bool {
+    guard requested else { return false }
+    guard let activeScriptID else { return true }
+    return activeScriptID == scriptID
+  }
+
   static func clampedHighlightRange(
     _ highlightRange: Range<Int>?,
     toVisibleWordRange visibleWordRange: Range<Int>?

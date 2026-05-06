@@ -16,6 +16,7 @@ class VoiceSyncEngine: ObservableObject {
   @Published var highlightedWordRange: Range<Int>?
   @Published var isHumanSpeechActive: Bool = false
   @Published var voiceScrollMode: VoiceScrollMode = .wordTracking
+  @Published private(set) var activeScriptID: UUID?
 
   private var audioEngine: AVAudioEngine?
   weak var audioLevelMonitor: AudioLevelMonitor?
@@ -124,8 +125,9 @@ class VoiceSyncEngine: ObservableObject {
 
   // MARK: - Public API
 
-  func loadScript(text: String, startingAt offset: CGFloat = 0) {
+  func loadScript(text: String, startingAt offset: CGFloat = 0, scriptID: UUID? = nil) {
     scriptWords = VoiceSyncMatching.tokenize(text)
+    activeScriptID = scriptID
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * offset)
     visibleWordRange = 0..<scriptWords.count
     hasVisibleWordRangeUpdate = false
@@ -183,6 +185,7 @@ class VoiceSyncEngine: ObservableObject {
     audioLevelMonitor?.reset()
     recognitionEnabled = false
     recognitionDrivesScroll = true
+    activeScriptID = nil
     scriptWords = []
     visibleWordRange = 0..<0
     hasVisibleWordRangeUpdate = false

@@ -396,7 +396,7 @@ class OverlayWindowController {
   }
 
   private func prepareSharedSession(script: Script) {
-    voiceSync.loadScript(text: script.body)
+    voiceSync.loadScript(text: script.body, scriptID: script.id)
     voiceSync.voiceScrollMode = appState?.settings.voiceScrollMode ?? .wordTracking
     audioMonitor.sensitivity = appState?.settings.speechSensitivity ?? .medium
     audioMonitor.reset()
@@ -414,7 +414,7 @@ class OverlayWindowController {
       return
     }
 
-    voiceSync.loadScript(text: pillScript.body)
+    voiceSync.loadScript(text: pillScript.body, scriptID: pillScript.id)
     audioMonitor.reset()
     playheadCoordinator.beginSession()
     scrollCoordinator.clearPrimaryMetrics()

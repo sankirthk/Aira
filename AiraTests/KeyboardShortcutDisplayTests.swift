@@ -462,6 +462,40 @@ struct KeyboardShortcutDisplayTests {
     )
   }
 
+  @Test func prompterHighlightWindowRequiresActiveScriptMatchWhenKnown() {
+    let activeScriptID = UUID()
+    let otherScriptID = UUID()
+
+    #expect(
+      PrompterHighlightWindow.isEnabledForScript(
+        requested: true,
+        scriptID: activeScriptID,
+        activeScriptID: activeScriptID
+      )
+    )
+    #expect(
+      !PrompterHighlightWindow.isEnabledForScript(
+        requested: true,
+        scriptID: otherScriptID,
+        activeScriptID: activeScriptID
+      )
+    )
+    #expect(
+      PrompterHighlightWindow.isEnabledForScript(
+        requested: true,
+        scriptID: otherScriptID,
+        activeScriptID: nil
+      )
+    )
+    #expect(
+      !PrompterHighlightWindow.isEnabledForScript(
+        requested: false,
+        scriptID: activeScriptID,
+        activeScriptID: activeScriptID
+      )
+    )
+  }
+
   @Test func overlayScrollWheelSignatureDedupesDuplicateDeliveries() {
     let localSignature = ScrollWheelEventSignature(
       eventNumber: 17,
