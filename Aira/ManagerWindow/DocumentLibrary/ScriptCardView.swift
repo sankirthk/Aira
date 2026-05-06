@@ -10,6 +10,7 @@ struct ScriptCardView: View {
   let deletionIsAvailable: Bool
   var onEdit: () -> Void
   var onCast: () -> Void
+  var onRequestCastWithSatellite: () -> Void = {}
   var onDelete: () -> Void
   var onDuplicate: () -> Void
   var onManageCollections: () -> Void
@@ -18,6 +19,7 @@ struct ScriptCardView: View {
   var onCardTap: () -> Void
 
   @State private var isHovered = false
+  @State private var isCastMenuPresented = false
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
@@ -142,6 +144,7 @@ struct ScriptCardView: View {
       Button("Duplicate") { onDuplicate() }
       Button("Add to Collection…") { onManageCollections() }
       Button("Cast to Notch") { onCast() }
+      Button("Cast with Pill Windows") { onRequestCastWithSatellite() }
       if deletionIsAvailable {
         Divider()
         Button("Delete", role: .destructive) { onDelete() }
@@ -168,7 +171,7 @@ struct ScriptCardView: View {
   private var cardActionRow: some View {
     HStack(spacing: 8) {
       editButton
-      castButton
+      castSplitButton
       duplicateButton
     }
     .frame(minHeight: 40)
@@ -178,7 +181,7 @@ struct ScriptCardView: View {
     VStack(spacing: 8) {
       HStack(spacing: 8) {
         editButton
-        castButton
+        castSplitButton
       }
 
       duplicateButton
@@ -236,19 +239,12 @@ struct ScriptCardView: View {
     .opacity(editingIsAvailable ? 1 : 0.55)
   }
 
-  private var castButton: some View {
-    Button {
-      onCast()
-    } label: {
-      HStack(spacing: 6) {
-        AiraIcon(type: .notch, size: 16, color: .white, animated: false)
-        Text("Cast")
-      }
-      .lineLimit(1)
-      .minimumScaleFactor(0.8)
-      .frame(maxWidth: .infinity)
-    }
-    .buttonStyle(AiraCardCastButtonStyle())
+  private var castSplitButton: some View {
+    ScriptCardCastSplitButton(
+      isCastMenuPresented: $isCastMenuPresented,
+      onCast: onCast,
+      onRequestCastWithSatellite: onRequestCastWithSatellite
+    )
   }
 
   private var duplicateButton: some View {
@@ -261,5 +257,70 @@ struct ScriptCardView: View {
         .frame(maxWidth: .infinity)
     }
     .buttonStyle(AiraSecondaryButtonStyle())
+  }
+}
+
+private struct ScriptCardCastSplitButton: View {
+  @Binding var isCastMenuPresented: Bool
+  let onCast: () -> Void
+  let onRequestCastWithSatellite: () -> Void
+  @Environment(\.managerFontScale) private var managerFontScale
+
+  var body: some View {
+    HStack(spacing: 0) {
+      Button {
+        isCastMenuPresented = false
+        onCast()
+      } label: {
+        HStack(spacing: 6) {
+          AiraIcon(type: .notch, size: 16, color: .white, animated: false)
+          Text("Cast")
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+      }
+      .buttonStyle(.plain)
+      .contentShape(Rectangle())
+
+      Rectangle()
+        .fill(Color.white.opacity(0.28))
+        .frame(width: 1, height: 18)
+
+      Button {
+        isCastMenuPresented.toggle()
+      } label: {
+        Image(systemName: "chevron.down")
+          .font(.system(size: 9, weight: .semibold))
+          .frame(width: 26)
+          .padding(.vertical, 10)
+      }
+      .buttonStyle(.plain)
+      .contentShape(Rectangle())
+      .popover(isPresented: $isCastMenuPresented, arrowEdge: .bottom) {
+        Button {
+          isCastMenuPresented = false
+          onRequestCastWithSatellite()
+        } label: {
+          Text("Cast with Pill Windows")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .font(.custom("CrimsonText-Regular", size: 15 * managerFontScale))
+        .foregroundStyle(Color("colorText"))
+        .frame(width: 210)
+      }
+    }
+    .font(.custom("Manrope-Bold", size: 14 * managerFontScale))
+    .foregroundStyle(.white)
+    .background(Color("colorSecondary"))
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .frame(maxWidth: .infinity)
   }
 }

@@ -209,6 +209,9 @@ struct ManagerWindowView: View {
         onCast: { id in
           castScriptToNotch(id: id)
         },
+        onCastWithSatellite: { id, selections in
+          castScriptWithSatellite(id: id, satelliteSelections: selections)
+        },
         onImportScript: {
           importScriptFromPicker()
         }
@@ -553,6 +556,24 @@ struct ManagerWindowView: View {
       overlayErrorMessage = error.localizedDescription
     }
   }
+
+  private func castScriptWithSatellite(id: UUID, satelliteSelections: [SatelliteLaunchSelection]) {
+    guard !overlayController.hasActiveNotch else {
+      overlayErrorMessage =
+        "An overlay is already active. End the current session before casting again."
+      return
+    }
+    do {
+      let script = try appState.loadScript(id: id)
+      startOverlaySession(with: script, launchIntent: .assignedSatellites(satelliteSelections))
+    } catch {
+      AiraLogger.shared.error(
+        error, category: "session",
+        context: "Failed to cast script \(id.uuidString) with satellites")
+      overlayErrorMessage = error.localizedDescription
+    }
+  }
+
   private func toggleNotchShortcut() {
     if overlayController.hasActiveNotch {
       overlayController.endSession()

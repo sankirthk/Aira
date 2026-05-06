@@ -524,7 +524,7 @@ private struct ScriptEditorLaunchMenuPanel: View {
   }
 }
 
-private struct ScriptEditorSatelliteLaunchPanel: View {
+struct ScriptEditorSatelliteLaunchPanel: View {
   @Binding var state: ScriptEditorSatelliteLaunchPanelState
   let scripts: [ScriptMeta]
   let onLaunch: () -> Void
