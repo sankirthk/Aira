@@ -163,6 +163,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030ak | User pause/mic control stops active recognition capture and restarts it on resume without clearing script/highlight state | `[x]` |
 | UT-030al | Passive non-consuming session keyboard shortcuts use a listen-only event tap so Escape can still reach macOS fullscreen while ending the presenter session | `[x]` |
 | UT-030am | Manager window session transition preserves fullscreen manager windows and avoids style-mask repair/stripping during hide/restore | `[x]` |
+| UT-030an | Spoken-word highlight matching accepts content words up to two positions ahead while keeping stop-word jumps constrained to one position | `[x]` |
 | UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
 | UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
 | UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |

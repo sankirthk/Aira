@@ -1372,16 +1372,26 @@ struct VoiceSyncMatching {
   static func findSequentialMatch(
     scriptWords: [String],
     spokenWord: String,
-    currentIndex: Int
+    currentIndex: Int,
+    lookAhead: Int = 2
   ) -> Match? {
     guard
       !scriptWords.isEmpty,
       let normalized = normalizeToken(spokenWord)
     else { return nil }
 
-    let index = min(max(currentIndex, 0), scriptWords.count - 1)
-    guard scriptWords[index] == normalized else { return nil }
-    return Match(startIndex: index, overlap: 1)
+    let searchStart = min(max(currentIndex, 0), scriptWords.count - 1)
+    let boundedLookAhead =
+      stopWords.contains(normalized)
+      ? min(max(lookAhead, 0), 1)
+      : max(lookAhead, 0)
+    let searchEnd = min(searchStart + boundedLookAhead, scriptWords.count - 1)
+
+    for index in searchStart...searchEnd where scriptWords[index] == normalized {
+      return Match(startIndex: index, overlap: 1)
+    }
+
+    return nil
   }
 
   private static func isDeepSearchPhraseMeaningful(_ spokenPhrase: [String]) -> Bool {

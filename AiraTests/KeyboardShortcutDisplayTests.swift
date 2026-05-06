@@ -1004,12 +1004,6 @@ struct VoiceSyncMatchingTests {
 
     backend.emit("the", timestamp: 1, confidence: 0.9)
 
-    #expect(engine.currentWordIndex == nil)
-    #expect(engine.highlightedWordRange == nil)
-
-    engine.reseedHighlight(to: 5)
-    backend.emit("the", timestamp: 2, confidence: 0.9)
-
     #expect(engine.currentWordIndex == 5)
     #expect(engine.highlightedWordRange == 0..<5)
   }
@@ -1043,22 +1037,36 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 2, totalWords: 4))
   }
 
-  @Test func sequentialMatcherOnlyAcceptsCurrentCursorWord() {
-    let scriptWords = VoiceSyncMatching.tokenize("one two three four")
+  @Test func sequentialMatcherAllowsSmallForwardWindowForContentWords() {
+    let scriptWords = VoiceSyncMatching.tokenize("one two three four and five")
 
     #expect(
       VoiceSyncMatching.findSequentialMatch(
         scriptWords: scriptWords,
-        spokenWord: "three",
+        spokenWord: "four",
         currentIndex: 0
       ) == nil
     )
     #expect(
       VoiceSyncMatching.findSequentialMatch(
         scriptWords: scriptWords,
-        spokenWord: "one",
+        spokenWord: "three",
         currentIndex: 0
-      ) == .init(startIndex: 0, overlap: 1)
+      ) == .init(startIndex: 2, overlap: 1)
+    )
+    #expect(
+      VoiceSyncMatching.findSequentialMatch(
+        scriptWords: scriptWords,
+        spokenWord: "and",
+        currentIndex: 2
+      ) == nil
+    )
+    #expect(
+      VoiceSyncMatching.findSequentialMatch(
+        scriptWords: scriptWords,
+        spokenWord: "and",
+        currentIndex: 3
+      ) == .init(startIndex: 4, overlap: 1)
     )
   }
 
