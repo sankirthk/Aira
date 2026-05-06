@@ -2330,11 +2330,19 @@ struct MenuBarStatusItemControllerTests {
 
   @Test func promotesPopoverWindowLevelToAtLeastFloating() {
     #expect(
-      MenuBarStatusItemController.promotedPopoverWindowLevel(from: .normal) == .floating
+      MenuBarStatusItemController.promotedPopoverWindowLevel(from: .normal) == .statusBar
     )
     #expect(
       MenuBarStatusItemController.promotedPopoverWindowLevel(from: .statusBar) == .statusBar
     )
+  }
+
+  @Test func popoverCollectionBehaviorFollowsActiveSpaceAndFullscreenApps() {
+    let behavior = MenuBarStatusItemController.popoverCollectionBehavior()
+
+    #expect(behavior.contains(.canJoinAllSpaces))
+    #expect(behavior.contains(.fullScreenAuxiliary))
+    #expect(behavior.contains(.moveToActiveSpace))
   }
 
   @Test func statusItemUsesTemplateRenderingForAutomaticBlackWhiteSwitching() {
@@ -2369,6 +2377,61 @@ struct MenuBarStatusItemControllerTests {
         interactionInsidePopover: false,
         interactionOnStatusItem: false
       ) == false
+    )
+  }
+}
+
+struct MenuBarScriptSelectionPresentationTests {
+  @Test func selectedScriptUsesExplicitRecentSelection() {
+    let first = Self.meta(title: "First")
+    let second = Self.meta(title: "Second")
+
+    let selected = MenuBarScriptSelectionPresentation.selectedScript(
+      recentScripts: [first, second],
+      selectedScriptID: second.id,
+      fallbackScript: first
+    )
+
+    #expect(selected?.id == second.id)
+  }
+
+  @Test func selectedScriptFallsBackWhenExplicitSelectionIsStale() {
+    let first = Self.meta(title: "First")
+    let staleID = UUID()
+
+    let selected = MenuBarScriptSelectionPresentation.selectedScript(
+      recentScripts: [first],
+      selectedScriptID: staleID,
+      fallbackScript: first
+    )
+
+    #expect(selected?.id == first.id)
+  }
+
+  @Test func castTitlesUseSelectedScriptName() {
+    let script = Self.meta(title: "Launch Plan")
+
+    #expect(
+      MenuBarScriptSelectionPresentation.castTitle(
+        selectedScript: script,
+        includesPills: false
+      ) == "Cast Launch Plan to Notch"
+    )
+    #expect(
+      MenuBarScriptSelectionPresentation.castTitle(
+        selectedScript: script,
+        includesPills: true
+      ) == "Cast Launch Plan to Notch + Pills"
+    )
+  }
+
+  private static func meta(title: String) -> ScriptMeta {
+    ScriptMeta(
+      id: UUID(),
+      title: title,
+      lastEdited: Date(timeIntervalSince1970: 0),
+      wordCount: 10,
+      starred: false
     )
   }
 }

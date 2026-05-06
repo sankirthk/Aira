@@ -6,6 +6,7 @@ struct MenuBarQuickAccessView: View {
   @Environment(\.dismiss) private var dismiss
   let overlayController: OverlayWindowController
   @ObservedObject private var voiceSync: VoiceSyncEngine
+  @State private var selectedScriptID: UUID?
 
   init(overlayController: OverlayWindowController) {
     self.overlayController = overlayController
@@ -23,6 +24,14 @@ struct MenuBarQuickAccessView: View {
       return meta
     }
     return recentScripts.first
+  }
+
+  private var selectedScript: ScriptMeta? {
+    MenuBarScriptSelectionPresentation.selectedScript(
+      recentScripts: recentScripts,
+      selectedScriptID: selectedScriptID,
+      fallbackScript: featuredScript
+    )
   }
 
   var body: some View {
@@ -54,15 +63,20 @@ struct MenuBarQuickAccessView: View {
 
       VStack(spacing: 10) {
         castButton(
-          title: featuredScript == nil ? "Cast to Notch" : "Cast \(featuredScript!.title) to Notch",
+          title: MenuBarScriptSelectionPresentation.castTitle(
+            selectedScript: selectedScript,
+            includesPills: false
+          ),
           systemImage: "play.rectangle.fill",
           background: Color("colorSecondary"),
           action: castFeaturedScriptToNotch
         )
 
         castButton(
-          title: featuredScript == nil
-            ? "Cast to Notch + Pills" : "Cast \(featuredScript!.title) to Notch + Pills",
+          title: MenuBarScriptSelectionPresentation.castTitle(
+            selectedScript: selectedScript,
+            includesPills: true
+          ),
           systemImage: "rectangle.on.rectangle",
           background: Color("colorPrimary"),
           action: castFeaturedScriptToNotchWithPills
@@ -119,9 +133,16 @@ struct MenuBarQuickAccessView: View {
             VStack(spacing: 10) {
               ForEach(recentScripts) { script in
                 Button {
-                  castScriptToNotch(id: script.id)
+                  selectedScriptID = script.id
                 } label: {
+                  let isSelected = selectedScript?.id == script.id
                   HStack(spacing: 12) {
+                    Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                      .font(.system(size: 15, weight: .semibold))
+                      .foregroundStyle(
+                        isSelected
+                          ? Color("colorSecondary") : Color("colorText").opacity(0.35))
+
                     VStack(alignment: .leading, spacing: 2) {
                       Text(script.title)
                         .font(.custom("CrimsonText-Regular", size: 15))
@@ -134,21 +155,32 @@ struct MenuBarQuickAccessView: View {
 
                     Spacer()
 
-                    Image(systemName: "display")
-                      .font(.system(size: 12, weight: .semibold))
-                      .foregroundStyle(Color("colorSecondary"))
+                    Text(isSelected ? "Selected" : "Select")
+                      .font(.custom("Inter-Regular", size: 11))
+                      .foregroundStyle(
+                        Color("colorText").opacity(isSelected ? 0.7 : 0.45))
                   }
                   .padding(.horizontal, 12)
                   .padding(.vertical, 10)
-                  .background(Color("colorSurface"))
+                  .background(
+                    isSelected
+                      ? Color("colorSecondary").opacity(0.14)
+                      : Color("colorSurface")
+                  )
                   .clipShape(RoundedRectangle(cornerRadius: 10))
                   .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                      .stroke(Color("colorText").opacity(0.07), lineWidth: 1)
+                      .stroke(
+                        isSelected
+                          ? Color("colorSecondary").opacity(0.6)
+                          : Color("colorText").opacity(0.07),
+                        lineWidth: isSelected ? 1.5 : 1
+                      )
                   )
                 }
                 .buttonStyle(.plain)
-                .help("Cast \(script.title) to the notch")
+                .contentShape(RoundedRectangle(cornerRadius: 10))
+                .help("Select \(script.title)")
               }
             }
             .padding(.vertical, 2)
@@ -160,6 +192,10 @@ struct MenuBarQuickAccessView: View {
     .padding(16)
     .frame(width: 330)
     .background(Color("colorBackground"))
+    .onAppear(perform: ensureSelection)
+    .onChange(of: appState.scripts.map(\.id)) { _, _ in
+      ensureSelection()
+    }
   }
 
   @ViewBuilder
@@ -185,8 +221,8 @@ struct MenuBarQuickAccessView: View {
       .clipShape(RoundedRectangle(cornerRadius: 12))
     }
     .buttonStyle(.plain)
-    .disabled(featuredScript == nil)
-    .opacity(featuredScript == nil ? 0.45 : 1)
+    .disabled(selectedScript == nil)
+    .opacity(selectedScript == nil ? 0.45 : 1)
     .help(title)
   }
 
@@ -222,13 +258,26 @@ struct MenuBarQuickAccessView: View {
   }
 
   private func castFeaturedScriptToNotch() {
-    guard let featuredScript else { return }
-    castScriptToNotch(id: featuredScript.id, includePills: false)
+    guard let selectedScript else { return }
+    castScriptToNotch(id: selectedScript.id, includePills: false)
   }
 
   private func castFeaturedScriptToNotchWithPills() {
-    guard let featuredScript else { return }
-    castScriptToNotch(id: featuredScript.id, includePills: true)
+    guard let selectedScript else { return }
+    castScriptToNotch(id: selectedScript.id, includePills: true)
+  }
+
+  private func ensureSelection() {
+    guard !recentScripts.isEmpty else {
+      selectedScriptID = nil
+      return
+    }
+
+    if let selectedScriptID, recentScripts.contains(where: { $0.id == selectedScriptID }) {
+      return
+    }
+
+    selectedScriptID = featuredScript?.id
   }
 
   private func castScriptToNotch(id: UUID, includePills: Bool = false) {
@@ -328,5 +377,37 @@ enum MenuBarVoiceControlPresentation {
 
   static func symbolName(isPausedByUser: Bool) -> String {
     isPausedByUser ? "play.fill" : "pause.fill"
+  }
+}
+
+enum MenuBarScriptSelectionPresentation {
+  static func selectedScript(
+    recentScripts: [ScriptMeta],
+    selectedScriptID: UUID?,
+    fallbackScript: ScriptMeta?
+  ) -> ScriptMeta? {
+    if let selectedScriptID,
+      let selectedScript = recentScripts.first(where: { $0.id == selectedScriptID })
+    {
+      return selectedScript
+    }
+
+    guard let fallbackScript,
+      recentScripts.contains(where: { $0.id == fallbackScript.id })
+    else {
+      return recentScripts.first
+    }
+
+    return fallbackScript
+  }
+
+  static func castTitle(selectedScript: ScriptMeta?, includesPills: Bool) -> String {
+    guard let selectedScript else {
+      return includesPills ? "Cast to Notch + Pills" : "Cast to Notch"
+    }
+
+    return includesPills
+      ? "Cast \(selectedScript.title) to Notch + Pills"
+      : "Cast \(selectedScript.title) to Notch"
   }
 }

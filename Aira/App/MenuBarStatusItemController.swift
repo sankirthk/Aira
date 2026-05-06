@@ -83,10 +83,10 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
     if popover.isShown {
       closePopover()
     } else {
+      activateAppForPopover()
       popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
       markPopoverWindowAsTransient()
       installPopoverDismissMonitors()
-      activateAppForPopover()
     }
   }
 
@@ -159,7 +159,11 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
   }
 
   nonisolated static func promotedPopoverWindowLevel(from level: NSWindow.Level) -> NSWindow.Level {
-    NSWindow.Level(rawValue: max(level.rawValue, NSWindow.Level.floating.rawValue))
+    NSWindow.Level(rawValue: max(level.rawValue, NSWindow.Level.statusBar.rawValue))
+  }
+
+  nonisolated static func popoverCollectionBehavior() -> NSWindow.CollectionBehavior {
+    [.canJoinAllSpaces, .fullScreenAuxiliary, .moveToActiveSpace]
   }
 
   nonisolated static func statusItemUsesTemplateRendering() -> Bool {
@@ -402,7 +406,8 @@ final class MenuBarStatusItemController: NSObject, NSPopoverDelegate {
 
     AppWindowCoordinator.markTransientMenuBarWindow(window)
     window.level = Self.promotedPopoverWindowLevel(from: window.level)
-    window.collectionBehavior.insert(.moveToActiveSpace)
+    window.collectionBehavior.formUnion(Self.popoverCollectionBehavior())
+    window.orderFrontRegardless()
   }
 
   func popoverDidClose(_ notification: Notification) {

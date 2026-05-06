@@ -146,6 +146,11 @@ The persistent main window. This is the user's home base for authoring and manag
 - Screen title (center-aligned, Manrope Bold 18pt)
 - Context actions (right side, screen-dependent)
 
+**Menu bar quick access:**
+- The menu bar popover must appear above the currently active app, including when Aira is not the foreground app, and should follow the user to the active Space.
+- Recent script rows are selection rows, not launch rows. Each row shows the script name, word count, and a radio indicator.
+- The two primary actions launch the selected script: `Cast [Script Name] to Notch` and `Cast [Script Name] to Notch + Pills`.
+
 ---
 
 ### Screen 2: Document Library
