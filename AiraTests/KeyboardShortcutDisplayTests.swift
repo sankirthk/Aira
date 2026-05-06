@@ -1142,6 +1142,77 @@ struct VoiceSyncMatchingTests {
     #expect(engine.scrollOffset == VoiceSyncMatching.scrollOffset(cursorIndex: 17, totalWords: 19))
   }
 
+  @Test @MainActor func wordTrackingPhraseRecoveryUsesVisibleForwardWindow() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "start missed accent gap1 gap2 gap3 gap4 visible phrase target after hidden phrase target end",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+    engine.updateVisibleWordRange(0..<12)
+
+    backend.emit("start", confidence: 0.9)
+    backend.emit("visible", confidence: 0.95)
+    backend.emit("phrase", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 8)
+    #expect(engine.highlightedWordRange == 0..<8)
+  }
+
+  @Test @MainActor func wordTrackingPhraseRecoveryRejectsMatchesPastVisibleWindow() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "start missed accent gap1 gap2 gap3 gap4 visible phrase target after hidden phrase target end",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+    engine.updateVisibleWordRange(0..<12)
+
+    backend.emit("start", confidence: 0.9)
+    backend.emit("hidden", confidence: 0.95)
+    backend.emit("phrase", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.scrollOffset == 0)
+  }
+
+  @Test @MainActor func wordTrackingPhraseRecoveryUsesFallbackBeforeVisibleMetrics() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    let gap = (1...70).map { "gap\($0)" }.joined(separator: " ")
+    engine.loadScript(text: "start \(gap) far phrase target", startingAt: 0)
+    engine.voiceScrollMode = .wordTracking
+
+    backend.emit("start", confidence: 0.9)
+    let offsetAfterStart = engine.scrollOffset
+    backend.emit("far", confidence: 0.95)
+    backend.emit("phrase", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.scrollOffset == offsetAfterStart)
+  }
+
+  @Test @MainActor func wordTrackingScrollOffsetDoesNotCorrectBackwardAfterOvershoot()
+    async throws
+  {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(text: "one two three four five six seven eight nine ten", startingAt: 0)
+    engine.voiceScrollMode = .wordTracking
+    engine.nudgeScroll(to: 0.7, resetSpokenTracking: false)
+    engine.reseedHighlight(to: 0)
+
+    backend.emit("one", confidence: 0.95)
+    backend.emit("two", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 1)
+    #expect(engine.scrollOffset == 0.7)
+  }
+
   @Test func robustMatcherRejectsDeepStopWordPhraseJump() {
     let scriptWords = VoiceSyncMatching.tokenize(
       "start anchor " + (1...24).map { "gap\($0)" }.joined(separator: " ")

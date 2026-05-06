@@ -25,6 +25,7 @@ class VoiceSyncEngine: ObservableObject {
   private var scriptWords: [String] = []
   private var cursorIndex: Int = 0
   private var visibleWordRange: Range<Int> = 0..<0
+  private var hasVisibleWordRangeUpdate = false
   private let silenceThresholdNanoseconds: UInt64 = 500_000_000
   private let firstTapTimeoutNanoseconds: UInt64 = 2_000_000_000
   private let firstRecognitionTimeoutNanoseconds: UInt64 = 4_000_000_000
@@ -45,7 +46,9 @@ class VoiceSyncEngine: ObservableObject {
   private let robustSingleTokenLookAhead = 4
   private let robustLocalLookAhead = 15
   private let robustDeepLookAhead = 200
+  private let phraseRecoveryFallbackLookAhead = 60
   private var recentSpokenWords: [String] = []
+  private var highestWordTrackingScrollOffset: CGFloat = 0
   private var acceptsRecognitionCallbacks = false
   private var resumesAudioCaptureAfterUserPause = false
 
@@ -125,7 +128,9 @@ class VoiceSyncEngine: ObservableObject {
     scriptWords = VoiceSyncMatching.tokenize(text)
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * offset)
     visibleWordRange = 0..<scriptWords.count
+    hasVisibleWordRangeUpdate = false
     scrollOffset = offset
+    highestWordTrackingScrollOffset = offset
     isPausedByUser = false
     resumesAudioCaptureAfterUserPause = false
     currentWordIndex = nil
@@ -167,6 +172,7 @@ class VoiceSyncEngine: ObservableObject {
     audioEngine = nil
     cursorIndex = 0
     scrollOffset = 0
+    highestWordTrackingScrollOffset = 0
     isPausedByUser = false
     resumesAudioCaptureAfterUserPause = false
     manualLineNudgeID = 0
@@ -179,6 +185,7 @@ class VoiceSyncEngine: ObservableObject {
     recognitionDrivesScroll = true
     scriptWords = []
     visibleWordRange = 0..<0
+    hasVisibleWordRangeUpdate = false
     recentSpokenWords = []
     previousPartialTokens = []
     diagnostics = DiagnosticsState()
@@ -207,6 +214,7 @@ class VoiceSyncEngine: ObservableObject {
   func nudgeScroll(by delta: CGFloat, resetSpokenTracking: Bool = true) {
     let updatedOffset = min(max(scrollOffset + delta, 0), 1)
     scrollOffset = updatedOffset
+    highestWordTrackingScrollOffset = updatedOffset
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * updatedOffset)
     if resetSpokenTracking {
       currentWordIndex = nil
@@ -219,6 +227,7 @@ class VoiceSyncEngine: ObservableObject {
   func nudgeScroll(to offset: CGFloat, resetSpokenTracking: Bool = true) {
     let clamped = min(max(offset, 0), 1)
     scrollOffset = clamped
+    highestWordTrackingScrollOffset = clamped
     cursorIndex = Int(CGFloat(max(scriptWords.count, 1)) * clamped)
     if resetSpokenTracking {
       currentWordIndex = nil
@@ -232,6 +241,7 @@ class VoiceSyncEngine: ObservableObject {
     let lower = min(max(range.lowerBound, 0), scriptWords.count)
     let upper = min(max(range.upperBound, lower), scriptWords.count)
     visibleWordRange = lower..<upper
+    hasVisibleWordRangeUpdate = true
   }
 
   func reseedHighlight(to wordIndex: Int) {
@@ -241,6 +251,7 @@ class VoiceSyncEngine: ObservableObject {
     cursorIndex = clampedIndex
     currentWordIndex = clampedIndex
     highlightedWordRange = 0..<clampedIndex
+    highestWordTrackingScrollOffset = scrollOffset
     recentSpokenWords = []
     previousPartialTokens = []
   }
@@ -503,10 +514,14 @@ class VoiceSyncEngine: ObservableObject {
       break
     case .wordTracking:
       if recognitionDrivesScroll {
-        scrollOffset = VoiceSyncMatching.scrollOffset(
+        let targetOffset = VoiceSyncMatching.scrollOffset(
           cursorIndex: match.currentWordIndex,
           totalWords: scriptWords.count
         )
+        if targetOffset > highestWordTrackingScrollOffset {
+          highestWordTrackingScrollOffset = targetOffset
+          scrollOffset = targetOffset
+        }
         AiraLogger.shared.info(
           "voiceSync.wordTrackingScroll token=\"\(token.word)\" currentWordIndex=\(match.currentWordIndex) scrollOffset=\(scrollOffset)",
           category: "voice"
@@ -525,10 +540,26 @@ class VoiceSyncEngine: ObservableObject {
       )
       return nil
     }
-    return VoiceSyncMatching.findSequentialMatch(
+    appendRecentSpokenWord(normalized)
+
+    if let sequentialMatch = VoiceSyncMatching.findSequentialMatch(
       scriptWords: scriptWords,
       spokenWord: normalized,
       currentIndex: cursorIndex
+    ) {
+      return sequentialMatch
+    }
+
+    let visibleUpperBound =
+      hasVisibleWordRangeUpdate && visibleWordRange.upperBound > cursorIndex
+      ? visibleWordRange.upperBound
+      : cursorIndex + phraseRecoveryFallbackLookAhead
+    return VoiceSyncMatching.findVisiblePhraseRecoveryMatch(
+      scriptWords: scriptWords,
+      recentSpokenWords: recentSpokenWords,
+      currentIndex: cursorIndex,
+      searchUpperBound: visibleUpperBound,
+      fallbackLookAhead: phraseRecoveryFallbackLookAhead
     )
   }
 
@@ -1394,8 +1425,47 @@ struct VoiceSyncMatching {
     return nil
   }
 
+  static func findVisiblePhraseRecoveryMatch(
+    scriptWords: [String],
+    recentSpokenWords: [String],
+    currentIndex: Int,
+    searchUpperBound: Int,
+    fallbackLookAhead: Int = 60
+  ) -> Match? {
+    guard !scriptWords.isEmpty else { return nil }
+    let searchStart = min(max(currentIndex, 0), scriptWords.count)
+    let requestedUpperBound =
+      searchUpperBound > searchStart
+      ? searchUpperBound
+      : searchStart + max(fallbackLookAhead, 0)
+    let searchEnd = min(requestedUpperBound, scriptWords.count)
+    guard searchStart < searchEnd else { return nil }
+
+    let phraseLengths = [3, 2]
+    for phraseLength in phraseLengths {
+      guard recentSpokenWords.count >= phraseLength else { continue }
+      let phrase = Array(recentSpokenWords.suffix(phraseLength))
+      guard isPhraseRecoveryMeaningful(phrase) else { continue }
+      guard searchEnd - searchStart >= phraseLength else { continue }
+
+      for index in searchStart...(searchEnd - phraseLength) {
+        guard scriptWords[index] == phrase[0] else { continue }
+        let scriptPhrase = scriptWords[index..<(index + phraseLength)]
+        if Array(scriptPhrase) == phrase {
+          return Match(startIndex: index, overlap: phraseLength)
+        }
+      }
+    }
+
+    return nil
+  }
+
   private static func isDeepSearchPhraseMeaningful(_ spokenPhrase: [String]) -> Bool {
     spokenPhrase.filter { !stopWords.contains($0) }.count >= 2
+  }
+
+  private static func isPhraseRecoveryMeaningful(_ spokenPhrase: [String]) -> Bool {
+    spokenPhrase.contains { !stopWords.contains($0) }
   }
 
   static func findMatch(
