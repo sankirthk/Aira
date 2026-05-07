@@ -70,6 +70,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-019l | `MenuBarStatusItemController` status item uses template rendering so macOS can switch between black and white automatically — REQ-021 | `[x]` |
 | UT-019m | Menu bar quick-access popover dismisses only for outside interactions, not clicks inside the popover or on the status-item button itself — REQ-021 | `[x]` |
 | UT-019n | Menu bar quick-access uses status-bar-level, all-Spaces popover behavior and launches the selected radio-row script from the primary Notch / Notch + Pills buttons — REQ-014, REQ-021 | `[x]` |
+| UT-019r | `showScriptProgress` defaults off, round-trips through `AppSettings`, and persists across `SettingsStore` re-initialization — REQ-040 | `[x]` |
 | UT-019o | Menu bar quick-access derives presenter voice-motion enablement from `voiceScrollMode`, matching Manager launch behavior instead of using the stale legacy voice-sync toggle — REQ-014, REQ-039 | `[x]` |
 | UT-019p | Menu bar quick-access is hosted in an owned status-bar-level `NSPanel` with active/fullscreen Space behavior instead of relying on `NSPopover` host-window promotion — REQ-021 | `[x]` |
 | UT-019q | Borderless menu bar panels are marked transient without title-bar mutation and quick access uses pop-up-menu level plus full-screen auxiliary all-Spaces behavior — REQ-021 | `[x]` |
@@ -416,6 +417,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-054 | Hovering notch and pill overlays reveals action chrome in expected corners: notch shows undock on left, Classic + spoken-word highlighting adds pause/resume beside undock, mic/close stays on the right when the mic is active, pill shows swap/fullscreen/close on right, and non-hover state hides the chrome | `[ ]` |
 | UT-030ay | Notch hover chrome policy shows the dock-side pause/resume button only for Classic mode with spoken-word highlighting enabled | `[x]` |
 | UT-030az | Notch microphone mute control stops active capture without setting the user-paused session state, keeping mic mute separate from pause/resume semantics | `[x]` |
+| UT-030ba | Notch right-side mic button routes to microphone mute/unmute whenever the mic icon is visible, so muted state can repaint the slashed mic indicator in every voice mode | `[x]` |
 | MT-060 | Clicking hover `Swap` on manual pill performs same script exchange as prior pill swap control, updating both manual pill and notch immediately from top of script | `[ ]` |
 | MT-061 | Clicking notch hover `Pause` toggles live session pause/resume, and clicking notch hover `Close` ends active presenter session with same behavior as Escape / prior end-session action | `[ ]` |
 | MT-062 | Pill hover `Fullscreen` is disabled on built-in/main display, becomes enabled after moving pill to a secondary display, and enters/exits macOS fullscreen there without affecting the notch overlay | `[ ]` |
@@ -456,6 +458,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | IT-024 | Sync overlay projection maps shared playhead progress into different local offsets for notch and pill windows with different viewport sizes | `[ ]` |
 | IT-025 | Unified Voice mode updates bounded playhead target progress without directly writing rendered offset state from `VoiceSyncEngine` | `[ ]` |
 | IT-026 | Voice mode advances the same playhead used by manual scroll and moves only when recognized human speech is active, not on raw audio-level noise alone | `[ ]` |
+| IT-031 | Script progress indicator clamps normalized progress to the visible `0...1` fill range and never produces negative width | `[x]` |
 | IT-029 | Voice spoken-word highlighting only searches the currently visible overlay word window, ignores low-confidence recognition segments, and never jumps backward automatically to already retired words unless the user explicitly clicks a word to reseed | `[ ]` |
 | IT-030 | High-confidence 3-word suffix matches win over 2-word and 1-word matches, and common filler words do not falsely highlight unrelated visible text | `[ ]` |
 | IT-027 | Primary manual playhead velocity is derived from measured rendered text density (`pointsPerWord`, `scrollableRange`, `autoScrollWPM`) rather than a naive `1 / totalSeconds` normalized step, so document length alone does not reduce physical scroll pace | `[x]` |
@@ -465,4 +468,5 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-055 | Scroll regression check after T-025ai: notch voice-sync, notch manual WPM, sync notch+pill, and manual pill sessions all scroll correctly after readability settings changes and long-script content updates | `[ ]` |
 | MT-069 | Voice mode inline highlighting follows spoken words only inside the currently visible overlay window in notch and pill sessions, retires words that scroll off the top, and does not highlight future off-screen words | `[ ]` |
 | MT-070 | System > During Session spoken-word highlighting toggle defaults off, persists across relaunch, and only affects overlay visuals without changing pause, manual scroll, or voice-driven scroll behavior | `[ ]` |
+| MT-072 | System > During Session `Show script progress` defaults off; when enabled, active notch and pill overlays show a thin bottom-edge progress line that tracks script position without adding a separate bottom lane | `[ ]` |
 | UT-071 | First-launch permission coordination requests Accessibility, speech recognition, and microphone access together, persists that onboarding ran, and later launches only retry the specific permissions still missing | `[w]` |

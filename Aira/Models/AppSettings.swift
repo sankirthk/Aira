@@ -37,6 +37,7 @@ struct AppSettings: Codable, Equatable {
   var countdownDuration: Int = 3
   var voiceSyncEnabled: Bool = true
   var spokenWordHighlightingEnabled: Bool = false
+  var showScriptProgress: Bool = false
   var pauseOnHoverEnabled: Bool = true
   var voiceSyncMode: VoiceSyncMode = .voice
   var voiceScrollMode: VoiceScrollMode = .wordTracking
@@ -83,6 +84,7 @@ struct AppSettings: Codable, Equatable {
     countdownDuration: Int = 3,
     voiceSyncEnabled: Bool = true,
     spokenWordHighlightingEnabled: Bool = false,
+    showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     voiceSyncMode: VoiceSyncMode = .voice,
     voiceScrollMode: VoiceScrollMode = .wordTracking,
@@ -108,6 +110,7 @@ struct AppSettings: Codable, Equatable {
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.voiceSyncMode = voiceSyncMode
     self.voiceScrollMode = voiceScrollMode
@@ -200,6 +203,7 @@ struct AppSettings: Codable, Equatable {
     case countdownDuration
     case voiceSyncEnabled
     case spokenWordHighlightingEnabled
+    case showScriptProgress
     case pauseOnHoverEnabled
     case voiceSyncMode
     case voiceScrollMode
@@ -237,6 +241,8 @@ struct AppSettings: Codable, Equatable {
     voiceSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .voiceSyncEnabled) ?? true
     spokenWordHighlightingEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .spokenWordHighlightingEnabled) ?? false
+    showScriptProgress =
+      try container.decodeIfPresent(Bool.self, forKey: .showScriptProgress) ?? false
     pauseOnHoverEnabled =
       try container.decodeIfPresent(Bool.self, forKey: .pauseOnHoverEnabled) ?? true
     voiceSyncMode =
@@ -290,6 +296,7 @@ struct AppSettings: Codable, Equatable {
     try container.encode(countdownDuration, forKey: .countdownDuration)
     try container.encode(voiceSyncEnabled, forKey: .voiceSyncEnabled)
     try container.encode(spokenWordHighlightingEnabled, forKey: .spokenWordHighlightingEnabled)
+    try container.encode(showScriptProgress, forKey: .showScriptProgress)
     try container.encode(pauseOnHoverEnabled, forKey: .pauseOnHoverEnabled)
     try container.encode(voiceSyncMode, forKey: .voiceSyncMode)
     try container.encode(voiceScrollMode, forKey: .voiceScrollMode)

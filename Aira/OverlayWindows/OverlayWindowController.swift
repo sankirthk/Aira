@@ -128,6 +128,7 @@ class OverlayWindowController {
         self?.notchController?.updateSessionBehavior(
           voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
           spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
+          showScriptProgress: settings.showScriptProgress,
           pauseOnHoverEnabled: settings.pauseOnHoverEnabled
         )
         self?.notchController?.updateSpokenWordHighlighting(
@@ -136,6 +137,7 @@ class OverlayWindowController {
           pillController.updateSessionBehavior(
             voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
             spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
+            showScriptProgress: settings.showScriptProgress,
             pauseOnHoverEnabled: settings.pauseOnHoverEnabled
           )
           pillController.updateSpokenWordHighlighting(
@@ -229,6 +231,7 @@ class OverlayWindowController {
       countdownDuration: countdownDuration,
       voiceSyncEnabled: voiceSyncEnabled,
       spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
+      showScriptProgress: appState?.settings.showScriptProgress ?? false,
       pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
       autoScrollWPM: autoScrollWPM,
       screenCaptureExclusionEnabled: appState?.settings.screenCaptureExclusionEnabled ?? true,
@@ -261,6 +264,7 @@ class OverlayWindowController {
         mode: plan.mode, script: plan.script, appearance: resolvedAppearance,
         countdownDuration: countdownDuration, voiceSyncEnabled: voiceSyncEnabled,
         spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
+        showScriptProgress: appState?.settings.showScriptProgress ?? false,
         pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
         autoScrollWPM: autoScrollWPM, voiceSyncMode: voiceSyncMode)
     }
@@ -275,6 +279,7 @@ class OverlayWindowController {
     mode: PillContentMode, script: Script, appearance: OverlayAppearance,
     countdownDuration: Int, voiceSyncEnabled: Bool = true,
     spokenWordHighlightingEnabled: Bool = false,
+    showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0, voiceSyncMode: VoiceSyncMode = .voice
   ) -> Bool {
@@ -297,6 +302,7 @@ class OverlayWindowController {
       countdownDuration: countdownDuration,
       voiceSyncEnabled: voiceSyncEnabled,
       spokenWordHighlightingEnabled: spokenWordHighlightingEnabled,
+      showScriptProgress: showScriptProgress,
       pauseOnHoverEnabled: pauseOnHoverEnabled,
       autoScrollWPM: autoScrollWPM,
       screenCaptureExclusionEnabled: appState?.settings.screenCaptureExclusionEnabled ?? true,
