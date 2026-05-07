@@ -331,6 +331,7 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - **During your session**
   - Voice-activated scroll: toggle (on by default)
   - Spoken-word highlighting: toggle (off by default, visual only, does not alter scroll behavior)
+  - Show script progress: toggle (off by default). When enabled, active Notch and Pill overlays show a thin bottom-edge progress line.
   - Mic sensitivity: Low / Medium / High segmented control, enabled for Sound-based and Word tracking modes, disabled for Classic
   - Pause on mouse hover: toggle (on by default)
 - **Controls**
@@ -400,7 +401,8 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - Overlay wheel input must accept intentional manual scrolling without amplifying one physical wheel gesture into multiple scroll mutations. When app is active, global scroll monitors must not double-apply same gesture already delivered through local/AppKit paths, and repeated back-and-forth wheel input in classic/manual highlight-only sessions must never yank script to top or random offset.
 - Notch-specific classic/highlight-only guard: when spoken-word highlighting is used in classic/manual notch sessions, wheel gestures over the notch overlay must not mutate script position at all. This guard is notch-only. Manual pill windows continue to accept wheel scrolling, manual pill mode does not render spoken-word highlighting, and manual pill wheel input must still work when the pill is a nonactivating panel by forwarding scroll-wheel events through the pill window's direct AppKit event path before duplicate-collapse logic.
 - Pill chrome must reflect actual live behavior, not only stored pill mode. A pill in Sync mode with voice-driven scrolling enabled may show voice chrome, but a pill in Sync mode while presenter is using classic/manual scrolling must not show waveform chrome or reserve a bottom audio lane; it should instead show a sync badge in top-left so users can tell it is shared-position sync, not manual and not voice-driven.
-- Active overlay sessions must also react to live System-tab session-setting changes (`Voice-activated scroll`, `Spoken-word highlighting`, `Pause on mouse hover`) by rebuilding the overlay content with the new behavior immediately, and overlay close must detach the hosted SwiftUI/AppKit content before the panel is destroyed so stale monitors or display-link work cannot leak into the next session.
+- Active overlay sessions must also react to live System-tab session-setting changes (`Voice-activated scroll`, `Spoken-word highlighting`, `Show script progress`, `Pause on mouse hover`) by rebuilding the overlay content with the new behavior immediately, and overlay close must detach the hosted SwiftUI/AppKit content before the panel is destroyed so stale monitors or display-link work cannot leak into the next session.
+- When the System-tab `Show script progress` setting is enabled, active overlays render a 3pt bottom-edge progress line using the current overlay text color for fill and a subtle dark track. The indicator is hidden during countdown and is a visual-only surface; it must not reserve a separate bottom lane, alter scroll math, or intercept pointer input.
 
 **Corner audio indicator:**
 - Rendered as 3 animated sound-wave arcs emerging from a top corner of the notch cutout
@@ -471,6 +473,7 @@ A free-moving overlay window launched explicitly from the Script Editor. A Pill 
 - **Mirror current script**: identical to Notch Window session content — same script, same scroll position, same pause state, same VisualBeam. Multiple mirrored Pill Windows all track the same content progress.
 - If no per-Pill Window appearance/readability override exists yet, a mirrored Pill Window initially renders with the same appearance/readability defaults as the Notch.
 - **Explicit script assignment**: assigned script text + cue annotations + a VisualBeam (still reflects microphone level for awareness, but does not drive scroll). Scroll is driven by user input only.
+- When `Show script progress` is enabled, mirrored Pill Windows use the shared session progress and manual assigned Pill Windows use their own local rendered progress.
 - A Pill Window never opens with an empty or whitespace-only resolved script. Empty assigned Pill Windows are skipped, and a standalone Pill Window shortcut attempt shows an Aira-branded popup instead of opening an empty window.
 - Mouse wheel / trackpad scrolling on an explicitly assigned Pill Window remains available whenever the pointer is over the Pill Window.
 - The global **Pause on mouse hover** setting does not apply to Pill Windows. Hovering a Pill Window must never pause motion or block wheel / trackpad scrolling.
@@ -743,7 +746,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-037 Collections | CollectionRow in sidebar; CollectionTag on script cards; Add to Collection popover |
 | REQ-038 Per-Window Overlay Appearance | Screen 9 OverlayAppearancePopover; Settings > Overlays for global defaults |
 | REQ-039 Keyboard Voice-Sync Toggle | Settings > System > Pause/Resume Voice-Sync shortcut row (default ⌘⇧Space) |
-| REQ-040 Scroll Progress Indicator | Deferred — no UI in v1 |
+| REQ-040 Scroll Progress Indicator | Settings > System toggle plus thin bottom-edge progress line in active Notch/Pill overlays |
 | REQ-041 Session Elapsed Timer | Deferred — no UI in v1 |
 | REQ-042 Jump-To-Top | Deferred — no UI in v1 |
 | REQ-043 Mirror Mode | Deferred — no UI in v1 |

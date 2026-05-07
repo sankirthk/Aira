@@ -2286,6 +2286,26 @@ private struct SystemTabContent: View {
 
           HStack {
             VStack(alignment: .leading, spacing: 4) {
+              Text("Show script progress")
+                .font(.custom("CrimsonText-Regular", size: 18))
+                .foregroundStyle(Color("colorText"))
+              Text(
+                "Adds a thin progress line at the bottom edge of active notch and pill overlays."
+              )
+              .font(.custom("CrimsonText-Regular", size: 14))
+              .foregroundStyle(Color("colorText").opacity(0.6))
+            }
+            Spacer()
+            Toggle("", isOn: $appState.settings.showScriptProgress)
+              .toggleStyle(.switch)
+              .tint(Color("colorPrimary"))
+              .labelsHidden()
+          }
+
+          Divider().opacity(0.2)
+
+          HStack {
+            VStack(alignment: .leading, spacing: 4) {
               Text("Pause on mouse hover")
                 .font(.custom("CrimsonText-Regular", size: 18))
                 .foregroundStyle(Color("colorText"))

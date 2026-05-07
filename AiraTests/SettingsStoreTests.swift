@@ -45,6 +45,7 @@ struct SettingsStoreTests {
       notchWindowHeight: 210,
       countdownDuration: 5,
       voiceSyncEnabled: false,
+      showScriptProgress: true,
       pauseOnHoverEnabled: false,
       speechSensitivity: .high,
       autoScrollWPM: 150,
@@ -102,6 +103,7 @@ struct SettingsStoreTests {
       notchWindowHeight: 220,
       countdownDuration: 0,
       voiceSyncEnabled: true,
+      showScriptProgress: true,
       pauseOnHoverEnabled: false,
       speechSensitivity: .low,
       autoScrollWPM: 120,
@@ -502,6 +504,7 @@ struct SettingsStoreTests {
     #expect(defaults.countdownDuration == 3)
     #expect(defaults.voiceSyncEnabled)
     #expect(defaults.pauseOnHoverEnabled)
+    #expect(!defaults.showScriptProgress)
     #expect(defaults.speechSensitivity == .medium)
     #expect(defaults.autoScrollWPM == ManualScrollConfiguration.defaultWPM)
     #expect(defaults.appearanceMode == .system)
@@ -517,5 +520,17 @@ struct SettingsStoreTests {
     #expect(ManualScrollConfiguration.defaultWPM == 10)
     #expect(ManualScrollConfiguration.clampedWPM(20) == 20)
     #expect(ManualScrollConfiguration.clampedWPM(50) == 30)
+  }
+
+  @Test func showScriptProgressPersistsAcrossStoreReinitialization() throws {
+    let (store, defaults, suiteName) = makeSettingsStore()
+    defer { cleanupSettings(defaults, suiteName: suiteName) }
+    var settings = AppSettings()
+    settings.showScriptProgress = true
+
+    try store.save(settings)
+
+    let loaded = try store.load()
+    #expect(loaded.showScriptProgress)
   }
 }

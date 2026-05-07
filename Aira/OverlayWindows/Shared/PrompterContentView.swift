@@ -13,6 +13,7 @@ struct PrompterContentView: View {
   let usesStrictActiveAppWheelSourceRouting: Bool
   let voiceSyncEnabled: Bool
   let spokenWordHighlightingEnabled: Bool
+  let showScriptProgress: Bool
   let pauseOnHoverEnabled: Bool
   let autoScrollWPM: Double
   @ObservedObject var playheadCoordinator: SessionPlayheadCoordinator
@@ -56,6 +57,7 @@ struct PrompterContentView: View {
     usesStrictActiveAppWheelSourceRouting: Bool = false,
     voiceSyncEnabled: Bool = true,
     spokenWordHighlightingEnabled: Bool = false,
+    showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0,
     playheadCoordinator: SessionPlayheadCoordinator,
@@ -81,6 +83,7 @@ struct PrompterContentView: View {
     self.usesStrictActiveAppWheelSourceRouting = usesStrictActiveAppWheelSourceRouting
     self.voiceSyncEnabled = voiceSyncEnabled
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
     self.playheadCoordinator = playheadCoordinator
@@ -251,6 +254,15 @@ struct PrompterContentView: View {
             startVoiceSubsystemIfNeeded()
             startAutoScrollIfNeeded()
           }
+        }
+
+        if sessionStarted && showScriptProgress {
+          ScriptProgressIndicator(
+            progress: Double(renderedScrollOffset),
+            fillColor: Color(hex: appearance.textColor)
+          )
+          .padding(.horizontal, 10)
+          .padding(.bottom, 4)
         }
       }
       .background(
@@ -1021,6 +1033,41 @@ enum OverlayScrollShortcutPolicy {
     ownsSynchronizedScroll: Bool
   ) -> Bool {
     syncsSessionScroll && ownsSynchronizedScroll
+  }
+}
+
+enum ScriptProgressIndicatorMetrics {
+  static func clampedProgress(_ progress: Double) -> Double {
+    min(max(progress, 0), 1)
+  }
+
+  static func fillWidth(progress: Double, totalWidth: CGFloat) -> CGFloat {
+    max(totalWidth, 0) * CGFloat(clampedProgress(progress))
+  }
+}
+
+private struct ScriptProgressIndicator: View {
+  let progress: Double
+  let fillColor: Color
+
+  var body: some View {
+    GeometryReader { geometry in
+      ZStack(alignment: .leading) {
+        Capsule()
+          .fill(Color.black.opacity(0.16))
+        Capsule()
+          .fill(fillColor.opacity(0.9))
+          .frame(
+            width: ScriptProgressIndicatorMetrics.fillWidth(
+              progress: progress,
+              totalWidth: geometry.size.width
+            )
+          )
+      }
+    }
+    .frame(height: 3)
+    .shadow(color: .black.opacity(0.16), radius: 1, y: 0.5)
+    .allowsHitTesting(false)
   }
 }
 

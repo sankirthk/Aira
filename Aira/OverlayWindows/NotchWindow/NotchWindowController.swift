@@ -13,6 +13,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
   private var countdownDuration: Int = 0
   private var voiceSyncEnabled: Bool = true
   private var spokenWordHighlightingEnabled: Bool = false
+  private var showScriptProgress: Bool = false
   private var pauseOnHoverEnabled: Bool = true
   private var autoScrollWPM: Double = 0
   private var playheadCoordinator: SessionPlayheadCoordinator?
@@ -46,6 +47,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     notchWindowHeight: Double,
     countdownDuration: Int,
     voiceSyncEnabled: Bool = true, spokenWordHighlightingEnabled: Bool = false,
+    showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true, autoScrollWPM: Double = 0,
     screenCaptureExclusionEnabled: Bool = true,
     playheadCoordinator: SessionPlayheadCoordinator,
@@ -66,6 +68,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
     self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
@@ -179,10 +182,12 @@ class NotchWindowController: NSObject, NSWindowDelegate {
   func updateSessionBehavior(
     voiceSyncEnabled: Bool,
     spokenWordHighlightingEnabled: Bool,
+    showScriptProgress: Bool,
     pauseOnHoverEnabled: Bool
   ) {
     self.voiceSyncEnabled = voiceSyncEnabled
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     refreshContentView()
   }
@@ -346,6 +351,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
       countdownDuration: countdownDuration,
       voiceSyncEnabled: voiceSyncEnabled,
       spokenWordHighlightingEnabled: spokenWordHighlightingEnabled,
+      showScriptProgress: showScriptProgress,
       pauseOnHoverEnabled: pauseOnHoverEnabled,
       autoScrollWPM: autoScrollWPM,
       playheadCoordinator: playheadCoordinator ?? SessionPlayheadCoordinator(),

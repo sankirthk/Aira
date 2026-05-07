@@ -130,6 +130,7 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 - [x] **T-025n** Countdown reveal behavior: keep script content hidden while the countdown is onscreen, then reveal the overlay text only after the countdown completes. — REQ-012, REQ-013
 - [x] **T-025s** Session pause shortcut: make the pause keyboard shortcut pause the active scrolling mode itself rather than only toggling speech-engine state, so manual WPM scroll and voice-driven scroll both stop and resume reliably. — REQ-003. Pause now drives shared/manual session scroll state instead of only speech-engine state.
 - [x] **T-025s.1** Classic spoken-word hover chrome: add a separate notch pause/resume affordance beside Undock when Classic mode uses spoken-word highlighting, keeping the mic-style control separate on the right. — REQ-003, REQ-039. Added a tested hover chrome policy, split mic mute from session pause state for this path, and updated the notch controls layout.
+- [x] **T-025s.2** Notch mic mute indicator routing: make the right-side mic icon always invoke microphone mute/unmute when visible, so every voice mode can repaint the muted diagonal slash instead of accidentally toggling session pause. — REQ-001, REQ-039.
 - [x] **T-025t** Synced overlay session state: in Sync mode, notch and all synced pills must share one scroll authority and one paused/running state; only Manual pills may diverge independently. — REQ-034, REQ-039. Sync sessions now share scroll and pause behavior while Manual pills keep local ownership.
 - [x] **T-025u** Synced manual driver parity: route synced manual scroll through the same display-linked driver used by the primary notch path, with `SessionScrollCoordinator` publishing the shared rendered offset to follower pills. — REQ-003, REQ-034. The initial synced manual path now runs through the display-linked driver and has since been refined onto the shared playhead path.
 - [x] **T-025v** Synced content-progress projection: in Sync mode, publish shared script/content progress rather than a shared rendered offset so each window keeps its own correct local WPM pacing while still showing the same content position. — REQ-003, REQ-034. Synced overlays now align on shared content progress with per-window projection.
@@ -150,6 +151,7 @@ Wire the stores into AppState so all views have a consistent, reactive source of
 - [x] **T-025ak-a** Classic highlight redraw clamp: clip spoken-word dulling/current-word visuals to the currently visible overlay word window before handing them to the AppKit text view so highlight-only classic sessions cannot repaint huge off-screen prefixes and disturb perceived scroll smoothness. — REQ-001, REQ-003, REQ-023. `PrompterContentView` now intersects visual highlight ranges with the visible word window before rendering. Guardrail: if classic scroll ever feels slower or jerky after highlight changes, inspect visible-range clamping first before touching scroll/playhead math.
 - [x] **T-025ak-b** Spoken-word history monotonicity: keep already spoken words dulled across skipped-word jumps and manual navigation, while preserving the current-word underline as a separate active marker. — REQ-001, REQ-023. `OverlayStyledTextView` now accumulates committed dulling across visible-window shifts, and `PrompterContentView` preserves spoken tracking on manual navigation/click paths instead of resetting it.
 - [ ] **T-025al** Spoken-word highlighting toggle: add a persisted System > During Session toggle for spoken-word highlighting, default it to off, and gate all overlay highlighting visuals through that setting without changing scroll or pause behavior. — REQ-001, REQ-023
+- [x] **T-025am** Script progress indicator: add a persisted System > During Session `Show script progress` toggle, default it to off, and render a thin bottom-edge progress line in active notch and pill overlays without adding a separate bottom lane. — REQ-040. The indicator follows shared session progress for mirrored overlays and local rendered progress for independently assigned pill scripts.
 
 ---
 
@@ -338,7 +340,6 @@ These tasks are documented for future reference. Do not implement in v1.
 - [ ] BYOK API key storage (Keychain) — REQ-019, REQ-020
 - [ ] Live Answer Mode — REQ-032, REQ-033
 - [ ] Homebrew Cask formula — REQ-030 (deferred until the direct-distribution + Sparkle pipeline is stable)
-- [ ] Scroll Progress Indicator — REQ-040
 - [ ] Session Elapsed Timer — REQ-041
 - [ ] Jump-to-Top shortcut — REQ-042
 - [ ] Mirror Mode — REQ-043

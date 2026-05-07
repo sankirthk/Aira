@@ -46,12 +46,14 @@ struct NotchWindowControllerTests {
     controller.updateSessionBehavior(
       voiceSyncEnabled: false,
       spokenWordHighlightingEnabled: true,
+      showScriptProgress: true,
       pauseOnHoverEnabled: false
     )
 
     let mirror = Mirror(reflecting: controller)
     #expect(mirror.descendant("voiceSyncEnabled") as? Bool == false)
     #expect(mirror.descendant("spokenWordHighlightingEnabled") as? Bool == true)
+    #expect(mirror.descendant("showScriptProgress") as? Bool == true)
     #expect(mirror.descendant("pauseOnHoverEnabled") as? Bool == false)
   }
 

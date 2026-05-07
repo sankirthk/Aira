@@ -819,6 +819,15 @@ struct KeyboardShortcutDisplayTests {
     )
   }
 
+  @Test func notchHoverChromeRightSideMicButtonUsesMicrophoneActionWheneverMicIsShown() {
+    #expect(
+      NotchHoverChromePolicy.rightSideActionShowsMicrophone(showsMicrophoneToggle: true)
+    )
+    #expect(
+      !NotchHoverChromePolicy.rightSideActionShowsMicrophone(showsMicrophoneToggle: false)
+    )
+  }
+
   @Test func sessionScrollShortcutsOnlyNudgePrimarySynchronizedOverlays() {
     #expect(
       OverlayScrollShortcutPolicy.respondsToManualLineNudges(
@@ -1876,12 +1885,14 @@ struct VoiceSyncMatchingTests {
     controller.updateSessionBehavior(
       voiceSyncEnabled: false,
       spokenWordHighlightingEnabled: true,
+      showScriptProgress: true,
       pauseOnHoverEnabled: false
     )
 
     let mirror = Mirror(reflecting: controller)
     #expect(mirror.descendant("voiceSyncEnabled") as? Bool == false)
     #expect(mirror.descendant("spokenWordHighlightingEnabled") as? Bool == true)
+    #expect(mirror.descendant("showScriptProgress") as? Bool == true)
     #expect(mirror.descendant("pauseOnHoverEnabled") as? Bool == false)
   }
 
@@ -2152,6 +2163,13 @@ struct VoiceSyncMatchingTests {
 
 @MainActor
 struct SessionPlayheadCoordinatorTests {
+  @Test func scriptProgressIndicatorClampsFillWidth() {
+    #expect(ScriptProgressIndicatorMetrics.fillWidth(progress: -0.5, totalWidth: 120) == 0)
+    #expect(ScriptProgressIndicatorMetrics.fillWidth(progress: 0.25, totalWidth: 120) == 30)
+    #expect(ScriptProgressIndicatorMetrics.fillWidth(progress: 1.5, totalWidth: 120) == 120)
+    #expect(ScriptProgressIndicatorMetrics.fillWidth(progress: 0.5, totalWidth: -20) == 0)
+  }
+
   @Test func clampsProgressAndPreservesPauseAcrossSessionTransitions() {
     let coordinator = SessionPlayheadCoordinator()
 

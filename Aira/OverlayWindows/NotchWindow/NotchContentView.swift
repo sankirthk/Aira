@@ -121,6 +121,7 @@ struct NotchContentView: View {
   let countdownDuration: Int
   let voiceSyncEnabled: Bool
   let spokenWordHighlightingEnabled: Bool
+  let showScriptProgress: Bool
   let pauseOnHoverEnabled: Bool
   let autoScrollWPM: Double
   let playheadCoordinator: SessionPlayheadCoordinator
@@ -152,6 +153,7 @@ struct NotchContentView: View {
   init(
     script: Script, appearance: OverlayAppearance, countdownDuration: Int,
     voiceSyncEnabled: Bool = true, spokenWordHighlightingEnabled: Bool = false,
+    showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true, autoScrollWPM: Double = 0,
     playheadCoordinator: SessionPlayheadCoordinator,
     scrollCoordinator: SessionScrollCoordinator, reportsPrimaryMetrics: Bool = true,
@@ -179,6 +181,7 @@ struct NotchContentView: View {
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
     self.playheadCoordinator = playheadCoordinator
@@ -232,6 +235,7 @@ struct NotchContentView: View {
             ),
           voiceSyncEnabled: voiceSyncEnabled,
           spokenWordHighlightingEnabled: spokenWordHighlightingEnabled,
+          showScriptProgress: showScriptProgress,
           pauseOnHoverEnabled: pauseOnHoverEnabled,
           autoScrollWPM: autoScrollWPM,
           playheadCoordinator: playheadCoordinator,
@@ -375,9 +379,10 @@ private struct NotchHoverChrome: View {
             help: showsMicrophoneToggle
               ? (isMicrophoneMuted ? "Turn Microphone On" : "Turn Microphone Off")
               : (isPaused ? "Resume Session" : "Pause Session"),
-            action: showsDockSidePauseButton && showsMicrophoneToggle
-              ? onMicrophoneToggle
-              : onPauseToggle
+            action: NotchHoverChromePolicy.rightSideActionShowsMicrophone(
+              showsMicrophoneToggle: showsMicrophoneToggle
+            )
+              ? onMicrophoneToggle : onPauseToggle
           ) {
             if showsMicrophoneToggle {
               OverlayVoiceMicIcon(isMuted: isMicrophoneMuted)
@@ -419,6 +424,10 @@ private struct NotchHoverChrome: View {
 }
 
 enum NotchHoverChromePolicy {
+  static func rightSideActionShowsMicrophone(showsMicrophoneToggle: Bool) -> Bool {
+    showsMicrophoneToggle
+  }
+
   static func showsDockSidePauseButton(
     voiceScrollMode: VoiceScrollMode,
     spokenWordHighlightingEnabled: Bool

@@ -71,6 +71,7 @@ struct PillContentView: View {
   let countdownDuration: Int
   let voiceSyncEnabled: Bool
   let spokenWordHighlightingEnabled: Bool
+  let showScriptProgress: Bool
   let pauseOnHoverEnabled: Bool
   let autoScrollWPM: Double
   let playheadCoordinator: SessionPlayheadCoordinator
@@ -98,6 +99,7 @@ struct PillContentView: View {
     script: Script, appearance: OverlayAppearance, countdownDuration: Int,
     voiceSyncEnabled: Bool = true,
     spokenWordHighlightingEnabled: Bool = false,
+    showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0,
     playheadCoordinator: SessionPlayheadCoordinator,
@@ -120,6 +122,7 @@ struct PillContentView: View {
     self.countdownDuration = countdownDuration
     self.voiceSyncEnabled = voiceSyncEnabled
     self.spokenWordHighlightingEnabled = spokenWordHighlightingEnabled
+    self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
     self.playheadCoordinator = playheadCoordinator
@@ -181,6 +184,7 @@ struct PillContentView: View {
           ),
         voiceSyncEnabled: effectiveVoiceSyncEnabled,
         spokenWordHighlightingEnabled: effectiveSpokenWordHighlightingEnabled,
+        showScriptProgress: showScriptProgress,
         pauseOnHoverEnabled: effectivePauseOnHoverEnabled,
         autoScrollWPM: autoScrollWPM,
         playheadCoordinator: playheadCoordinator,
