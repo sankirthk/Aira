@@ -195,3 +195,53 @@ Manual verification is still needed on a macOS 14.x machine:
 
 - This issue appears to be OS-version timing-sensitive, not hardware-performance-sensitive.
 - The bug was latent; newer macOS versions only made it harder to reproduce.
+
+## 2026-04-23: Voice / Shortcut / Launch Follow-Up Regressions
+
+- Status: open
+- Area: voice sync / launch / keyboard shortcuts
+- Files:
+  - `Aira/VoiceSync/VoiceSyncEngine.swift`
+  - `Aira/OverlayWindows/Shared/PrompterContentView.swift`
+  - `Aira/OverlayWindows/OverlayWindowController.swift`
+  - `Aira/VoiceSync/VoiceSyncKeyboardMonitor.swift`
+  - `Aira/App/AppWindowCoordinator.swift`
+
+### Symptom
+
+Three related live-session issues are currently tracked:
+
+1. Zero-countdown `Cast to Notch` can show a beachball on first launch, with trace logs showing the major stall happens when `VoiceSyncEngine.startEngine()` begins immediately after the first overlay render.
+2. Voice-driven scrolling can fail entirely while the user is already on an active call/meeting app using the microphone.
+3. Session scroll keyboard shortcuts currently move Manual-mode Pill Windows even though those windows are supposed to remain independent of the shared notch/synced playhead.
+
+### Observed Cause
+
+- Launch trace instrumentation shows notch creation and first layout are relatively fast, but zero-countdown voice startup immediately triggers the heaviest launch work:
+  - `voiceSync.start requested`
+  - `voiceSync.startEngine begin`
+  - CoreAudio / HAL overload logging during startup
+- Zero-countdown launch can also emit AppKit/SwiftUI recursive-layout warnings:
+  - reentrant `NSHostingView` layout
+  - `layoutSubtreeIfNeeded` while already laying out
+  - `Invalid tile rect null passed to NSFullScreenSpace`
+- Keyboard shortcut handling is still scoped too broadly across overlay types; Manual Pill Windows are responding to shared session nudges when they should ignore them.
+
+### Proposed Fix
+
+1. Defer zero-countdown `voiceSync.start()` until after the first overlay render turn instead of starting audio/speech synchronously inside the initial `onAppear` path.
+2. Keep the manager visible until the primary notch overlay is actually ordered front, then switch to accessory/session presentation.
+3. Audit the audio-session / speech-recognition path under active-call conditions so Voice-Sync keeps receiving mic input while another app is also using the microphone.
+4. Tighten keyboard shortcut routing so only the notch and synced overlays sharing the active session playhead respond to scroll shortcuts; Manual Pill Windows must remain isolated.
+
+### Follow-Up Testing Needed
+
+1. Cold launch with countdown `0`: no beachball, notch appears first, then voice startup begins.
+2. Zero-countdown launch emits no recursive-layout warnings in the debug log.
+3. Voice-Sync continues advancing while the user is on a live call/meeting app.
+4. Scroll-up / scroll-down shortcuts do not move Manual-mode Pill Windows.
+
+### Notes
+
+- Actionable tracking lives in `docs/todo.md` and `docs/tests.md` under `T-048d`, `T-048e`, `T-048f`, `IT-003a`, `IT-017a`, and `MT-049e`.
+- The current launch trace suggests voice startup is the primary beachball driver, not notch panel creation or first text layout.

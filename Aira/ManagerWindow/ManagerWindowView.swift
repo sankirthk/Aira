@@ -36,8 +36,6 @@ struct ManagerWindowView: View {
           importErrorMessage: importErrorMessage,
           dismissErrorBinding: dismissErrorBinding,
           dismissErrorMessage: dismissErrorMessage,
-          overlayErrorBinding: overlayErrorBinding,
-          overlayErrorMessage: overlayErrorMessage,
           sessionRestrictionBinding: sessionRestrictionBinding,
           sessionRestrictionMessage: sessionRestrictionMessage,
           collectionErrorBinding: collectionErrorBinding,
@@ -47,6 +45,17 @@ struct ManagerWindowView: View {
       .overlay {
         if let pendingDeleteCollection {
           deleteCollectionOverlay(collection: pendingDeleteCollection)
+        }
+      }
+      .overlay {
+        if let overlayErrorMessage {
+          AiraMessagePopup(
+            content: .launchOverlayError(message: overlayErrorMessage),
+            onDismiss: {
+              self.overlayErrorMessage = nil
+            }
+          )
+          .transition(.opacity.combined(with: .scale(scale: 0.98)))
         }
       }
       .onAppear {
@@ -183,6 +192,9 @@ struct ManagerWindowView: View {
         onCast: {
           castCurrentScriptToNotch()
         },
+        onCastWithSatellite: { satelliteSelections in
+          castCurrentScriptWithSatellite(satelliteSelections: satelliteSelections)
+        },
         onBack: {
           dismissEditor()
         }
@@ -196,6 +208,9 @@ struct ManagerWindowView: View {
         },
         onCast: { id in
           castScriptToNotch(id: id)
+        },
+        onCastWithSatellite: { id, selections in
+          castScriptWithSatellite(id: id, satelliteSelections: selections)
         },
         onImportScript: {
           importScriptFromPicker()
@@ -382,17 +397,6 @@ struct ManagerWindowView: View {
     )
   }
 
-  private var overlayErrorBinding: Binding<Bool> {
-    Binding(
-      get: { overlayErrorMessage != nil },
-      set: { isPresented in
-        if !isPresented {
-          overlayErrorMessage = nil
-        }
-      }
-    )
-  }
-
   private var sessionRestrictionBinding: Binding<Bool> {
     Binding(
       get: { sessionRestrictionMessage != nil },
@@ -507,10 +511,6 @@ struct ManagerWindowView: View {
     }
   }
 
-  private var enabledPillModes: [PillContentMode] {
-    appState.settings.enabledPillModes
-  }
-
   private func castCurrentScriptToNotch() {
     guard !overlayController.hasActiveNotch else {
       overlayErrorMessage =
@@ -522,7 +522,23 @@ struct ManagerWindowView: View {
       return
     }
 
-    startOverlaySession(with: script)
+    startOverlaySession(with: script, launchIntent: .notchOnly)
+  }
+
+  private func castCurrentScriptWithSatellite(
+    satelliteSelections: [SatelliteLaunchSelection]
+  ) {
+    guard !overlayController.hasActiveNotch else {
+      overlayErrorMessage =
+        "An overlay is already active. End the current session before casting again."
+      return
+    }
+    guard let script = activeScript ?? appState.activeScript else {
+      overlayErrorMessage = "Open a script before casting with Pill Windows."
+      return
+    }
+
+    startOverlaySession(with: script, launchIntent: .assignedSatellites(satelliteSelections))
   }
 
   private func castScriptToNotch(id: UUID) {
@@ -533,13 +549,31 @@ struct ManagerWindowView: View {
     }
     do {
       let script = try appState.loadScript(id: id)
-      startOverlaySession(with: script)
+      startOverlaySession(with: script, launchIntent: .notchOnly)
     } catch {
       AiraLogger.shared.error(
         error, category: "session", context: "Failed to cast script \(id.uuidString) to notch")
       overlayErrorMessage = error.localizedDescription
     }
   }
+
+  private func castScriptWithSatellite(id: UUID, satelliteSelections: [SatelliteLaunchSelection]) {
+    guard !overlayController.hasActiveNotch else {
+      overlayErrorMessage =
+        "An overlay is already active. End the current session before casting again."
+      return
+    }
+    do {
+      let script = try appState.loadScript(id: id)
+      startOverlaySession(with: script, launchIntent: .assignedSatellites(satelliteSelections))
+    } catch {
+      AiraLogger.shared.error(
+        error, category: "session",
+        context: "Failed to cast script \(id.uuidString) with satellites")
+      overlayErrorMessage = error.localizedDescription
+    }
+  }
+
   private func toggleNotchShortcut() {
     if overlayController.hasActiveNotch {
       overlayController.endSession()
@@ -549,7 +583,7 @@ struct ManagerWindowView: View {
 
     do {
       let script = try defaultShortcutScript()
-      startOverlaySession(with: script)
+      startOverlaySession(with: script, launchIntent: .notchOnly)
     } catch {
       AiraLogger.shared.error(
         error, category: "session", context: "Failed to toggle notch shortcut")
@@ -558,10 +592,6 @@ struct ManagerWindowView: View {
   }
 
   private func togglePillShortcut() {
-    guard appState.settings.pillsEnabled else {
-      return
-    }
-
     if overlayController.pillCount >= appState.settings.maxPillCount {
       overlayController.closeLastPill()
       return
@@ -569,16 +599,25 @@ struct ManagerWindowView: View {
 
     do {
       let script = try defaultShortcutScript()
-      overlayController.addPill(
+      guard PillLaunchPolicy.canLaunchPill(with: script) else {
+        overlayErrorMessage = "Add script text before casting to a Pill Window."
+        return
+      }
+
+      let launched = overlayController.addPill(
         mode: .voiceSync,
         script: script,
-        appearance: appState.settings.defaultOverlayAppearance,
+        appearance: appState.settings.effectiveSatelliteAppearance(
+          forSlot: overlayController.pillCount + 1
+        ),
         countdownDuration: appState.settings.countdownDuration,
-        voiceSyncEnabled: appState.settings.voiceSyncEnabled,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
         autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
         voiceSyncMode: appState.settings.voiceSyncMode
       )
-      miniaturizeManagerWindow()
+      if launched {
+        miniaturizeManagerWindow()
+      }
     } catch {
       AiraLogger.shared.error(error, category: "session", context: "Failed to toggle pill shortcut")
       overlayErrorMessage = error.localizedDescription
@@ -602,20 +641,50 @@ struct ManagerWindowView: View {
     return try appState.loadScript(id: firstScript.id)
   }
 
-  private func startOverlaySession(with script: Script) {
+  private func startOverlaySession(
+    with script: Script,
+    launchIntent: OverlaySessionLaunchIntent
+  ) {
+    guard ScriptEditorSessionLogic.canStartPresenterSession(withBody: script.body) else {
+      overlayErrorMessage = "Add script text before casting to the notch."
+      return
+    }
+
     // Hide the manager window and remove from Dock/⌘+Tab before presenting overlays.
     // Doing this first ensures panels are ordered-front while the app is already in
     // accessory mode — switching policy AFTER panels appear can cause macOS to hide them.
     miniaturizeManagerWindow()
-    overlayController.presentSession(
-      script: script,
-      appearance: appState.settings.defaultOverlayAppearance,
-      countdownDuration: appState.settings.countdownDuration,
-      voiceSyncEnabled: appState.settings.voiceSyncEnabled,
-      autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
-      voiceSyncMode: appState.settings.voiceSyncMode,
-      pillModes: enabledPillModes
-    )
+    switch launchIntent {
+    case .notchOnly:
+      overlayController.presentSession(
+        script: script,
+        appearance: appState.settings.defaultOverlayAppearance,
+        countdownDuration: appState.settings.countdownDuration,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
+        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+        voiceSyncMode: appState.settings.voiceSyncMode
+      )
+    case .mirroredSatellites(let count):
+      overlayController.presentMirroredSatelliteSession(
+        script: script,
+        appearance: appState.settings.defaultOverlayAppearance,
+        countdownDuration: appState.settings.countdownDuration,
+        satelliteCount: count,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
+        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+        voiceSyncMode: appState.settings.voiceSyncMode
+      )
+    case .assignedSatellites(let satelliteSelections):
+      overlayController.presentAssignedSatelliteSession(
+        script: script,
+        appearance: appState.settings.defaultOverlayAppearance,
+        countdownDuration: appState.settings.countdownDuration,
+        voiceSyncEnabled: appState.settings.voiceDrivenScrollEnabled,
+        autoScrollWPM: ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM),
+        voiceSyncMode: appState.settings.voiceSyncMode,
+        satelliteSelections: satelliteSelections
+      )
+    }
   }
 
   private func miniaturizeManagerWindow() {
@@ -671,6 +740,10 @@ struct ScriptEditorSessionLogic {
     let trimmedBody = script.body.trimmingCharacters(in: .whitespacesAndNewlines)
     return !trimmedBody.isEmpty || script.title != "Untitled Script"
   }
+
+  static func canStartPresenterSession(withBody body: String) -> Bool {
+    !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
 }
 
 private struct ManagerWindowAlerts: ViewModifier {
@@ -680,8 +753,6 @@ private struct ManagerWindowAlerts: ViewModifier {
   let importErrorMessage: String?
   let dismissErrorBinding: Binding<Bool>
   let dismissErrorMessage: String?
-  let overlayErrorBinding: Binding<Bool>
-  let overlayErrorMessage: String?
   let sessionRestrictionBinding: Binding<Bool>
   let sessionRestrictionMessage: String?
   let collectionErrorBinding: Binding<Bool>
@@ -703,11 +774,6 @@ private struct ManagerWindowAlerts: ViewModifier {
         Button("OK", role: .cancel) {}
       } message: {
         Text(dismissErrorMessage ?? "Please try again.")
-      }
-      .alert("Unable to Launch Overlay", isPresented: overlayErrorBinding) {
-        Button("OK", role: .cancel) {}
-      } message: {
-        Text(overlayErrorMessage ?? "Please try again.")
       }
       .alert("Action Unavailable During Live Session", isPresented: sessionRestrictionBinding) {
         Button("OK", role: .cancel) {}

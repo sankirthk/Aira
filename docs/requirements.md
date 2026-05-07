@@ -60,11 +60,11 @@ The primary prompter window anchored beneath the camera notch region of the disp
 
 ### Pill Window
 
-A free-moving, resizable overlay window that the user can place anywhere on screen. Each Pill Window operates in a content mode that determines what it displays and how it scrolls.
+A free-moving, resizable overlay window that the user can place anywhere on screen. `Pill Window` is product language; implementation may still use historical `Satellite` naming until code migration is complete.
 
-### Pill Content Mode
+### Pill Window Launch Mode
 
-The operational mode of a Pill Window. A pill in **Sync mode** follows the same script and shared scroll position as the Notch Window, driven by the active presenter session. A pill in **Manual mode** displays an independently assigned script that the user scrolls by hand; Sync mode does not drive it.
+The content relationship chosen when launching a Pill Window from the Script Editor. A Pill Window in **Mirror Current Script** mode follows the same script and shared scroll position as the active Notch session. A Pill Window in **Choose Script** mode displays an explicitly selected script for that Pill Window and scrolls independently by hand.
 
 ### Voice-Sync
 
@@ -113,7 +113,7 @@ These rules apply across all of Aira's behavior.
 - Aira requires no user account, login, or registration at any point.
 - All scripts, settings, appearance preferences, and API keys remain on the user's device at all times.
 - Aira collects no analytics, telemetry, usage data, or crash reports that leave the device.
-- No network connection is required to use any core authoring or presenter feature. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). App Store builds do not use Sparkle and therefore must not perform updater traffic. If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
+- No network connection is required to use any core authoring or presenter feature. Voice-Sync uses bundled on-device speech recognition assets and must not download speech models at runtime. The only permitted network activity in direct-distribution builds is Sparkle update traffic over HTTPS (appcast checks and signed update downloads). App Store builds do not use Sparkle and therefore must not perform updater traffic. If the future AI converter ships, its user-initiated BYOK request is the only additional permitted network path.
 - Stealth Mode must never fail silently; if the prompter cannot be excluded from screen-share output, the user must be informed before a presenter session begins.
 - Voice-Sync and manual scroll are always independently available; one must never depend on the other being active.
 - The Notch Window and Pill Windows are independent surfaces; the failure or closure of one must not affect the other.
@@ -214,23 +214,27 @@ Acceptance criteria:
 The app shall support up to two free-moving, resizable Pill Windows that the user can place anywhere on screen.
 
 Acceptance criteria:
-- Pill Windows are opt-in; they are disabled by default and must be enabled in Settings before they can be launched.
-- When enabled, the user can open 1 or 2 Pill Windows (configured in Settings) during a presenter session.
+- Pill Windows are user-invoked launch surfaces; they never appear as an implicit side effect of `Cast to Notch`.
+- The user can launch 1 or 2 Pill Windows during a presenter session, based on the Pill Window count selected in Settings.
 - Pill Windows are independently positionable and resizable.
 - A Pill Window can be placed on a secondary monitor.
 - Closing a Pill Window does not affect the Notch Window or any other Pill Window.
-- Each Pill Window operates in a content mode (Voice-Sync or Manual) as defined in REQ-034.
+- A Pill Window launched in Mirror Current Script mode follows the active Notch session script and shared playhead state.
+- A Pill Window launched in Choose Script mode displays an explicitly assigned script and scrolls independently of the Notch session.
 
 #### REQ-044: Pill Window Settings
 
-The app shall expose pill configuration in Settings > Overlays so the user can opt in to pill windows and choose how many to use.
+The app shall expose Pill Window appearance configuration in Settings without storing or hiding session content choices there.
 
 Acceptance criteria:
-- An "Enable Pill Windows" toggle controls whether pills can be launched. Off by default.
-- When the toggle is on, a pill count control (1 or 2, segmented) becomes active.
-- The pill count defaults to 1 when first enabled.
-- Pill Windows inherit their initial appearance from `defaultOverlayAppearance` (the shared Notch/Pill defaults). There are no separate per-pill appearance settings in Settings — per-pill customisation is done in-session via the right-click popover (REQ-038).
-- The enabled state and count persist across app restarts.
+- Settings includes a `Pill Windows` tab with a count selector for how many Pill Windows are enabled during a Pill Window launch (`1` or `2`) plus a switcher for `Pill Window 1` and `Pill Window 2`.
+- Settings does not contain a separate enable toggle.
+- Settings stores Pill Window appearance/readability defaults only: opacity, font size, font, background color, text color, and text accessibility controls.
+- Settings does not store Mirror-vs-Choose-script launch behavior.
+- Settings does not store remembered per-Pill Window script assignments.
+- If the user has not customized a Pill Window slot, that Pill Window inherits the shared Notch appearance/readability defaults.
+- Pill Windows inherit their initial appearance from their configured Pill Window defaults; per-window customisation may still happen in-session via the overlay popover (REQ-038).
+- The selected Pill Window count and appearance/readability values persist across app restarts.
 
 #### REQ-010: Hover-To-Pause
 
@@ -251,18 +255,31 @@ Acceptance criteria:
 - Scroll resumes from the exact position at which it paused.
 - No user action other than moving the cursor away is required to resume.
 
-#### REQ-034: Pill Content Mode
+#### REQ-034: Pill Window Launch Assignment
 
-A Pill Window shall support two content modes: Sync and Manual.
+A Pill Window launch from the Script Editor shall require explicit per-Pill Window content choice at launch time.
 
 Acceptance criteria:
-- In Sync mode, the pill displays the same script position as the Notch Window and is driven by the active shared session playhead state.
-- In Manual mode, the pill is assigned any script from the user's library independently of the Notch Window.
-- In Manual mode, scroll is controlled entirely by the user; Voice-Sync does not advance a manual-mode pill.
-- The user selects a pill's content mode when the pill is created.
-- A manual-mode pill does not require an active VoiceSyncEngine or a microphone to display and scroll its assigned script.
-- Multiple Sync pills can be open simultaneously; they all follow the same shared content progress and paused/running state.
-- Sync pills are not required to share one rendered pixel offset or one pixel velocity; each projects the shared session playhead into its own window geometry.
+- `Cast to Notch` always launches only the Notch Window with current editor script.
+- The editor presents a split-button launch control: primary `Cast to Notch` plus adjacent dropdown.
+- The split-button is rendered as one connected control with integrated app styling rather than native macOS menu styling.
+- The split-button preserves compact toolbar sizing comparable to the original `Cast to Notch` button.
+- The primary label does not repeat a decorative chevron beside the text; only the trailing chevron segment is the interactive dropdown trigger.
+- Clicking outside an open dropdown dismisses it.
+- The dropdown includes:
+  - `Cast with Pill Windows`
+- Choosing the Pill Windows dropdown entry opens Pill Window launch flow.
+- The launch panel shows one section per enabled Pill Window.
+- Each Pill Window section offers exactly two choices:
+  - `Mirror current script`
+  - `Manual`
+- A Pill Window set to `Mirror current script` launches against the current editor script and shared session playhead state.
+- A mirrored Pill Window also inherits the active Notch session behavior because it is following the same live session.
+- A Pill Window set to `Manual` requires explicit script assignment inside the launch panel before launch.
+- When two Pill Windows are enabled, choice is made independently per Pill Window inside the same launch panel.
+- A Pill Window launched with an explicitly chosen script scrolls independently of the Notch Window; Voice-Sync does not advance that Pill Window.
+- If a required manual assignment is missing, that Pill Window must not launch silently as mirrored content.
+- The app may launch valid targets and skip invalid Pill Window launches, but it must surface lightweight feedback explaining what was skipped.
 
 ### Countdown Timer
 
@@ -301,7 +318,7 @@ Acceptance criteria:
 - Bulk delete is not available while a presenter session is active.
 - The Select All control and bulk delete control are hidden while a presenter session is active.
 - Individual script deletion is not available while a presenter session is active.
-- A script currently used by the active notch or any active pill session cannot be opened for editing until that session ends.
+- A script currently used by the active notch or any active Pill Window session cannot be opened for editing until that session ends.
 
 #### REQ-014: Built-In Script Editor
 
@@ -319,6 +336,14 @@ Acceptance criteria:
 - The user can edit an existing script from within the app.
 - Multiple scripts can be stored and named independently.
 - Auto-save on dismiss: when the user navigates away from the editor without explicitly saving, the app saves automatically if the draft has meaningful content (as defined above). No dirty indicator is shown — auto-save makes it unnecessary.
+- The editor toolbar exposes a split-button launch control: primary `Cast to Notch` plus adjacent dropdown.
+- Pressing the primary `Cast to Notch` action is deterministic and never launches Pill Windows.
+- `Cast to Notch` does not start a presenter session when the resolved script body has zero non-whitespace characters; the app keeps the manager visible and shows a lightweight Aira-branded popup message instead of a native macOS alert.
+- Pill Windows never launch with scripts whose resolved body has zero non-whitespace characters, whether the Pill Window mirrors the current script, uses a manually assigned script, or is launched through the Toggle Pill Window shortcut.
+- Opening the dropdown exposes only explicit Pill Window launch intents:
+  - `Cast with Pill Windows`
+- Choosing the Pill Windows dropdown entry opens the Pill Window launch flow, listing each enabled Pill Window and its content assignment controls.
+- The editor launch flow owns session intent: what launches, and which script appears in each Pill Window.
 
 #### REQ-015: Local Script Storage
 
@@ -618,9 +643,8 @@ The core presenter session dependency chain is:
 
 - script authored or imported → loaded into prompter → countdown completes → Voice-Sync begins → scrolling advances with speech
 
-The core pill setup dependency chain is:
-
-- pill created → content mode selected → (if Manual) script assigned → pill displays independently of Notch Window
+The core Pill Window launch dependency chain is:
+- user opens launch dropdown → chooses `Cast with Pill Windows` → per-Pill Window assignment chosen in launch panel → valid Pill Windows launch alongside Notch
 
 The core AI conversion dependency chain is:
 

@@ -1,5 +1,10 @@
 # Aira — Codex Code Guide
 
+    ## Local Tooling Note
+
+    - In this repo, `qmd` must run with Node 22 from `nvm` or it can fail with a native-module ABI mismatch.
+      Use `PATH=/Users/sankirthkalahasti/.nvm/versions/node/v22.17.1/bin:$PATH qmd ...` when needed.
+
     ## What is Aira
 
     Aira is a native macOS teleprompter app for presenters, podcasters, and video creators. It displays a scrolling script in a
@@ -43,6 +48,20 @@
     4. Only then write implementation code.
 
     This order prevents `docs/design.md` from drifting out of sync with the actual implementation.
+
+    ---
+
+    ## Git Worktree Workflow
+
+    For all feature work going forward:
+
+    1. Create a **separate git worktree** for the feature before making implementation changes.
+    2. Do **not** implement features directly in the main working tree. Keep the main tree clean.
+    3. Treat each feature worktree as the isolated workspace for its docs, code changes, and tests.
+    4. Run the relevant tests inside that feature worktree before considering the work ready.
+    5. Only after the required tests pass should the worktree changes be merged back to the target branch.
+
+    This is the default workflow unless a task explicitly says otherwise.
 
     ---
 
@@ -125,6 +144,9 @@
     - Use a custom `VStack` layout: sage green top bar (title + close button + horizontal tab row), then
       cream content area below. Do NOT use the system `TabView`.
     - Tab buttons fill the full row equally: `HStack` with `frame(maxWidth: .infinity)` on each button.
+    - All custom SwiftUI buttons must make the whole visible button area clickable, not only the text or icon.
+      Apply the sizing to the `Button` itself when needed, add a matching `contentShape(...)`, and use a
+      pointing-hand cursor on the full hit target.
     - Do not show a subtitle or description under each tab button label.
     - Do not show a repeated tab title + blurb inside the content area — content starts immediately.
     - The Intelligence/AI tab is **deferred** — only Appearance, The Notch, and System tabs exist in v1.

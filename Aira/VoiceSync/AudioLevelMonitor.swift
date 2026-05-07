@@ -9,6 +9,10 @@ class AudioLevelMonitor: ObservableObject {
   @Published var level: Float = 0.0  // 0.0–1.0 normalized
   @Published var isSpeaking: Bool = false
   var sensitivity: SpeechSensitivity = .medium
+  private let visualMeterTargetPeak: Float = 0.12
+  private let maxVisualMeterGain: Float = 10
+  private let visualMeterBaseScale: Float = 12
+  private let visualMeterCurveExponent: Float = 0.72
 
   private let hangTime: TimeInterval = 0.9
   private var lastSpokenTime: Date = .distantPast
@@ -44,15 +48,19 @@ class AudioLevelMonitor: ObservableObject {
     thresholdCrossedTime = nil
   }
 
-  private var speakingThreshold: Float {
+  static func speakingThreshold(for sensitivity: SpeechSensitivity) -> Float {
     switch sensitivity {
     case .low:
-      return 0.20
+      return 0.35
     case .medium:
-      return 0.11
+      return 0.20
     case .high:
-      return 0.06
+      return 0.12
     }
+  }
+
+  private var speakingThreshold: Float {
+    Self.speakingThreshold(for: sensitivity)
   }
 
   private var activationHoldTime: TimeInterval {
@@ -67,15 +75,26 @@ class AudioLevelMonitor: ObservableObject {
   }
 
   private func calculateRMS(buffer: AVAudioPCMBuffer) -> Float {
-    guard let channelData = buffer.floatChannelData else { return 0 }
+    guard
+      let channelData = buffer.floatChannelData,
+      let dominantChannelIndex = VoiceSyncRecognitionInput.dominantChannelIndex(for: buffer)
+    else { return 0 }
     let frameCount = Int(buffer.frameLength)
     var sum: Float = 0
+    var peak: Float = 0
     for i in 0..<frameCount {
-      let sample = channelData[0][i]
+      let sample = channelData[dominantChannelIndex][i]
       sum += sample * sample
+      peak = max(peak, abs(sample))
     }
     let rms = sqrt(sum / Float(max(frameCount, 1)))
-    // Normalize to 0–1 with a reasonable ceiling
-    return min(rms * 10, 1.0)
+    let gain = visualMeterGain(forPeak: peak)
+    let scaledLevel = min(rms * visualMeterBaseScale * gain, 1.0)
+    return pow(scaledLevel, visualMeterCurveExponent)
+  }
+
+  private func visualMeterGain(forPeak peak: Float) -> Float {
+    guard peak > 0 else { return 1 }
+    return max(1, min(maxVisualMeterGain, visualMeterTargetPeak / peak))
   }
 }

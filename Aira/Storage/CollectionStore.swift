@@ -15,7 +15,7 @@ class CollectionStore {
         let fallback = fileManager.homeDirectoryForCurrentUser
           .appending(path: "Library/Application Support", directoryHint: .isDirectory)
         AiraLogger.shared.warning(
-          "Application Support lookup failed; falling back to \(fallback.path) for collection storage",
+          "Application Support lookup failed; using fallback collection storage directory",
           category: "storage"
         )
         return fallback

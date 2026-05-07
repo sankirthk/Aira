@@ -14,7 +14,7 @@ The developer is new to Swift. Technical decisions are explained clearly, includ
 
 These constraints apply to every decision in this document. They are non-negotiable.
 
-- **Binary size.** Keep dependencies minimal. Sparkle is the only approved third-party package, and only in the direct-distribution build; all other functionality must use Apple's native frameworks. Target app bundle under 10 MB after Archive build.
+- **Binary size.** Keep dependencies minimal. Sparkle is approved only for the direct-distribution updater path. WhisperKit and its bundled `openai_whisper-base.en` model are approved for offline Voice-Sync. The old sub-10 MB archive target is superseded by a measured release-size gate that includes the bundled speech model.
 - **Memory.** Overlay windows hold only the active script segment in memory during a session, not the full document.
 - **Battery.** The microphone tap (`AVAudioEngine`) runs **only during an active presenter session**. It is fully stopped and released when the session ends or the overlays are closed. Zero audio capture at idle.
 - **CPU.** No polling loops. Use Combine publishers or `async/await` for all reactive state. Scroll animation is driven by a single frame-synced session playhead clock (`CADisplayLink` / AppKit display link host) rather than `Timer` loops or per-view sleep loops.
@@ -29,8 +29,8 @@ These constraints apply to every decision in this document. They are non-negotia
 |---|---|---|
 | UI framework | SwiftUI | Declarative and modern. Good fit for the Manager App's panels, settings sheets, and document library. New Swift developers find it more approachable than UIKit/AppKit. |
 | Overlay windows | AppKit (`NSPanel`) | SwiftUI alone cannot control the window-level flags required for stealth (`sharingType = .none`) or precise always-on-top behavior. The overlay windows are AppKit at the controller layer, with SwiftUI views hosted inside them via `NSHostingView`. |
-| Voice detection | `SFSpeechRecognizer` + `AVAudioEngine` | On-device speech recognition. `requiresOnDeviceRecognition = true` keeps all audio processing on the device — no audio is sent to Apple's servers. Recognizes actual speech content (words), not just volume. |
-| Voice Activity Detection (VAD) | Hybrid of `AudioLevelMonitor` activity and `SFSpeechRecognizer` result cadence | Live voice motion stays active while either recent audio activity or recent recognition results indicate speech. Recognition pauses still halt anchored speech progress, and matcher output continues to correct playhead position. |
+| Voice detection | `WhisperKit` + `AVAudioEngine` | Bundled on-device speech recognition with word timestamps. The speech model ships inside the app bundle so Voice-Sync requires no runtime model download and no microphone audio leaves the Mac. |
+| Voice Activity Detection (VAD) | Hybrid of `AudioLevelMonitor` activity and WhisperKit word-token cadence | Live voice motion stays active while either recent audio activity or recent recognized word tokens indicate speech. Recognition pauses still halt anchored speech progress, and matcher output continues to correct playhead position. |
 | Stealth (screen capture exclusion) | `NSWindow.sharingType = .none` | A single macOS API flag that excludes a window from all screen capture streams, including Zoom and Teams. Must be set at window creation time. |
 | Global keyboard shortcut | `CGEvent` tap via `CGEventTap` | Captures keyboard events globally, regardless of which window has focus. Used for the Voice-Sync toggle shortcut. |
 | Updater | Sparkle in direct builds, no-op updater in App Store builds | Direct-distribution updater uses signed ZIP-based in-place updates, appcast verification, EdDSA update signing, and sandbox-compatible installer launch services. App Store builds omit Sparkle and all self-update UI. |
@@ -91,7 +91,9 @@ Aira/
 │       └── OverlayAppearancePopover.swift — per-window appearance override popover
 │
 ├── VoiceSync/
-│   ├── VoiceSyncEngine.swift    — AVAudioEngine tap + SFSpeechRecognizer + word-matching; publishes scroll events; started/stopped per session
+│   ├── VoiceSyncEngine.swift    — AVAudioEngine tap + speech-backend word matching; publishes scroll events; started/stopped per session
+│   ├── SpeechRecognitionBackend.swift — fakeable speech backend protocol and normalized spoken-word tokens
+│   ├── WhisperSpeechRecognitionBackend.swift — bundled WhisperKit model loading and word-token emission
 │   └── AudioLevelMonitor.swift  — reads RMS from the same AVAudioEngine; feeds VisualBeam
 │
 ├── Storage/
@@ -246,9 +248,9 @@ This is Aira's core technical feature. The app supports a single Voice mode buil
 ```
 AVAudioEngine (microphone input)
     ↓
-SFSpeechRecognizer (on-device, requiresOnDeviceRecognition = true)
-    ↓ partial + final transcription results (real-time stream)
-VoiceSyncEngine.matchTranscription(_ words: [String])
+WhisperKit backend (bundled openai_whisper-base.en)
+    ↓ stable spoken word tokens with timestamps
+VoiceSyncEngine.alignSpokenWord(_ token: SpokenWordToken)
     ↓ matched word index / anchor information
     ↓
     └── Voice Mode: update playhead motion state and anchor correction
@@ -256,11 +258,11 @@ VoiceSyncEngine.matchTranscription(_ words: [String])
 
 **The Tiered Word-Matching Algorithm (The Engine):**
 
-To handle speech recognition latency and Apple's tendency to revise previous partial results, Aira uses a resilient sliding-window matcher with **Tiered Look-Ahead Bounds** to prevent jitter (false jumps).
+To handle repeated/common words and recognition latency, Aira uses a forward-only matcher with **Tiered Look-Ahead Bounds** to prevent jitter (false jumps).
 
 1. At session start, tokenize the script into a word array: lowercase, strip punctuation, skip cue annotations.
 2. Maintain a `cursorIndex: Int` (current position in the script word array).
-3. On each `SFSpeechRecognitionResult`, extract the recent spoken words (e.g., the last 1–3 words) and run a string-overlap match against the script near the `cursorIndex`.
+3. On each stable `SpokenWordToken`, normalize the word and match it against the script near the `cursorIndex`.
 4. **Tiered Bounds:** To prevent jumping 40 words ahead just because the user said a common word like "the", the maximum allowed jump distance scales with match confidence:
     - **High confidence (3 consecutive words matched):** Allowed to jump up to 45 words ahead (speaker skipped a paragraph).
     - **Medium confidence (2 consecutive words):** Allowed to jump up to 12 words ahead (speaker skipped a line).
@@ -269,7 +271,7 @@ To handle speech recognition latency and Apple's tendency to revise previous par
 6. The exact matched word position is published so the shared playhead can anchor against speech without requiring inline visual emphasis.
 
 **Voice Mode:**
-In this mode, voice motion uses a hybrid activity signal. Recent audio activity can keep motion alive moment-to-moment, while `SFSpeechRecognizer` results provide the matched script anchor and also contribute to the active-speaking state.
+In this mode, voice motion uses a hybrid activity signal. Recent audio activity can keep motion alive moment-to-moment, while WhisperKit word tokens provide the matched script anchor and also contribute to the active-speaking state.
 
 The engine publishes two signals into the shared playhead path:
 
@@ -418,14 +420,14 @@ The full lifecycle of a presenter session:
 User clicks "Go Live" in Manager App
     → session picker: Notch / Pill / Both
     → if Pill or Both: PillSetupView sheet (content mode + script)
-    → OverlayWindowController.presentSession(script:, pillConfigs:)
+    → OverlayWindowController.presentSession(script:) / presentMirroredSatelliteSession(script:, satelliteCount:) / presentAssignedSatelliteSession(script:, satelliteSelections:)
     → NotchWindowController.present(script:, appearance:)   [creates NSPanel, sets sharingType = .none]
     → for each pill config: PillWindowController.present(config:) [creates NSPanel, sets sharingType = .none]
     → Stealth check: verify sharingType accepted → show warning banner if not
     → CountdownView starts (if duration > 0)
     → CountdownView completes → VoiceSyncEngine.start()
         → AVAudioEngine starts (microphone tap begins)
-        → SFSpeechRecognizer starts recognition task
+        → WhisperKit backend starts local word-token processing
     → Sync pills subscribe to the shared session scroll state
     → Manual pills load their assigned scripts independently; no subscription
     → VoiceSyncKeyboardMonitor.start() — begins listening for ⌘⇧Space
@@ -433,7 +435,7 @@ User clicks "Go Live" in Manager App
 
 User ends session (Escape key or ⌘W or closes overlay)
     → VoiceSyncEngine.stop()
-        → SFSpeechRecognizer recognition task cancelled
+        → WhisperKit backend processing stopped
         → AVAudioEngine stopped and released
         → Microphone access relinquished
     → VoiceSyncKeyboardMonitor.stop()
@@ -515,9 +517,9 @@ struct OverlayAppearance: Codable, Equatable {
 
 **Default appearance** is stored in `AppSettings.defaultOverlayAppearance` (a single `OverlayAppearance` value). The Settings > Overlays tab edits this value, with Overlay Font as the only typeface picker and Accessibility handling alignment, spacing, text shadow, and inner padding. `UserDefaults` stores it via `SettingsStore`. Both Notch and Pill windows are initialised from this single value — there are no separate per-pill appearance defaults.
 
-**Pill settings** are two additional fields on `AppSettings`:
-- `pillsEnabled: Bool = false` — gates whether pills can be launched. The "Go Live" pill flow checks this before presenting `PillSetupView`.
-- `maxPillCount: Int = 1` — 1 or 2. `OverlayWindowController.presentSession` caps the number of pill configs it accepts at this value.
+**Pill Window settings** currently persist two Pill Window-specific settings on `AppSettings`:
+- `maxPillCount: Int = 1` — 1 or 2. Explicit Pill Window launch surfaces derive how many mirrored/assignment slots participate from this count, while launch content choice stays session-scoped instead of persisting in Settings.
+- `satelliteAppearances: [OverlayAppearance?]` — optional per-slot appearance/readability defaults for `Pill Window 1` / `Pill Window 2`. A `nil` slot means "inherit `defaultOverlayAppearance`", so uncustomized Pill Windows launch with shared Notch defaults.
 
 **Per-window overrides:** Each `NSPanel` controller (`NotchWindowController`, `PillWindowController`) holds a `var currentAppearance: OverlayAppearance`. At creation, it is initialized from `AppSettings.defaultOverlayAppearance`. When the user changes it via `OverlayAppearancePopover`, only `currentAppearance` on that specific controller is updated — other windows are unaffected.
 
@@ -755,6 +757,14 @@ User clicks "Cast to Notch"
     → script body passed directly to PrompterContentView
     → VoiceSyncEngine.loadScript(text:) — tokenizes words for matching
 
+User triggers mirrored Pill Window launch from menu bar quick cast
+    → OverlayWindowController.presentMirroredSatelliteSession(script:, satelliteCount:)
+    → mirrored Pill Window selections are derived from count and shared playhead mode
+
+User triggers assigned Pill Window launch from Script Editor
+    → OverlayWindowController.presentAssignedSatelliteSession(script:, satelliteSelections:)
+    → explicit per-slot Mirror/Manual choices are preserved into launch planning
+
 User creates a Pill in Voice-Sync mode (REQ-034)
     → PillWindowController.present(mode: .voiceSync)
     → PillContentView subscribes to VoiceSyncEngine scroll events
@@ -826,12 +836,9 @@ All views that need global state receive it via `@EnvironmentObject`. Nested vie
 ```xml
 <key>NSMicrophoneUsageDescription</key>
 <string>Aira uses your microphone to follow along with your script as you speak.</string>
-
-<key>NSSpeechRecognitionUsageDescription</key>
-<string>Aira uses on-device speech recognition to advance your script in sync with your voice. No audio leaves your device.</string>
 ```
 
-**On-device enforcement:** `SFSpeechRecognizer` is configured with `requiresOnDeviceRecognition = true`. This ensures all speech processing happens locally. If on-device recognition is unavailable (e.g., the language model is not downloaded), Aira will prompt the user to download it via System Settings > Accessibility > Spoken Content, and disable Voice-Sync until it is available.
+**On-device enforcement:** WhisperKit loads the bundled `openai_whisper-base.en` model from the app bundle. Voice-Sync must not fall back to cloud speech recognition or trigger a runtime model download. If the bundled model cannot be loaded, Aira disables Voice-Sync for that session and reports the local model-load error.
 
 **Sandbox and entitlements:**
 ```xml
@@ -917,7 +924,7 @@ The release workflow should avoid rerunning full `xcodebuild build` and `xcodebu
 - Confirm per-window appearance popover changes apply live without lag
 - Confirm keyboard shortcut fires correctly when Manager App window is in focus (not the overlay)
 - Confirm Accessibility permission prompt appears on first use of keyboard shortcut
-- Confirm app bundle size is under 10 MB after Archive build (`du -sh Aira.app`)
+- Confirm app bundle size is measured after Archive build and includes the bundled `openai_whisper-base.en` model (`du -sh Aira.app`)
 - Confirm `otool -L Aira` shows no third-party analytics or telemetry libraries
 - Confirm Charles Proxy trace shows zero outbound network traffic during a full session
 - Confirm `.txt` file over 10 MB is rejected gracefully with a user-facing error message
@@ -931,9 +938,9 @@ The following must be verified before any release build is signed and distribute
 | Check | Requirement |
 |---|---|
 | No plaintext secrets on disk | API key UI is deferred; no secrets written in v1. Verify via `grep -r "apiKey\|secret\|token" ~/Library/Application\ Support/Aira/` after a full session |
-| No outbound telemetry or unrelated traffic | Charles Proxy / Network Instruments trace must show no outbound requests except Sparkle appcast/update traffic over HTTPS |
+| No outbound telemetry or unrelated traffic | Charles Proxy / Network Instruments trace must show no outbound requests except Sparkle appcast/update traffic over HTTPS; Voice-Sync must not download speech models at runtime |
 | Microphone access scoped correctly | `AVAudioEngine` tap installed only inside `VoiceSyncEngine.start()` and torn down in `stop()`. Verify in Activity Monitor: microphone indicator appears only during active session |
-| No telemetry SDK | Binary must not link any analytics framework. Verify: `otool -L Aira.app/Contents/MacOS/Aira` — Sparkle is the only approved non-Apple framework; no Crashlytics, Mixpanel, Amplitude, Firebase, or similar |
+| No telemetry SDK | Binary must not link any analytics framework. Verify: `otool -L Aira.app/Contents/MacOS/Aira` — Sparkle and WhisperKit are the only approved non-Apple frameworks; no Crashlytics, Mixpanel, Amplitude, Firebase, or similar |
 | Script files readable only by user | Files in Application Support use default POSIX permissions. Verify: `ls -la ~/Library/Application\ Support/Aira/Scripts/` |
 | Imported files not cached or duplicated | After import, only the new script JSON exists. Original `.txt` path is not retained or re-read after import completes. |
 | No world-readable tmp files | No sensitive content written to `/tmp` or shared directories |
@@ -941,7 +948,7 @@ The following must be verified before any release build is signed and distribute
 | Gatekeeper passes | Notarized `.dmg` passes `spctl --assess --verbose Aira.dmg` without warnings |
 | Sparkle sandbox wiring present | `SUEnableInstallerLauncherService = true`, app sandbox entitlement enabled, Sparkle mach-lookup exceptions present, and feed/public key values resolve in the built app |
 | Hardened Runtime enabled | Xcode build settings: Hardened Runtime = Yes. Sandbox entitlements present and signing succeeds |
-| On-device recognition enforced | `requiresOnDeviceRecognition = true` set on `SFSpeechRecognizer`. No speech data leaves the device |
+| On-device recognition enforced | WhisperKit loads from bundled `openai_whisper-base.en` and no speech data leaves the device |
 
 ---
 

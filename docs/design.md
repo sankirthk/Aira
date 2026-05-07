@@ -91,7 +91,7 @@ Base grid: 4pt. All spacing values are multiples of 4.
 |---|---|
 | Cards, inputs | 8pt |
 | Panels, sidebar | 16pt |
-| Pills, overlays, toggles | 24pt |
+| Pill windows, overlays, toggles | 24pt |
 | Circular elements | 50% |
 
 ### Elevation
@@ -123,7 +123,7 @@ The persistent main window. This is the user's home base for authoring and manag
 **Sidebar anatomy (top to bottom):**
 1. App wordmark ("Aira") and sidebar toggle button
 2. **New Script** action button — terracotta fill, Manrope Bold label
-3. **Go Live** action button — sage green fill, launches session picker (Notch / Pill / Both)
+3. **Go Live** action button — sage green fill, launches session picker (Notch / Pill Window / Both)
 4. Navigation section divider
 5. Library navigation:
    - All Scripts
@@ -145,6 +145,11 @@ The persistent main window. This is the user's home base for authoring and manag
 - Back / forward navigation (when drilling into editor or settings)
 - Screen title (center-aligned, Manrope Bold 18pt)
 - Context actions (right side, screen-dependent)
+
+**Menu bar quick access:**
+- The menu bar popover must appear above the currently active app, including when Aira is not the foreground app, and should follow the user to the active Space.
+- Recent script rows are selection rows, not launch rows. Each row shows the script name, word count, and a radio indicator.
+- The two primary actions launch the selected script: `Cast [Script Name] to Notch` and `Cast [Script Name] to Notch + Pills`.
 
 ---
 
@@ -182,6 +187,7 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Starred toggle (top-right corner of card, filled/outline star)
 - Primary action: **Edit** button
 - Secondary action: **Cast to Notch** button
+- Pill Window launch is intentionally excluded from library-card quick actions in this pass; Pill Window-inclusive launch belongs to the Script Editor where per-Pill Window content choice can be made explicitly.
 - Tertiary action: **Duplicate** button (creates a "Copy of [title]" script immediately; the copy opens in the editor for renaming)
 - Destructive action: **Delete** button (with confirmation)
 - Right-click context menu on card: Edit, Duplicate, Add to Collection…, Cast to Notch, Delete
@@ -226,7 +232,25 @@ The full-screen authoring experience within the content area.
 - Script title input (Manrope Bold, editable inline, 20pt)
 - Word count + estimated duration (Slate Blue, right-aligned)
 - **Save** button (sage green, with hand-drawn save icon)
-- **Cast to Notch** button (terracotta)
+- **Split launch control**: `[ Cast to Notch ] [ chevron ]`
+
+**Launch behavior:**
+- Primary button press on `Cast to Notch` is deterministic and launches only the Notch Window with the current editor script.
+- The split launch control renders as one connected button, not as two detached buttons.
+- The split launch control keeps compact toolbar height consistent with the original `Cast to Notch` button.
+- The primary half does not repeat a second chevron beside the text; only the trailing chevron segment acts as dropdown affordance.
+- The dropdown panel uses Aira manager-app styling rather than native macOS menu chrome.
+- Clicking outside the dropdown panel dismisses it.
+- Chevron dropdown menu entries:
+  - `Cast with Pill Windows`
+- Choosing the Pill Windows dropdown entry opens follow-up Pill Window launch flow.
+- The launch panel shows one section per enabled Pill Window.
+- Each Pill Window section offers:
+  - `Mirror current script`
+  - `Manual`
+- A Pill Window set to `Mirror current script` launches with the current editor script mirrored from the notch session; mirrored Pill Windows inherit live Notch session behavior because they are following that shared session.
+- A Pill Window set to `Manual` exposes script picker controls inside the same launch panel.
+- Missing assignment never falls back silently to mirrored content; the app launches only valid targets and shows lightweight feedback for skipped Pill Windows.
 
 **Main text area:**
 - Full-height, no visible border — blends with content area background
@@ -247,6 +271,7 @@ The full-screen authoring experience within the content area.
 - Header: "Performance Cues" in Manrope Bold
 - Cue buttons: pill-shaped `RoundedRectangle` buttons in cream with terracotta border
 - Clicking a cue inserts the annotation at the current cursor position
+- Supporting copy tells users they can create custom cues by typing any cue inside square brackets, such as `[Look up]`.
 
 **No AI button in v1.** The AI enhancement feature is deferred. No AI-related controls appear in the editor.
 
@@ -260,8 +285,8 @@ A four-tab modal sheet (SwiftUI `.sheet` / AppKit panel), accessible from the si
 
 #### Tab 1: Appearance
 - Light / Dark mode toggle (system default is an additional option)
-- Manager App font selector: dropdown with Crimson Text (default), Manrope, Inter
-- Text size: segmented control with S / M / L options (maps to 16pt / 20pt / 26pt in the prompter)
+- Typography panel controls only manager app UI scale. Manager app font faces are fixed: `CrimsonText-Regular` for readable UI text and `IndieFlower` for decorative/display labels.
+- Text size: segmented control with Small / Medium / Large options for manager app UI scale
 
 #### Tab 2: The Notch
 This tab sets the **shared overlay appearance defaults** plus notch-only sizing controls. Per-window overrides are applied directly on the overlay window via hover chrome / per-window controls (see Screen 8).
@@ -277,21 +302,36 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - **Width** (Notch only): slider 400–800pt, default 600pt
 - **Height** (Notch only): notch body height slider
 
-#### Tab 3: Pills
-- Pill setup lives here instead of under The Notch because pill count, mode, and script assignment are structural session choices, not appearance.
-- **Enable Pill Windows** toggle. Off by default. When off, the controls below are disabled/dimmed.
-- **Number of Pills**: segmented control with options 1 and 2. Enabled only when the toggle is on. Defaults to 1 on first enable.
-- **Per-pill mode**: each enabled pill can be `Sync` or `Manual`; manual mode exposes script selection.
-- Note text below the count selector: "Pill windows inherit appearance settings from The Notch tab. Customise each pill in-session via right-click." — shown in `CrimsonText-Regular` 14pt, muted.
+#### Tab 3: Pill Windows
+- This tab is configuration-only. It defines how Pill Windows look and read; it does not decide what they show during a session.
+- If a Pill Window slot has never been customized, it inherits the shared Notch appearance/readability defaults.
+- `Pill Window count` segmented control: choose how many Pill Windows are enabled for the session launch flow (`1` or `2`).
+- Top switcher: `Pill Window 1` / `Pill Window 2`
+- The selected count controls how many Pill Window assignment rows appear in the launch flow and how many mirrored Pill Windows launch from `Cast with Pill Windows`.
+- Live preview for selected Pill Window slot
+- Appearance controls:
+  - opacity
+  - font size
+  - font
+  - background color
+  - text color
+- Accessibility/readability controls:
+  - alignment
+  - line spacing
+  - letter spacing
+  - word spacing
+  - text shadow
+  - inner text padding
+- Supporting note: "Pill Window content is chosen when launching from the Script Editor." — shown in `CrimsonText-Regular` 14pt, muted.
 
 #### Tab 4: System
 - **Before your session**
   - Countdown duration: stepper control (0–10 seconds, default 3)
-  - Scroll speed: points-per-second slider with live value label, shown as `NNN pt/s`
+  - Scroll speed: points-per-second slider with live value label, default `10 pt/s`, clamped to `10...30 pt/s`
 - **During your session**
   - Voice-activated scroll: toggle (on by default)
   - Spoken-word highlighting: toggle (off by default, visual only, does not alter scroll behavior)
-  - Speech sensitivity: slider (Low / Medium / High), disabled when voice tracking is off
+  - Mic sensitivity: Low / Medium / High segmented control, enabled for Sound-based and Word tracking modes, disabled for Classic
   - Pause on mouse hover: toggle (on by default)
 - **Controls**
   - Keyboard shortcuts: 6 editable shortcut rows
@@ -315,12 +355,13 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - The Light Paper preview swatch remains the same warm cream preview in both light and dark mode; it does not inherit the app theme.
 - In the System tab, only section headings use `IndieFlower`; action labels, helper copy, field values, and control labels use `CrimsonText-Regular` for readability.
 - The Notch preview canvas background uses `#434343`.
+- In Settings, reset/default action buttons and custom color swatches use the full visible control surface as the hit target; interaction must not collapse to text-only or center-only regions.
 - In dark mode, script overview cards use `#3A3A3A` as the card surface.
 - The Cast to Notch button on script cards always uses the light text color.
 - The sidebar New Script action uses pure white label/icon color.
 - The script-card Cast button label/icon match the Edit button's white label color.
 - Script cards use a slightly larger gap between the outer solid border and inner dashed border than the previous implementation.
-- The Pill Windows enable control uses the same switch dimensions and sage-green tint treatment as the Voice Tracking toggle.
+- The Pill Windows count/config controls use the same switch dimensions and sage-green tint treatment as the Voice Tracking toggle.
 - The Sidebar Scripts navigation item uses a document icon with scribble lines, distinct from the New Script plus icon.
 - While Voice-Sync is active, the currently spoken word or short matched phrase is highlighted inline inside the visible reading window using high-contrast emphasis that remains legible against the current overlay appearance.
 
@@ -353,7 +394,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - Blank-line paragraph breaks remain visible as paragraph spacing
 - Spoken-word tracking visibly highlights the current spoken word or matched phrase inline
 - When spoken-word highlighting is enabled, clicking a visible word in the notch or pill overlay reseeds the spoken-word highlight/search anchor to that word without changing the current scroll position
-- Spoken-word highlighting is visual only and is clipped to the currently visible overlay word window so off-screen spoken ranges cannot trigger large redraws or influence scroll pacing
+- Spoken-word highlighting is visual only and is clipped to the currently visible overlay word window so off-screen spoken ranges cannot trigger large redraws or influence scroll pacing. If the user skips ahead and speaks a different visible line, a meaningful 2+ word phrase match may become the new highlight anchor without moving the scroll offset.
 - Regression note: do not feed whole spoken-prefix ranges into live overlay rendering for classic/manual mode. Large off-screen dull-prefix redraws made classic scroll look jerky and slower even though scroll math itself was unchanged.
 - Session-mode switches must fully reset voice-session state. Ending a voice-driven session and later starting a classic/manual session must not inherit any prior recognition callbacks, speech-activity flags, scroll offsets, or voice-mode rendering behavior; a fresh post-quit launch and a post-voice mode switch must behave identically.
 - Overlay wheel input must accept intentional manual scrolling without amplifying one physical wheel gesture into multiple scroll mutations. When app is active, global scroll monitors must not double-apply same gesture already delivered through local/AppKit paths, and repeated back-and-forth wheel input in classic/manual highlight-only sessions must never yank script to top or random offset.
@@ -380,7 +421,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - When cursor enters the window: scroll pauses, cursor changes to a hand icon with a pause indicator
 - When cursor exits: scroll resumes from the exact paused position
 - No visual change to the overlay content during pause — the pause state is communicated solely through cursor change
-- Hover chrome appears only while hovered: top-left `Undock` + `Fullscreen`, top-right `Pause` + `Close`. In this pass the buttons are present visually only; behavior wiring can follow later.
+- Hover chrome appears only while hovered: top-left `Undock`; when Classic mode is using spoken-word highlighting, a separate `Pause` / `Resume` button appears beside `Undock` so session pause is not conflated with the microphone affordance. Undocked mode also shows `Fullscreen` on the left. Top-right shows microphone and close controls when the mic is active, otherwise pause/resume and close. The microphone button mutes/unmutes capture without marking the session as paused.
 - Scope: hover-to-pause applies to the Notch Window only. Pill Windows keep hover chrome but never pause on hover.
 
 **Background appearance (per-window, inherits global defaults):**
@@ -392,8 +433,9 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 
 **Hover chrome on the Notch Window:**
 - Left-side button undocks the notch only when no pill windows are active
-- Once undocked, the button becomes a dock action and a fullscreen action appears beside it
-- Right-side buttons expose pause/resume and close affordances
+- In Classic mode with spoken-word highlighting enabled, a pause/resume button appears beside the dock/undock button
+- Once undocked, the dock action remains left-aligned and a fullscreen action appears beside it
+- Right-side buttons expose microphone and close affordances when the mic is active; otherwise they expose pause/resume and close. In Classic spoken-word highlighting, the microphone button only mutes/unmutes capture, while the left-side pause button owns session pause/resume.
 - The close button ends the active presenter session for the notch, matching Escape / prior end-session action
 
 **Notch sizing during session:**
@@ -407,7 +449,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 
 ### Screen 6: Pill Window (Floating Overlay)
 
-A free-moving overlay window that can operate in Sync mode (follows the same script and scroll state as the Notch) or Manual mode (shows an independently assigned script).
+A free-moving overlay window launched explicitly from the Script Editor. A Pill Window can either mirror current script/playhead state from the Notch session or show an explicitly assigned script that scrolls independently.
 
 **Window characteristics:**
 - Free-moving `NSPanel`, draggable by clicking and dragging anywhere on the window body
@@ -419,17 +461,19 @@ A free-moving overlay window that can operate in Sync mode (follows the same scr
 - All four corners are rounded (16pt radius)
 - Hover chrome appears in top-right while hovered: `Swap`, `Fullscreen`, `Close`
 
-**Content mode indicator:**
-- A small badge in the top-left corner of the pill (3pt inside the window edge)
-- Sync mode: small sage green waveform icon (same style as VisualBeam but smaller)
-- Manual mode: small hand-pointer icon in Warm Tan
+**Launch relationship indicator:**
+- A small badge in the top-left corner of the Pill Window (3pt inside the window edge)
+- Mirror-current-script: small sage green sync indicator
+- Explicit-script assignment: small hand-pointer icon in Warm Tan
 - The badge is only visible on hover; it disappears after 1.5 seconds to avoid distracting during a session
 
 **Content anatomy:**
-- **Sync mode**: identical to Notch Window — same script, same scroll position, same pause state, same VisualBeam. Multiple Sync pills all track the same cursor position.
-- **Manual mode**: the assigned script's text + cue annotations + a VisualBeam (still reflects microphone level for awareness, but does not drive scroll). Scroll is driven by user input only.
-- Mouse wheel / trackpad scrolling on a Manual-mode pill remains available whenever the pointer is over the pill.
-- The global **Pause on mouse hover** setting does not apply to pill windows. Hovering a pill must never pause motion or block wheel / trackpad scrolling.
+- **Mirror current script**: identical to Notch Window session content — same script, same scroll position, same pause state, same VisualBeam. Multiple mirrored Pill Windows all track the same content progress.
+- If no per-Pill Window appearance/readability override exists yet, a mirrored Pill Window initially renders with the same appearance/readability defaults as the Notch.
+- **Explicit script assignment**: assigned script text + cue annotations + a VisualBeam (still reflects microphone level for awareness, but does not drive scroll). Scroll is driven by user input only.
+- A Pill Window never opens with an empty or whitespace-only resolved script. Empty assigned Pill Windows are skipped, and a standalone Pill Window shortcut attempt shows an Aira-branded popup instead of opening an empty window.
+- Mouse wheel / trackpad scrolling on an explicitly assigned Pill Window remains available whenever the pointer is over the Pill Window.
+- The global **Pause on mouse hover** setting does not apply to Pill Windows. Hovering a Pill Window must never pause motion or block wheel / trackpad scrolling.
 
 **Assigned script label (Manual mode only):**
 - A small Inter label at the bottom edge of the pill showing the script title in Slate Blue
@@ -448,31 +492,57 @@ A free-moving overlay window that can operate in Sync mode (follows the same scr
 
 ---
 
-### Screen 7: Pill Setup Sheet
+### Screen 7: Pill Window Launch Chooser + Assignment Popup
+Shown from the Script Editor when the user opens the launch dropdown and selects `Cast with Pill Windows`.
 
-Shown when the user creates a new Pill Window — either from the "Go Live" session picker or the "Add Pill" action during an active session.
+**Trigger:** User clicks the chevron beside `Cast to Notch` and selects `Cast with Pill Windows`.
 
-**Trigger:** User selects "Pill Window" or "Both" in the Go Live session picker, or clicks "Add Pill" from the Manager App during a live session.
+**Step 1: Launch dropdown**
+- Anchored to the chevron side of the split button
+- Options:
+  - `Cast with Pill Windows`
 
-**Layout:** A compact sheet (400pt wide, ~260pt tall) that appears centered over the Manager App window.
+**Step 2: Pill Window launch panel**
+- Compact sheet or popup (~420pt wide) centered over the Script Editor
+- One section per enabled Pill Window
+- Each section includes:
+  - slot label (`Pill Window 1`, `Pill Window 2`)
+  - `Mirror current script` full-width choice button
+  - `Manual` full-width choice button
+  - when `Manual` selected: collapsed script dropdown showing the selected script title or `Select script`
+  - opening the script dropdown lists library scripts sorted by last edited, with search affordance if list is long
+  - selecting a script immediately collapses the dropdown
+- Manual script dropdown rows are full-width click targets, not text-only targets.
+- All interactive controls in the panel use a pointing-hand cursor across the whole visible hit target on hover.
+- Primary action: `Launch`
+- Secondary action: `Cancel`
 
-**Controls (top to bottom):**
-1. **Sheet title**: "New Pill Window" in Manrope Bold
-2. **Content Mode** — segmented control:
-   - [Sync] — follows the same script and scroll state as the Notch
-   - [Manual] — shows a different script, user scrolls by hand
-3. **Script selector** (shown only when Manual is selected):
-   - Dropdown listing all scripts from the library, sorted by last edited
-   - Search field at the top of the dropdown
-   - Default: the most recently edited script
-4. **Launch** button (terracotta, full-width) — creates the pill and dismisses the sheet
-5. **Cancel** link (Slate Blue, small Inter)
-
-**Multiple pills:** Each pill goes through its own setup sheet when created. Sync pills all share the same cursor position and paused/running state as the active session.
+**Multiple Pill Windows:**
+- If one Pill Window is configured, one row is shown.
+- If two Pill Windows are configured, two independent sections are shown.
+- One Pill Window may mirror while the other uses an explicitly chosen script.
+- Unassigned or empty `Manual` sections are skipped rather than silently mirrored; launch feedback explains skipped Pill Windows.
 
 ---
 
-### Screen 8: Overlay Appearance Popover
+### Screen 8: Aira Message Popup
+
+A compact in-window popup for manager-level messages that should match Aira's custom visual language instead of using native macOS alert chrome.
+
+**Empty script launch error:**
+- Triggered when `Cast to Notch` is pressed with a script body containing zero non-whitespace characters.
+- The manager window remains visible; no presenter session starts.
+- Popup content:
+  - eyebrow: `Cast paused`
+  - title: `Add script text first`
+  - body: `Write or paste a few words before casting to the notch.`
+  - primary action: `OK`
+- Visual style matches the custom update prompt: cream card, sage border, Indie Flower title, Crimson body copy, and Aira-styled primary action.
+- Dismissal clears the launch error message.
+
+---
+
+### Screen 9: Overlay Appearance Popover
 
 A per-window appearance override panel. Accessed from overlay-local controls when appearance actions are exposed.
 
@@ -493,7 +563,7 @@ Changes apply live as the user adjusts controls — no confirm step required.
 
 ---
 
-### Screen 9: Update Prompt
+### Screen 10: Update Prompt
 
 A compact Aira-branded update popup shown when Sparkle finds a newer version or finishes downloading one.
 
@@ -574,9 +644,10 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | `VisualBeam` | Row of 8 animated `RoundedRectangle` bars, sage green, heights driven by microphone RMS level. Used by Pill overlays and any embedded-audio indicator surfaces. | REQ-004 |
 | `CountdownOverlay` | Full-overlay with large Manrope numeral centered. Background and text colors respect the window's current `OverlayAppearance`. Fades between counts. Skipped if duration is 0. | REQ-012, REQ-013 |
 | `OverlayWindow` | Shared layout shell for Notch and Pill windows. No title bar, no chrome. Hosts script text, cue labels, countdown, and the appropriate audio indicator for that overlay style. | REQ-005, REQ-006, REQ-008, REQ-009 |
-| `ContentModeIndicator` | Small badge (waveform icon for Sync, hand icon for Manual) in top-left corner of Pill windows. Visible on hover only. | REQ-034 |
+| `ContentModeIndicator` | Small badge in top-left corner of Pill Windows. Indicates mirrored-current-script vs explicitly assigned-script launch state. Visible on hover only. | REQ-034 |
 | `CueAnnotation` | Small pill-shaped inline label in terracotta, rendered within script text flow. Distinct from plain text. | REQ-016, REQ-018 |
-| `PillSetupSheet` | Compact sheet for configuring a new Pill Window: content mode selector + script picker (Manual mode). | REQ-034 |
+| `PillWindowLaunchChooser` | Chevron dropdown attached to `Cast to Notch`, with one `Cast with Pill Windows` menu item. | REQ-034 |
+| `PillWindowAssignmentPopup` | Compact launch panel for per-Pill Window assignment, allowing each enabled Pill Window to choose `Mirror current script` or `Manual` before launch. | REQ-034 |
 | `OverlayAppearancePopover` | Per-window appearance override panel accessed via right-click. Live preview strip + controls for text color, background color, opacity, font, font size. | REQ-038 |
 | `UpdatePrompt` | Compact Aira-branded Sparkle update decision panel with version badge, calm copy, and `Update Now` / `Cancel` actions. | REQ-030 |
 | `EmptyState` | Illustration + Indie Flower headline + Crimson Text sub-copy + terracotta CTA. Used in Document Library when no scripts exist. | — |
@@ -605,8 +676,8 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | Overlay Appearance Popover open | Per-window appearance controls visible | Live preview strip updates in real-time as controls change |
 | Sparkle update found (direct build only) | Small branded update prompt appears instead of the stock Sparkle alert | Version badge visible; `Update Now` / `Cancel` actions use Aira button styling |
 | Sparkle update ready to install (direct build only) | Same branded prompt style reused for install step | Primary action changes to `Install & Relaunch` |
-| Pill content mode switch (Sync ↔ Manual) | Pill immediately switches source | ContentModeIndicator badge changes icon |
-| Assign Script to Manual Pill | Script picker popover | Dropdown list of scripts, search field |
+| `Cast with Pill Windows` dropdown choice | Launch panel opens | One section per enabled Pill Window appears |
+| Assign script to Pill Window | Launch panel | Script picker appears in that Pill Window section |
 | Sidebar collapsed | Navigation icons only | Tooltip on hover reveals label |
 | Settings open | Content area dims slightly | Sheet slides up from bottom of Manager App window |
 | Collection nav item clicked | Document Library filters to show only scripts in that collection | Header bar shows collection name; "All Scripts" link to clear filter |
@@ -624,7 +695,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 - Overlay windows do not trap keyboard focus — the user's main window remains active during a presenter session
 - The VisualBeam provides audio feedback via visual animation; it is not the sole indicator of session state
 - Tooltip labels on collapsed sidebar icons ensure icon-only navigation remains accessible
-- The ContentModeIndicator badge uses both color and icon shape to distinguish Voice-Sync vs. Manual (not color-only)
+- The ContentModeIndicator badge uses both color and icon shape to distinguish mirrored-current-script vs explicitly assigned-script state (not color-only)
 - The import drop zone has a visible affordance at rest (dashed border + label), not only on drag-hover
 
 ---
@@ -635,7 +706,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 |---|---|
 | REQ-001 Voice-Driven Scroll | Notch Window, Voice-Sync mode Pill Windows — script advances with speech |
 | REQ-002 Pause On Silence | All Voice-Sync windows — scroll halts; VisualBeam dims |
-| REQ-003 Manual Scroll Override | Mouse wheel / trackpad scrolling in overlay windows; line-by-line keyboard nudges; WPM speed slider in Settings > System |
+| REQ-003 Manual Scroll Override | Mouse wheel / trackpad scrolling in overlay windows; line-by-line keyboard nudges; `pt/s` speed slider in Settings > System |
 | REQ-004 Visual Beam Feedback | VisualBeam component in all overlay windows |
 | REQ-005 Prompter Hidden From Screen Share | OverlayWindow uses stealth flag; no visual cue needed |
 | REQ-006 Prompter Visible To User | Overlay windows fully visible on local display at all times |
@@ -662,15 +733,15 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-027 No Account Required | No sign-in screen, no profile UI |
 | REQ-028 Free Distribution | No paywall UI, no subscription prompts |
 | REQ-029 Signed And Notarized | No UI impact — build/distribution concern |
-| REQ-030 Distribution Channels | Direct build uses Screen 9 Update Prompt plus GitHub Releases / Sparkle surfaces; Mac App Store build omits in-app updater surfaces |
+| REQ-030 Distribution Channels | Direct build uses Screen 10 Update Prompt plus GitHub Releases / Sparkle surfaces; Mac App Store build omits in-app updater surfaces |
 | REQ-031 Closed-Source Policy | No UI impact — repository concern |
 | REQ-032 Live Answer Mode | Experimental — opt-in toggle in Settings (labeled "Experimental"), disabled by default |
 | REQ-033 Experimental Transparency | Plain-language disclosure modal shown before first activation of Live Answer Mode |
-| REQ-034 Pill Content Mode | Screen 7 PillSetupSheet; Screen 6 right-click → Switch Mode; ContentModeIndicator badge |
+| REQ-034 Pill Window Launch Assignment | Screen 3 split launch control; Screen 7 PillWindowLaunchChooser + PillWindowAssignmentPopup |
 | REQ-035 Script Import | ImportDropZone in Document Library; "Import Script" button in header bar |
 | REQ-036 Script Duplication | Duplicate button on ScriptCard; right-click context menu |
 | REQ-037 Collections | CollectionRow in sidebar; CollectionTag on script cards; Add to Collection popover |
-| REQ-038 Per-Window Overlay Appearance | Screen 8 OverlayAppearancePopover; Settings > Overlays for global defaults |
+| REQ-038 Per-Window Overlay Appearance | Screen 9 OverlayAppearancePopover; Settings > Overlays for global defaults |
 | REQ-039 Keyboard Voice-Sync Toggle | Settings > System > Pause/Resume Voice-Sync shortcut row (default ⌘⇧Space) |
 | REQ-040 Scroll Progress Indicator | Deferred — no UI in v1 |
 | REQ-041 Session Elapsed Timer | Deferred — no UI in v1 |

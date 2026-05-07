@@ -4,14 +4,124 @@ import SwiftUI
 // MARK: - Tab
 
 private enum SettingsTab: CaseIterable, Hashable {
-  case appearance, notch, pills, system
+  case appearance, notch, satellite, system
 
   var label: String {
     switch self {
     case .appearance: return "Appearance"
     case .notch: return "The Notch"
-    case .pills: return "Pills"
+    case .satellite: return "Pill Windows"
     case .system: return "Session"
+    }
+  }
+}
+
+enum SettingsColorSwatchControlKind: Equatable {
+  case appKitColorWell
+  case appKitPanelButton
+}
+
+struct SettingsControlAffordance: Equatable {
+  let usesFullVisibleHitTarget: Bool
+  let usesPointingHandCursor: Bool
+  let fillsVisibleTile: Bool
+  let colorSwatchControlKind: SettingsColorSwatchControlKind?
+}
+
+enum SettingsControlAffordances {
+  static let resetButton = SettingsControlAffordance(
+    usesFullVisibleHitTarget: true,
+    usesPointingHandCursor: true,
+    fillsVisibleTile: false,
+    colorSwatchControlKind: nil
+  )
+  static let customColorSwatch = SettingsControlAffordance(
+    usesFullVisibleHitTarget: true,
+    usesPointingHandCursor: true,
+    fillsVisibleTile: true,
+    colorSwatchControlKind: .appKitPanelButton
+  )
+}
+
+private struct SettingsPointingHandCursorModifier: ViewModifier {
+  @State private var isHovering = false
+
+  func body(content: Content) -> some View {
+    content
+      .onHover { hovering in
+        guard hovering != isHovering else { return }
+        if hovering {
+          NSCursor.pointingHand.push()
+          isHovering = true
+        } else {
+          NSCursor.pop()
+          isHovering = false
+        }
+      }
+      .onDisappear {
+        guard isHovering else { return }
+        NSCursor.pop()
+        isHovering = false
+      }
+  }
+}
+
+extension View {
+  fileprivate func settingsPointingHandCursor() -> some View {
+    modifier(SettingsPointingHandCursorModifier())
+  }
+}
+
+private struct SettingsColorPanelButtonBridge: NSViewRepresentable {
+  @Binding var selection: Color
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(selection: $selection)
+  }
+
+  func makeNSView(context: Context) -> NSButton {
+    let button = NSButton()
+    button.translatesAutoresizingMaskIntoConstraints = false
+    button.title = ""
+    button.isBordered = false
+    button.bezelStyle = .regularSquare
+    button.target = context.coordinator
+    button.action = #selector(Coordinator.openColorPanel(_:))
+    return button
+  }
+
+  func updateNSView(_ nsView: NSButton, context: Context) {
+    context.coordinator.updateSelectionBinding($selection)
+  }
+
+  final class Coordinator: NSObject {
+    private var selection: Binding<Color>
+
+    init(selection: Binding<Color>) {
+      self.selection = selection
+    }
+
+    func updateSelectionBinding(_ selection: Binding<Color>) {
+      self.selection = selection
+    }
+
+    @objc func openColorPanel(_ sender: NSButton) {
+      let panel = NSColorPanel.shared
+      panel.showsAlpha = false
+      panel.isContinuous = true
+      panel.setTarget(self)
+      panel.setAction(#selector(colorPanelDidChange(_:)))
+      panel.color = nsColor(from: selection.wrappedValue)
+      panel.makeKeyAndOrderFront(nil)
+      NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc func colorPanelDidChange(_ sender: NSColorPanel) {
+      selection.wrappedValue = Color(sender.color)
+    }
+
+    func nsColor(from color: Color) -> NSColor {
+      NSColor(color).usingColorSpace(.sRGB) ?? .white
     }
   }
 }
@@ -138,9 +248,9 @@ struct SettingsView: View {
           settingsStaticContainer {
             NotchTabContent()
           }
-        case .pills:
+        case .satellite:
           settingsScrollContainer {
-            PillsTabContent()
+            SatelliteTabContent()
           }
         case .system:
           settingsScrollContainer {
@@ -503,7 +613,6 @@ private struct AppearanceTabContent: View {
       SettingsPanel {
         SectionTitle(text: "Typography")
         VStack(alignment: .leading, spacing: 14) {
-
           // Size buttons
           VStack(alignment: .leading, spacing: 8) {
             Text("Base Size")
@@ -875,16 +984,20 @@ private struct NotchTabContent: View {
 
           HStack {
             Spacer()
-            Button("Reset to Defaults") {
+            Button {
               resetOverlayFeelToDefaults()
+            } label: {
+              Text("Reset to Defaults")
+                .font(.custom("CrimsonText-Regular", size: 16))
+                .foregroundStyle(Color("colorBackground"))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color("colorPrimary"))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
             }
-            .font(.custom("CrimsonText-Regular", size: 16))
-            .foregroundStyle(Color("colorBackground"))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(Color("colorPrimary"))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
             .buttonStyle(.plain)
+            .settingsPointingHandCursor()
           }
         }
         .padding(.top, 14)
@@ -1065,13 +1178,13 @@ private struct NotchTabContent: View {
           .padding(8)
       )
 
-      ColorPicker("", selection: selection, supportsOpacity: false)
-        .labelsHidden()
-        .opacity(0.015)
-        .contentShape(Rectangle())
+      SettingsColorPanelButtonBridge(selection: selection)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .aspectRatio(1, contentMode: .fit)
     .clipShape(RoundedRectangle(cornerRadius: 10))
+    .contentShape(RoundedRectangle(cornerRadius: 10))
+    .settingsPointingHandCursor()
     .overlay(
       RoundedRectangle(cornerRadius: 10)
         .stroke(Color("colorText").opacity(0.12), lineWidth: 1)
@@ -1147,56 +1260,185 @@ private struct NotchTabContent: View {
 
 }
 
-// MARK: - Pills Tab
+// MARK: - Pill Windows Tab
 
-private struct PillsTabContent: View {
+private struct SatelliteTabContent: View {
   @EnvironmentObject var appState: AppState
-  @State private var expandedManualPillSlot: Int? = nil
+  @State private var selectedSatelliteSlot = 1
+  private let swatchRowMaxWidth: CGFloat = 700
+  private let swatchSpacing: CGFloat = 10
+
+  private let colorPresets: [(String, String)] = [
+    ("Sage", "#849688"),
+    ("Clay", "#C98B7A"),
+    ("Ink", "#2B2B2B"),
+    ("Slate", "#6B8E99"),
+    ("Warm Tan", "#D4A574"),
+  ]
+  private let textColorPresets: [(String, String)] = [
+    ("Cream", "#F5F2EC"),
+    ("White", "#FFFFFF"),
+    ("Charcoal", "#2B2B2B"),
+    ("Warm Tan", "#D4A574"),
+  ]
+  private let previewSampleText =
+    "Pill Window preview uses the selected slot's readability defaults."
+
+  private var selectedSlotOverride: OverlayAppearance? {
+    appState.settings.satelliteAppearanceOverride(forSlot: selectedSatelliteSlot)
+  }
+
+  private var selectedSlotAppearance: OverlayAppearance {
+    appState.settings.effectiveSatelliteAppearance(forSlot: selectedSatelliteSlot)
+  }
+
+  private var selectedSlotIsInherited: Bool {
+    selectedSlotOverride == nil
+  }
+
+  private var lineSpacingBinding: Binding<CGFloat> {
+    appearanceMetricBinding(
+      getValue: \.lineSpacing,
+      clamp: OverlayLineSpacingConfiguration.clamped,
+      setValue: { appearance, value in
+        appearance.lineSpacing = value
+      }
+    )
+  }
+
+  private var letterSpacingBinding: Binding<CGFloat> {
+    appearanceMetricBinding(
+      getValue: \.letterSpacing,
+      clamp: OverlayLetterSpacingConfiguration.clamped,
+      setValue: { appearance, value in
+        appearance.letterSpacing = value
+      }
+    )
+  }
+
+  private var wordSpacingBinding: Binding<CGFloat> {
+    appearanceMetricBinding(
+      getValue: \.wordSpacing,
+      clamp: OverlayWordSpacingConfiguration.clamped,
+      setValue: { appearance, value in
+        appearance.wordSpacing = value
+      }
+    )
+  }
+
+  private var textShadowBinding: Binding<CGFloat> {
+    appearanceMetricBinding(
+      getValue: \.textShadow,
+      clamp: OverlayTextShadowConfiguration.clamped,
+      setValue: { appearance, value in
+        appearance.textShadow = value
+      }
+    )
+  }
+
+  private var contentPaddingBinding: Binding<CGFloat> {
+    appearanceMetricBinding(
+      getValue: \.contentPadding,
+      clamp: OverlayContentPaddingConfiguration.clamped,
+      setValue: { appearance, value in
+        appearance.contentPadding = value
+      }
+    )
+  }
+
+  private var opacityBinding: Binding<Double> {
+    Binding(
+      get: { selectedSlotAppearance.opacity },
+      set: { newValue in
+        updateSelectedSlotAppearance { appearance in
+          appearance.opacity = newValue
+        }
+      }
+    )
+  }
+
+  private var fontSizeBinding: Binding<CGFloat> {
+    Binding(
+      get: { selectedSlotAppearance.fontSize },
+      set: { newValue in
+        updateSelectedSlotAppearance { appearance in
+          appearance.fontSize = newValue
+        }
+      }
+    )
+  }
+
+  private var fontNameBinding: Binding<String> {
+    Binding(
+      get: { selectedSlotAppearance.fontName },
+      set: { newValue in
+        updateSelectedSlotAppearance { appearance in
+          appearance.fontName = newValue
+        }
+      }
+    )
+  }
+
+  private var overlayColorBinding: Binding<Color> {
+    Binding(
+      get: { Color(hex: selectedSlotAppearance.backgroundColor) },
+      set: { newColor in
+        let fallbackColor =
+          NSColor(Color(hex: selectedSlotAppearance.backgroundColor)).usingColorSpace(.sRGB)
+          ?? .white
+        let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? fallbackColor
+        let hex = String(
+          format: "#%02X%02X%02X",
+          Int((ns.redComponent * 255).rounded()),
+          Int((ns.greenComponent * 255).rounded()),
+          Int((ns.blueComponent * 255).rounded()))
+        updateSelectedSlotAppearance { appearance in
+          appearance.backgroundColor = hex
+        }
+      }
+    )
+  }
+
+  private var overlayTextColorBinding: Binding<Color> {
+    Binding(
+      get: { Color(hex: selectedSlotAppearance.textColor) },
+      set: { newColor in
+        let fallbackColor =
+          NSColor(Color(hex: selectedSlotAppearance.textColor)).usingColorSpace(.sRGB) ?? .black
+        let ns = NSColor(newColor).usingColorSpace(.sRGB) ?? fallbackColor
+        let hex = String(
+          format: "#%02X%02X%02X",
+          Int((ns.redComponent * 255).rounded()),
+          Int((ns.greenComponent * 255).rounded()),
+          Int((ns.blueComponent * 255).rounded()))
+        updateSelectedSlotAppearance { appearance in
+          appearance.textColor = hex
+        }
+      }
+    )
+  }
 
   var body: some View {
     VStack(spacing: 16) {
       SettingsPanel {
         SectionTitle(text: "Pill Windows")
         Text(
-          "Set up optional free-moving pills here without mixing session structure into The Notch tab."
+          "Choose how many free-moving Pill Windows are available. Content is chosen when launching from the Script Editor."
         )
         .font(.custom("CrimsonText-Regular", size: 14))
         .foregroundStyle(Color("colorText").opacity(0.6))
         .padding(.top, 2)
 
         VStack(alignment: .leading, spacing: 16) {
-          HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Enable Pill Windows")
-                .font(.custom("IndieFlower", size: 22))
-                .foregroundStyle(Color("colorText"))
-              Text(
-                "Turn this off to ignore pills entirely and keep sessions centered on notch only."
-              )
-              .font(.custom("CrimsonText-Regular", size: 14))
-              .foregroundStyle(Color("colorText").opacity(0.62))
-            }
-            Spacer(minLength: 12)
-            Toggle("", isOn: $appState.settings.pillsEnabled)
-              .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
-              .labelsHidden()
-              .accessibilityLabel("Enable Pill Windows")
-          }
-
           VStack(alignment: .leading, spacing: 8) {
-            FieldLabel(text: "Maximum Pill Windows")
+            FieldLabel(text: "Pill Window Count")
             HStack(spacing: 8) {
-              pillCountButton(count: 1)
-              pillCountButton(count: 2)
+              satelliteCountButton(count: 1)
+              satelliteCountButton(count: 2)
             }
-            .disabled(!appState.settings.pillsEnabled)
-            .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
 
             Text(
-              appState.settings.pillsEnabled
-                ? "Allow one or two floating pill windows during a live session."
-                : "Enable pill windows to choose how many can appear during a live session."
+              "Choose whether the explicit Pill Window launch flow offers one or two floating Pill Windows during a live session."
             )
             .font(.custom("CrimsonText-Regular", size: 14))
             .foregroundStyle(Color("colorText").opacity(0.62))
@@ -1204,152 +1446,264 @@ private struct PillsTabContent: View {
 
           Divider().opacity(0.2)
 
-          VStack(alignment: .leading, spacing: 16) {
-            FieldLabel(text: "Content Mode")
-
-            ForEach(0..<appState.settings.clampedMaxPillCount, id: \.self) { slot in
-              pillContentModeSection(forSlot: slot)
+          VStack(alignment: .leading, spacing: 10) {
+            FieldLabel(text: "Configure Slot")
+            HStack(spacing: 8) {
+              satelliteSlotButton(slot: 1)
+              satelliteSlotButton(slot: 2)
             }
+
+            Text(
+              selectedSlotIsInherited
+                ? "Pill Window \(selectedSatelliteSlot) is currently inheriting The Notch defaults. Adjust any control below to create a slot-specific override."
+                : "Pill Window \(selectedSatelliteSlot) is using its own saved appearance and readability defaults."
+            )
+            .font(.custom("CrimsonText-Regular", size: 14))
+            .foregroundStyle(Color("colorText").opacity(0.62))
           }
-          .disabled(!appState.settings.pillsEnabled)
-          .opacity(appState.settings.pillsEnabled ? 1 : 0.45)
         }
         .padding(.top, 12)
       }
-    }
-  }
 
-  @ViewBuilder
-  private func pillContentModeSection(forSlot slot: Int) -> some View {
-    let mode = appState.settings.pillContentMode(forSlot: slot)
+      satellitePreviewPanel
 
-    VStack(alignment: .leading, spacing: 8) {
-      Text("Pill \(slot + 1)")
-        .font(.custom("IndieFlower", size: 22))
-        .foregroundStyle(Color("colorText"))
+      ScrollView {
+        VStack(spacing: 16) {
+          SettingsPanel {
+            SectionTitle(text: "Overlay Color")
 
-      HStack(spacing: 8) {
-        ForEach(["Sync", "Manual"], id: \.self) { label in
-          let isSync = label == "Sync"
-          let isSelected = isSync ? mode == .voiceSync : mode != .voiceSync
-
-          Button {
-            if isSync {
-              appState.settings.setPillContentMode(.voiceSync, forSlot: slot)
-            } else {
-              enableManualPillMode(forSlot: slot)
-            }
-          } label: {
-            Text(label)
-              .font(.custom("CrimsonText-Regular", size: 16))
-              .foregroundStyle(
-                isSelected ? Color("colorBackground") : Color("colorText").opacity(0.6)
-              )
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 10)
-              .background(isSelected ? Color("colorPrimary") : Color("colorBackground"))
-              .clipShape(RoundedRectangle(cornerRadius: 10))
-              .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                  .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
-              )
-          }
-          .buttonStyle(.plain)
-          .disabled(!appState.settings.pillsEnabled || (!isSync && appState.scripts.isEmpty))
-        }
-      }
-
-      if case .manual(let selectedId) = mode {
-        Button {
-          expandedManualPillSlot = expandedManualPillSlot == slot ? nil : slot
-        } label: {
-          HStack(spacing: 10) {
-            Text(appState.scripts.first(where: { $0.id == selectedId })?.title ?? "Select a script")
-              .font(.custom("CrimsonText-Regular", size: 16))
-              .foregroundStyle(Color("colorText"))
-            Spacer()
-            Image(systemName: expandedManualPillSlot == slot ? "chevron.up" : "chevron.down")
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundStyle(Color("colorText").opacity(0.55))
-          }
-          .padding(.horizontal, 14)
-          .padding(.vertical, 12)
-          .background(Color("colorBackground"))
-          .clipShape(RoundedRectangle(cornerRadius: 14))
-          .overlay(
-            RoundedRectangle(cornerRadius: 14)
-              .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-          )
-        }
-        .buttonStyle(.plain)
-        .disabled(!appState.settings.pillsEnabled || appState.scripts.isEmpty)
-
-        if expandedManualPillSlot == slot {
-          ScrollView {
-            VStack(spacing: 6) {
-              ForEach(appState.scripts) { meta in
+            FieldLabel(text: "Background Color")
+            LazyVGrid(
+              columns: Array(repeating: GridItem(.flexible(), spacing: swatchSpacing), count: 6),
+              spacing: swatchSpacing
+            ) {
+              ForEach(colorPresets, id: \.0) { name, hex in
+                let isActive = selectedSlotAppearance.backgroundColor == hex
                 Button {
-                  appState.settings.setPillContentMode(.manual(scriptId: meta.id), forSlot: slot)
-                  expandedManualPillSlot = nil
-                } label: {
-                  HStack(spacing: 10) {
-                    Text(meta.title)
-                      .font(.custom("CrimsonText-Regular", size: 16))
-                      .foregroundStyle(Color("colorText"))
-                      .lineLimit(1)
-                    Spacer()
-                    if meta.id == selectedId {
-                      Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color("colorPrimary"))
-                    }
+                  updateSelectedSlotAppearance { appearance in
+                    appearance.backgroundColor = hex
                   }
-                  .padding(.horizontal, 14)
-                  .padding(.vertical, 10)
-                  .background(Color("colorBackground").opacity(0.9))
-                  .clipShape(RoundedRectangle(cornerRadius: 12))
-                  .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                      .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
-                  )
+                } label: {
+                  swatchTile(name: name, isActive: isActive) {
+                    RoundedRectangle(cornerRadius: 10)
+                      .fill(Color(hex: hex))
+                      .aspectRatio(1, contentMode: .fit)
+                  }
                 }
                 .buttonStyle(.plain)
               }
-            }
-          }
-          .frame(maxHeight: 220)
-          .padding(8)
-          .background(Color("colorSurface").opacity(0.7))
-          .clipShape(RoundedRectangle(cornerRadius: 16))
-          .overlay(
-            RoundedRectangle(cornerRadius: 16)
-              .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
-          )
-        }
-      }
 
-      Text(
-        mode == .voiceSync
-          ? "Pill \(slot + 1) follows notch and stays in sync with shared session scroll."
-          : "Pill \(slot + 1) displays selected script and scrolls manually."
-      )
-      .font(.custom("CrimsonText-Regular", size: 14))
-      .foregroundStyle(Color("colorText").opacity(0.62))
+              swatchTile(name: "Custom", isActive: false) {
+                customColorSwatch(selection: overlayColorBinding)
+              }
+            }
+            .padding(.top, 8)
+            .frame(maxWidth: swatchRowMaxWidth)
+            .frame(maxWidth: .infinity)
+
+            Divider().padding(.vertical, 8)
+
+            FieldLabel(text: "Text Color")
+            LazyVGrid(
+              columns: Array(repeating: GridItem(.flexible(), spacing: swatchSpacing), count: 5),
+              spacing: swatchSpacing
+            ) {
+              ForEach(textColorPresets, id: \.0) { name, hex in
+                let isActive = selectedSlotAppearance.textColor == hex
+                Button {
+                  updateSelectedSlotAppearance { appearance in
+                    appearance.textColor = hex
+                  }
+                } label: {
+                  swatchTile(name: name, isActive: isActive) {
+                    RoundedRectangle(cornerRadius: 10)
+                      .fill(Color(hex: hex))
+                      .aspectRatio(1, contentMode: .fit)
+                      .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                          .stroke(Color("colorText").opacity(0.15), lineWidth: 1)
+                      )
+                  }
+                }
+                .buttonStyle(.plain)
+              }
+
+              swatchTile(name: "Custom", isActive: false) {
+                customColorSwatch(selection: overlayTextColorBinding)
+              }
+            }
+            .padding(.top, 8)
+            .frame(maxWidth: swatchRowMaxWidth)
+            .frame(maxWidth: .infinity)
+          }
+
+          SettingsPanel {
+            SectionTitle(text: "Overlay Feel")
+            VStack(spacing: 16) {
+              sliderRow(
+                "Opacity",
+                "\(Int(selectedSlotAppearance.opacity * 100))%",
+                opacityBinding,
+                0.2...1.0
+              )
+              sliderRow(
+                "Font Size",
+                "\(Int(selectedSlotAppearance.fontSize))pt",
+                fontSizeBinding,
+                OverlayFontSizeConfiguration.minimum...OverlayFontSizeConfiguration.maximum
+              )
+
+              HStack {
+                Spacer()
+                Button {
+                  clearSelectedSlotOverride()
+                } label: {
+                  Text(selectedSlotIsInherited ? "Using Notch Defaults" : "Use Notch Defaults")
+                    .font(.custom("CrimsonText-Regular", size: 16))
+                    .foregroundStyle(Color("colorBackground"))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                      selectedSlotIsInherited
+                        ? Color("colorText").opacity(0.35)
+                        : Color("colorPrimary")
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+                .settingsPointingHandCursor()
+                .disabled(selectedSlotIsInherited)
+              }
+            }
+            .padding(.top, 14)
+          }
+
+          SettingsPanel {
+            SectionTitle(text: "Overlay Font")
+            Text("Choose a typeface for this Pill Window slot without affecting The Notch.")
+              .font(.custom("CrimsonText-Regular", size: 14))
+              .foregroundStyle(Color("colorText").opacity(0.6))
+              .padding(.top, 2)
+            SystemFontPicker(selectedFont: fontNameBinding)
+              .padding(.top, 10)
+          }
+
+          SettingsPanel {
+            SectionTitle(text: "Accessibility")
+            Text(
+              "These readability controls apply only to the selected Pill Window slot once you customize it."
+            )
+            .font(.custom("CrimsonText-Regular", size: 14))
+            .foregroundStyle(Color("colorText").opacity(0.6))
+            .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 16) {
+              VStack(alignment: .leading, spacing: 8) {
+                FieldLabel(text: "Text Alignment")
+                HStack(spacing: 8) {
+                  alignmentOptionButton(.left, label: "Left")
+                  alignmentOptionButton(.center, label: "Center")
+                  alignmentOptionButton(.justified, label: "Justified")
+                }
+              }
+
+              readabilitySlider(
+                label: "Line Spacing",
+                valueText: "\(Int(lineSpacingBinding.wrappedValue.rounded()))pt",
+                value: lineSpacingBinding,
+                range: OverlayLineSpacingConfiguration
+                  .minimum...OverlayLineSpacingConfiguration.maximum,
+                step: 1,
+                minimumText: "\(Int(OverlayLineSpacingConfiguration.minimum))pt",
+                maximumText: "\(Int(OverlayLineSpacingConfiguration.maximum))pt"
+              )
+
+              readabilitySlider(
+                label: "Letter Spacing",
+                valueText: String(format: "%.1fpt", letterSpacingBinding.wrappedValue),
+                value: letterSpacingBinding,
+                range: OverlayLetterSpacingConfiguration
+                  .minimum...OverlayLetterSpacingConfiguration.maximum,
+                step: 0.1,
+                minimumText: String(format: "%.1fpt", OverlayLetterSpacingConfiguration.minimum),
+                maximumText: String(format: "%.1fpt", OverlayLetterSpacingConfiguration.maximum)
+              )
+
+              readabilitySlider(
+                label: "Word Spacing",
+                valueText: String(format: "%.1fpt", wordSpacingBinding.wrappedValue),
+                value: wordSpacingBinding,
+                range: OverlayWordSpacingConfiguration
+                  .minimum...OverlayWordSpacingConfiguration.maximum,
+                step: 0.5,
+                minimumText: "\(Int(OverlayWordSpacingConfiguration.minimum))pt",
+                maximumText: "\(Int(OverlayWordSpacingConfiguration.maximum))pt"
+              )
+
+              readabilitySlider(
+                label: "Text Shadow",
+                valueText: String(format: "%.1f", textShadowBinding.wrappedValue),
+                value: textShadowBinding,
+                range: OverlayTextShadowConfiguration
+                  .minimum...OverlayTextShadowConfiguration.maximum,
+                step: 0.5,
+                minimumText: "Off",
+                maximumText: String(format: "%.1f", OverlayTextShadowConfiguration.maximum)
+              )
+
+              readabilitySlider(
+                label: "Text Padding",
+                valueText: "\(Int(contentPaddingBinding.wrappedValue.rounded()))pt",
+                value: contentPaddingBinding,
+                range: OverlayContentPaddingConfiguration
+                  .minimum...OverlayContentPaddingConfiguration.maximum,
+                step: 1,
+                minimumText: "\(Int(OverlayContentPaddingConfiguration.minimum))pt",
+                maximumText: "\(Int(OverlayContentPaddingConfiguration.maximum))pt"
+              )
+            }
+            .padding(.top, 12)
+          }
+        }
+        .padding(.bottom, 4)
+      }
+      .scrollIndicators(.never)
     }
   }
 
-  private func enableManualPillMode(forSlot slot: Int) {
-    if case .manual = appState.settings.pillContentMode(forSlot: slot) {
-      return
-    }
+  private var satellitePreviewPanel: some View {
+    SettingsPanel {
+      SectionTitle(text: "Preview")
 
-    guard let firstScript = appState.scripts.first else { return }
-    appState.settings.setPillContentMode(.manual(scriptId: firstScript.id), forSlot: slot)
-    expandedManualPillSlot = slot
+      ZStack {
+        Color(hex: "#434343")
+
+        RoundedRectangle(cornerRadius: 24)
+          .fill(
+            Color(hex: selectedSlotAppearance.backgroundColor).opacity(
+              selectedSlotAppearance.opacity)
+          )
+          .frame(width: 420, height: 144)
+          .overlay(
+            OverlayAppearancePreviewText(
+              text: previewSampleText,
+              appearance: selectedSlotAppearance,
+              width: 420,
+              topPadding: 20
+            )
+          )
+          .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+      }
+      .frame(maxWidth: .infinity)
+      .frame(height: 196)
+      .clipShape(RoundedRectangle(cornerRadius: 24))
+      .padding(.top, 8)
+    }
   }
 
   @ViewBuilder
-  private func pillCountButton(count: Int) -> some View {
+  private func satelliteCountButton(count: Int) -> some View {
     let isActive = appState.settings.maxPillCount == count
 
     Button {
@@ -1368,6 +1722,227 @@ private struct PillsTabContent: View {
         )
     }
     .buttonStyle(.plain)
+  }
+
+  @ViewBuilder
+  private func satelliteSlotButton(slot: Int) -> some View {
+    let isActive = selectedSatelliteSlot == slot
+    let usesOverride = appState.settings.satelliteAppearanceOverride(forSlot: slot) != nil
+
+    Button {
+      selectedSatelliteSlot = slot
+    } label: {
+      HStack(spacing: 8) {
+        Text("Pill Window \(slot)")
+          .font(.custom("CrimsonText-Regular", size: 16))
+        Spacer()
+        Text(usesOverride ? "Custom" : "Inherit")
+          .font(.custom("Inter-Regular", size: 11))
+          .padding(.horizontal, 8)
+          .padding(.vertical, 4)
+          .background(
+            usesOverride
+              ? Color("colorSecondary").opacity(isActive ? 0.28 : 0.14)
+              : Color("colorPrimary").opacity(isActive ? 0.28 : 0.14)
+          )
+          .clipShape(Capsule())
+      }
+      .foregroundStyle(isActive ? Color("colorBackground") : Color("colorText"))
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .frame(maxWidth: .infinity)
+      .background(isActive ? Color("colorPrimary") : Color("colorBackground"))
+      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .overlay(
+        RoundedRectangle(cornerRadius: 14)
+          .stroke(Color("colorText").opacity(isActive ? 0.08 : 0.12), lineWidth: isActive ? 2 : 1.5)
+      )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func clearSelectedSlotOverride() {
+    appState.settings.setSatelliteAppearanceOverride(nil, forSlot: selectedSatelliteSlot)
+  }
+
+  private func updateSelectedSlotAppearance(_ mutate: (inout OverlayAppearance) -> Void) {
+    var appearance = selectedSlotAppearance
+    mutate(&appearance)
+    appState.settings.setSatelliteAppearanceOverride(appearance, forSlot: selectedSatelliteSlot)
+  }
+
+  private func appearanceMetricBinding(
+    getValue: @escaping (OverlayAppearance) -> CGFloat,
+    clamp: @escaping @MainActor (CGFloat) -> CGFloat,
+    setValue: @escaping (inout OverlayAppearance, CGFloat) -> Void
+  ) -> Binding<CGFloat> {
+    Binding(
+      get: {
+        clamp(getValue(selectedSlotAppearance))
+      },
+      set: { newValue in
+        updateSelectedSlotAppearance { appearance in
+          setValue(&appearance, clamp(newValue))
+        }
+      }
+    )
+  }
+
+  private func sliderRow(
+    _ label: String, _ valueText: String,
+    _ value: Binding<Double>, _ range: ClosedRange<Double>
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text(label).font(.custom("IndieFlower", size: 22)).foregroundStyle(Color("colorText"))
+        Spacer()
+        Text(valueText).font(.custom("IndieFlower", size: 20)).foregroundStyle(
+          Color("colorPrimary"))
+      }
+      Slider(value: value, in: range).tint(Color("colorPrimary"))
+    }
+  }
+
+  private func sliderRow(
+    _ label: String, _ valueText: String,
+    _ value: Binding<CGFloat>, _ range: ClosedRange<CGFloat>
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Text(label).font(.custom("IndieFlower", size: 22)).foregroundStyle(Color("colorText"))
+        Spacer()
+        Text(valueText).font(.custom("IndieFlower", size: 20)).foregroundStyle(
+          Color("colorPrimary"))
+      }
+      Slider(value: value, in: range).tint(Color("colorPrimary"))
+    }
+  }
+
+  private func swatchTile<Swatch: View>(
+    name: String,
+    isActive: Bool,
+    @ViewBuilder swatch: () -> Swatch
+  ) -> some View {
+    VStack(spacing: 6) {
+      swatch()
+      Text(name)
+        .font(.custom("IndieFlower", size: 12))
+        .foregroundStyle(Color("colorText"))
+        .lineLimit(1)
+    }
+    .padding(8)
+    .frame(maxWidth: .infinity)
+    .background(
+      isActive
+        ? Color("colorPrimary").opacity(0.12)
+        : Color("colorBackground").opacity(0.7)
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 13))
+    .overlay(
+      RoundedRectangle(cornerRadius: 13)
+        .stroke(
+          isActive ? Color("colorPrimary") : Color("colorText").opacity(0.1),
+          lineWidth: isActive ? 2.5 : 1.5
+        )
+    )
+  }
+
+  private func customColorSwatch(selection: Binding<Color>) -> some View {
+    ZStack {
+      LinearGradient(
+        colors: [
+          Color(hex: "#D98C7B"),
+          Color(hex: "#D8B36A"),
+          Color(hex: "#A8C28A"),
+          Color(hex: "#7FAEB5"),
+          Color(hex: "#A890C8"),
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      .saturation(0.72)
+      .brightness(0.03)
+      .overlay(
+        RoundedRectangle(cornerRadius: 10)
+          .fill(Color.white.opacity(0.18))
+          .blur(radius: 10)
+          .padding(8)
+      )
+
+      SettingsColorPanelButtonBridge(selection: selection)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    .aspectRatio(1, contentMode: .fit)
+    .clipShape(RoundedRectangle(cornerRadius: 10))
+    .contentShape(RoundedRectangle(cornerRadius: 10))
+    .settingsPointingHandCursor()
+    .overlay(
+      RoundedRectangle(cornerRadius: 10)
+        .stroke(Color("colorText").opacity(0.12), lineWidth: 1)
+    )
+  }
+
+  @ViewBuilder
+  private func alignmentOptionButton(_ alignment: OverlayTextAlignment, label: String) -> some View
+  {
+    let isSelected = selectedSlotAppearance.textAlignment == alignment
+
+    Button {
+      updateSelectedSlotAppearance { appearance in
+        appearance.textAlignment = alignment
+      }
+    } label: {
+      Text(label)
+        .font(.custom("CrimsonText-Regular", size: 17))
+        .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .background(isSelected ? Color("colorPrimary") : Color("colorBackground"))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+          RoundedRectangle(cornerRadius: 12)
+            .stroke(
+              isSelected ? Color("colorPrimary") : Color("colorText").opacity(0.14),
+              lineWidth: isSelected ? 2.5 : 1.5
+            )
+        )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func readabilitySlider(
+    label: String,
+    valueText: String,
+    value: Binding<CGFloat>,
+    range: ClosedRange<CGFloat>,
+    step: CGFloat,
+    minimumText: String,
+    maximumText: String
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(alignment: .firstTextBaseline) {
+        FieldLabel(text: label)
+        Spacer()
+        Text(valueText)
+          .font(.custom("CrimsonText-Regular", size: 16))
+          .foregroundStyle(Color("colorPrimary"))
+      }
+
+      Slider(
+        value: value,
+        in: range,
+        step: step
+      )
+      .tint(Color("colorPrimary"))
+
+      HStack {
+        Text(minimumText)
+        Spacer()
+        Text(maximumText)
+      }
+      .font(.custom("CrimsonText-Regular", size: 14))
+      .foregroundStyle(Color("colorText").opacity(0.55))
+    }
   }
 }
 
@@ -1457,7 +2032,7 @@ private struct SystemTabContent: View {
     )
   }
 
-  private var autoScrollWPMSliderBinding: Binding<Double> {
+  private var autoScrollSpeedSliderBinding: Binding<Double> {
     Binding(
       get: { ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM) },
       set: { appState.settings.autoScrollWPM = ManualScrollConfiguration.clampedWPM($0) }
@@ -1481,6 +2056,46 @@ private struct SystemTabContent: View {
     Text(text)
       .font(.custom("CrimsonText-Regular", size: 14))
       .foregroundStyle(Color("colorText").opacity(0.66))
+  }
+
+  @ViewBuilder
+  private func voiceScrollModeButton(_ mode: VoiceScrollMode) -> some View {
+    let isActive = appState.settings.voiceScrollMode == mode
+
+    Button {
+      appState.settings.voiceScrollMode = mode
+    } label: {
+      VStack(alignment: .leading, spacing: 5) {
+        Text(mode.settingsTitle)
+          .font(.custom("CrimsonText-Regular", size: 17))
+          .foregroundStyle(Color("colorText"))
+        Text(mode.settingsDescription)
+          .font(.custom("CrimsonText-Regular", size: 13))
+          .foregroundStyle(Color("colorText").opacity(0.62))
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 12)
+      .background(
+        isActive
+          ? Color("colorPrimary").opacity(0.1)
+          : Color("colorBackground").opacity(0.75)
+      )
+      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .overlay(
+        RoundedRectangle(cornerRadius: 14)
+          .stroke(
+            isActive
+              ? Color("colorPrimary")
+              : Color("colorText").opacity(0.14),
+            lineWidth: isActive ? 3 : 2
+          )
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 14))
+    }
+    .buttonStyle(.plain)
+    .settingsPointingHandCursor()
   }
 
   var body: some View {
@@ -1544,19 +2159,19 @@ private struct SystemTabContent: View {
                   .font(.custom("CrimsonText-Regular", size: 18))
                   .foregroundStyle(Color("colorText"))
                 Text(
-                  "Sets the physical scroll speed before you begin and still drives Manual mode when Voice-Sync is off."
+                  "Sets the manual reading pace before you begin and still drives Manual mode when Voice-Sync is off."
                 )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
               }
               Spacer()
-              Text("\(Int(autoScrollWPMSliderBinding.wrappedValue.rounded())) pt/s")
+              Text("\(Int(autoScrollSpeedSliderBinding.wrappedValue.rounded())) pt/s")
                 .font(.custom("CrimsonText-Regular", size: 18))
                 .foregroundStyle(Color("colorPrimary"))
             }
 
             Slider(
-              value: autoScrollWPMSliderBinding,
+              value: autoScrollSpeedSliderBinding,
               in: ManualScrollConfiguration.minimumWPM...ManualScrollConfiguration.maximumWPM,
               step: 1
             )
@@ -1577,43 +2192,32 @@ private struct SystemTabContent: View {
       SettingsPanel {
         SectionTitle(text: "During your Session")
         VStack(alignment: .leading, spacing: 16) {
-          HStack {
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Voice-activated tracking")
-                .font(.custom("CrimsonText-Regular", size: 18))
-                .foregroundStyle(Color("colorText"))
-              Text("Moves only when human speech is recognized and keeps script anchored smoothly.")
-                .font(.custom("CrimsonText-Regular", size: 14))
-                .foregroundStyle(Color("colorText").opacity(0.6))
-            }
-            Spacer()
-            Toggle("", isOn: $appState.settings.voiceSyncEnabled)
-              .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
-              .labelsHidden()
-          }
-
           VStack(alignment: .leading, spacing: 14) {
             HStack {
               VStack(alignment: .leading, spacing: 4) {
-                Text("Voice Follow")
+                Text("Voice scroll mode")
                   .font(.custom("CrimsonText-Regular", size: 18))
                   .foregroundStyle(Color("colorText"))
                 Text(
-                  "Moves with speech, uses your configured points-per-second speed as a base, and keeps the script anchored smoothly."
+                  "Choose manual-speed scrolling, sound-triggered movement, or word-by-word tracking."
                 )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
               }
               Spacer()
             }
-          }
-          .disabled(!appState.settings.voiceSyncEnabled)
-          .opacity(appState.settings.voiceSyncEnabled ? 1.0 : 0.6)
 
-          // Sensitivity — disabled when voice tracking is off
+            VStack(spacing: 8) {
+              ForEach(VoiceScrollMode.allCases, id: \.self) { mode in
+                voiceScrollModeButton(mode)
+              }
+            }
+          }
+
+          // Sensitivity affects microphone-driven scroll modes.
           VStack(alignment: .leading, spacing: 10) {
-            systemFieldLabel("Speech Sensitivity")
+            let usesSpeechSensitivity = appState.settings.voiceScrollMode.usesSpeechSensitivity
+            systemFieldLabel("Mic Sensitivity")
             HStack(spacing: 8) {
               ForEach(SpeechSensitivity.allCases, id: \.self) { level in
                 let isActive = appState.settings.speechSensitivity == level
@@ -1624,12 +2228,12 @@ private struct SystemTabContent: View {
                     .font(.custom("CrimsonText-Regular", size: 17))
                     .foregroundStyle(
                       Color("colorText")
-                        .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.35)
+                        .opacity(usesSpeechSensitivity ? 1 : 0.35)
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(
-                      isActive && appState.settings.voiceSyncEnabled
+                      isActive && usesSpeechSensitivity
                         ? Color("colorPrimary").opacity(0.1)
                         : Color("colorBackground").opacity(0.75)
                     )
@@ -1637,24 +2241,26 @@ private struct SystemTabContent: View {
                     .overlay(
                       RoundedRectangle(cornerRadius: 12)
                         .stroke(
-                          isActive && appState.settings.voiceSyncEnabled
+                          isActive && usesSpeechSensitivity
                             ? Color("colorPrimary")
                             : Color("colorText").opacity(0.14),
-                          lineWidth: isActive && appState.settings.voiceSyncEnabled ? 3 : 2
+                          lineWidth: isActive && usesSpeechSensitivity ? 3 : 2
                         ))
                 }
                 .buttonStyle(.plain)
-                .disabled(!appState.settings.voiceSyncEnabled)
+                .disabled(!usesSpeechSensitivity)
               }
             }
-            Text("Keeps the scroll tied to your natural pace instead of forcing a robotic cadence.")
-              .font(.custom("CrimsonText-Regular", size: 14))
-              .foregroundStyle(
-                Color("colorText")
-                  .opacity(appState.settings.voiceSyncEnabled ? 0.64 : 0.3))
+            Text(
+              "Applies to Sound-based and Word tracking modes. Classic uses the manual scroll speed."
+            )
+            .font(.custom("CrimsonText-Regular", size: 14))
+            .foregroundStyle(
+              Color("colorText")
+                .opacity(usesSpeechSensitivity ? 0.64 : 0.3))
           }
-          .opacity(appState.settings.voiceSyncEnabled ? 1 : 0.5)
-          .animation(.easeInOut(duration: 0.2), value: appState.settings.voiceSyncEnabled)
+          .opacity(appState.settings.voiceScrollMode.usesSpeechSensitivity ? 1 : 0.5)
+          .animation(.easeInOut(duration: 0.2), value: appState.settings.voiceScrollMode)
 
           Divider().opacity(0.2)
 
@@ -1703,7 +2309,7 @@ private struct SystemTabContent: View {
         SectionTitle(text: "Controls")
         VStack(spacing: 8) {
           shortcutRow("Toggle Notch", $appState.settings.shortcutToggleNotch)
-          shortcutRow("Toggle Pill", $appState.settings.shortcutTogglePill)
+          shortcutRow("Toggle Pill Window", $appState.settings.shortcutTogglePill)
           shortcutRow("Space to Pause", $appState.settings.shortcutToggleVoiceSync)
           shortcutRow("Scroll Up", $appState.settings.shortcutScrollUp)
           shortcutRow("Scroll Down", $appState.settings.shortcutScrollDown)
@@ -1721,7 +2327,7 @@ private struct SystemTabContent: View {
                 .font(.custom("CrimsonText-Regular", size: 18))
                 .foregroundStyle(Color("colorText"))
               Text(
-                "Turn this off if you want notch or pill overlay to appear in screenshots, recordings, or video calls."
+                "Turn this off if you want notch or Pill Window overlay to appear in screenshots, recordings, or video calls."
               )
               .font(.custom("CrimsonText-Regular", size: 14))
               .foregroundStyle(Color("colorText").opacity(0.6))

@@ -23,6 +23,7 @@ struct DocumentLibraryView: View {
   var onEdit: (Script) -> Void
   var onNewScript: () -> Void
   var onCast: (UUID) -> Void
+  var onCastWithSatellite: (UUID, [SatelliteLaunchSelection]) -> Void = { _, _ in }
   var onImportScript: () -> Void
 
   @State private var isDragTargeted: Bool = false
@@ -34,6 +35,9 @@ struct DocumentLibraryView: View {
   @State private var collectionManagerScriptID: UUID? = nil
   @State private var isCreatingCollectionFromManager = false
   @State private var newCollectionName = ""
+  @State private var satelliteCastScriptID: UUID? = nil
+  @State private var isSatellitePanelPresented = false
+  @State private var satelliteLaunchPanelState = ScriptEditorSatelliteLaunchPanelState(sections: [])
 
   var filteredScripts: [ScriptMeta] {
     DocumentLibraryFilterLogic.filteredScripts(
@@ -95,7 +99,7 @@ struct DocumentLibraryView: View {
             .font(.custom("IndieFlower", size: scaled(36)))
             .foregroundStyle(Color("colorText"))
           Text(pageSubtitle)
-            .font(.custom("Inter-Regular", size: scaled(14)))
+            .font(.custom("CrimsonText-Regular", size: scaled(14)))
             .foregroundStyle(Color("colorMuted"))
         }
         Spacer()
@@ -158,6 +162,8 @@ struct DocumentLibraryView: View {
         deleteConfirmationOverlay(deleteConfirmation)
       } else if let collectionManagerScriptID {
         collectionManagerOverlay(scriptID: collectionManagerScriptID)
+      } else if isSatellitePanelPresented {
+        satelliteLaunchOverlay
       }
     }
     .onChange(of: visibleScriptIDs) { _, newVisibleIDs in
@@ -216,6 +222,13 @@ struct DocumentLibraryView: View {
       },
       onCast: {
         onCast(meta.id)
+      },
+      onRequestCastWithSatellite: {
+        satelliteCastScriptID = meta.id
+        satelliteLaunchPanelState = ScriptEditorSatelliteLaunchPanelState.make(
+          enabledSatelliteCount: appState.settings.clampedMaxPillCount
+        )
+        isSatellitePanelPresented = true
       },
       onDelete: {
         if deletionIsAvailable {
@@ -324,6 +337,34 @@ struct DocumentLibraryView: View {
         }
       }
     )
+  }
+
+  private var satelliteLaunchOverlay: some View {
+    ZStack {
+      Color.black.opacity(0.22)
+        .ignoresSafeArea()
+        .onTapGesture {
+          isSatellitePanelPresented = false
+        }
+
+      ScriptEditorSatelliteLaunchPanel(
+        state: $satelliteLaunchPanelState,
+        scripts: appState.scripts,
+        onLaunch: {
+          guard let scriptID = satelliteCastScriptID else { return }
+          let selections = satelliteLaunchPanelState.launchRequest(
+            scripts: appState.scripts
+          ).satelliteSelections
+          isSatellitePanelPresented = false
+          satelliteCastScriptID = nil
+          onCastWithSatellite(scriptID, selections)
+        },
+        onCancel: {
+          isSatellitePanelPresented = false
+          satelliteCastScriptID = nil
+        }
+      )
+    }
   }
 
   @ViewBuilder

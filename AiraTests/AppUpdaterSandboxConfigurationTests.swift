@@ -22,7 +22,7 @@ struct AppUpdaterSandboxConfigurationTests {
     #expect(entitlements["com.apple.security.app-sandbox"] as? Bool == true)
     #expect(entitlements["com.apple.security.network.client"] as? Bool == true)
     #expect(entitlements["com.apple.security.device.audio-input"] as? Bool == true)
-    #expect(entitlements["com.apple.security.files.user-selected.read-only"] as? Bool == true)
+    #expect(entitlements["com.apple.security.files.user-selected.read-write"] as? Bool == true)
 
     let machLookupNames = try #require(
       entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String]
@@ -58,7 +58,7 @@ struct AppUpdaterSandboxConfigurationTests {
 
     #expect(entitlements["com.apple.security.app-sandbox"] as? Bool == true)
     #expect(entitlements["com.apple.security.device.audio-input"] as? Bool == true)
-    #expect(entitlements["com.apple.security.files.user-selected.read-only"] as? Bool == true)
+    #expect(entitlements["com.apple.security.files.user-selected.read-write"] as? Bool == true)
     #expect(entitlements["com.apple.security.network.client"] == nil)
     #expect(entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] == nil)
 

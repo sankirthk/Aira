@@ -33,7 +33,7 @@ struct CuePanelView: View {
         Text(
           isReadOnly
             ? "This script is live in an active session. End the session before inserting cues or editing text."
-            : "Performance cue insertion is available directly from this panel while you draft."
+            : "You can also make your own cues by typing them inside square brackets, like [Look up]."
         )
         .font(.custom("CrimsonText-Regular", size: 15))
         .foregroundStyle(Color("colorBackground").opacity(0.8))

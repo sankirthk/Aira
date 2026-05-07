@@ -2,6 +2,83 @@ import AppKit
 import Combine
 import Foundation
 
+struct PillLaunchPlan {
+  let slotIndex: Int
+  let mode: PillContentMode
+  let script: Script
+}
+
+struct SatelliteLaunchSelection: Equatable {
+  let slotIndex: Int
+  let mode: PillContentMode
+}
+
+enum OverlaySessionLaunchIntent: Equatable {
+  case notchOnly
+  case mirroredSatellites(count: Int)
+  case assignedSatellites([SatelliteLaunchSelection])
+
+  var satelliteSelections: [SatelliteLaunchSelection] {
+    switch self {
+    case .notchOnly:
+      return []
+    case .mirroredSatellites(let count):
+      guard count > 0 else { return [] }
+      return (1...count).map { slotIndex in
+        SatelliteLaunchSelection(slotIndex: slotIndex, mode: .voiceSync)
+      }
+    case .assignedSatellites(let selections):
+      return selections
+    }
+  }
+
+  var allowsNotchUndock: Bool {
+    satelliteSelections.isEmpty
+  }
+}
+
+enum PillLaunchPolicy {
+  static func canLaunchPill(with script: Script) -> Bool {
+    !script.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  static func resolvedLaunchPlans(
+    for selections: [SatelliteLaunchSelection],
+    fallbackScript: Script,
+    loadScript: (UUID) -> Script?
+  ) -> [PillLaunchPlan] {
+    selections.compactMap { selection in
+      guard
+        let script = resolvedScript(
+          for: selection.mode,
+          fallbackScript: fallbackScript,
+          loadScript: loadScript
+        )
+      else {
+        return nil
+      }
+      guard canLaunchPill(with: script) else { return nil }
+      return PillLaunchPlan(
+        slotIndex: selection.slotIndex,
+        mode: selection.mode,
+        script: script
+      )
+    }
+  }
+
+  private static func resolvedScript(
+    for mode: PillContentMode,
+    fallbackScript: Script,
+    loadScript: (UUID) -> Script?
+  ) -> Script? {
+    guard case .manual(let scriptID) = mode else {
+      return fallbackScript
+    }
+
+    return loadScript(scriptID)
+  }
+}
+
 /// Entry point for creating and managing all overlay windows for a session.
 @MainActor
 class OverlayWindowController {
@@ -47,8 +124,9 @@ class OverlayWindowController {
   private func bindAppState() {
     settingsCancellable = appState?.$settings
       .sink { [weak self] settings in
+        self?.voiceSync.voiceScrollMode = settings.voiceScrollMode
         self?.notchController?.updateSessionBehavior(
-          voiceSyncEnabled: settings.voiceSyncEnabled,
+          voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
           spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
           pauseOnHoverEnabled: settings.pauseOnHoverEnabled
         )
@@ -56,7 +134,7 @@ class OverlayWindowController {
           enabled: settings.spokenWordHighlightingEnabled)
         for pillController in self?.pillControllers ?? [] {
           pillController.updateSessionBehavior(
-            voiceSyncEnabled: settings.voiceSyncEnabled,
+            voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
             spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
             pauseOnHoverEnabled: settings.pauseOnHoverEnabled
           )
@@ -70,13 +148,75 @@ class OverlayWindowController {
     script: Script, appearance: OverlayAppearance,
     countdownDuration: Int, voiceSyncEnabled: Bool = true,
     autoScrollWPM: Double = 0,
-    voiceSyncMode: VoiceSyncMode = .voice,
-    pillModes: [PillContentMode] = []
+    voiceSyncMode: VoiceSyncMode = .voice
   ) {
+    presentSession(
+      script: script,
+      appearance: appearance,
+      countdownDuration: countdownDuration,
+      voiceSyncEnabled: voiceSyncEnabled,
+      autoScrollWPM: autoScrollWPM,
+      voiceSyncMode: voiceSyncMode,
+      launchIntent: .notchOnly
+    )
+  }
+
+  func presentMirroredSatelliteSession(
+    script: Script,
+    appearance: OverlayAppearance,
+    countdownDuration: Int,
+    satelliteCount: Int,
+    voiceSyncEnabled: Bool = true,
+    autoScrollWPM: Double = 0,
+    voiceSyncMode: VoiceSyncMode = .voice
+  ) {
+    presentSession(
+      script: script,
+      appearance: appearance,
+      countdownDuration: countdownDuration,
+      voiceSyncEnabled: voiceSyncEnabled,
+      autoScrollWPM: autoScrollWPM,
+      voiceSyncMode: voiceSyncMode,
+      launchIntent: .mirroredSatellites(count: satelliteCount)
+    )
+  }
+
+  func presentAssignedSatelliteSession(
+    script: Script, appearance: OverlayAppearance,
+    countdownDuration: Int, voiceSyncEnabled: Bool = true,
+    autoScrollWPM: Double = 0,
+    voiceSyncMode: VoiceSyncMode = .voice,
+    satelliteSelections: [SatelliteLaunchSelection]
+  ) {
+    presentSession(
+      script: script,
+      appearance: appearance,
+      countdownDuration: countdownDuration,
+      voiceSyncEnabled: voiceSyncEnabled,
+      autoScrollWPM: autoScrollWPM,
+      voiceSyncMode: voiceSyncMode,
+      launchIntent: .assignedSatellites(satelliteSelections)
+    )
+  }
+
+  private func presentSession(
+    script: Script,
+    appearance: OverlayAppearance,
+    countdownDuration: Int,
+    voiceSyncEnabled: Bool,
+    autoScrollWPM: Double,
+    voiceSyncMode: VoiceSyncMode,
+    launchIntent: OverlaySessionLaunchIntent
+  ) {
+    let satelliteSelections = launchIntent.satelliteSelections
+    let launchTrace = SessionLaunchTrace(label: "presentSession")
+    launchTrace.mark("presentSession.begin")
     endSession()
+    launchTrace.mark("presentSession.afterEndSession")
     prepareSharedSession(script: script)
+    launchTrace.mark("presentSession.afterPrepareSharedSession")
     AiraLogger.shared.info(
-      "Started session scriptId=\(script.id.uuidString) pills=\(pillModes.count)",
+      "Started session scriptId=\(script.id.uuidString) pills=\(satelliteSelections.count)",
       category: "session")
 
     // Launch notch window
@@ -96,17 +236,29 @@ class OverlayWindowController {
       scrollCoordinator: scrollCoordinator,
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync, audioMonitor: audioMonitor,
-      canUndock: pillModes.isEmpty,
+      launchTrace: launchTrace,
+      canUndock: launchIntent.allowsNotchUndock,
       onEndSession: { [weak self] in
         self?.endSession()
       })
     notchController = notch
 
     // Launch any pill windows
-    for mode in pillModes {
-      let pillScript = resolvedScript(for: mode, fallbackScript: script)
+    let pillLaunchPlans = PillLaunchPolicy.resolvedLaunchPlans(
+      for: satelliteSelections,
+      fallbackScript: script,
+      loadScript: { [weak self] scriptID in
+        self?.loadScript(id: scriptID)
+      }
+    )
+
+    for plan in pillLaunchPlans {
+      let resolvedAppearance =
+        appState?.settings.effectiveSatelliteAppearance(
+          forSlot: plan.slotIndex, fallback: appearance)
+        ?? appearance
       addPill(
-        mode: mode, script: pillScript, appearance: appearance,
+        mode: plan.mode, script: plan.script, appearance: resolvedAppearance,
         countdownDuration: countdownDuration, voiceSyncEnabled: voiceSyncEnabled,
         spokenWordHighlightingEnabled: appState?.settings.spokenWordHighlightingEnabled ?? false,
         pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
@@ -118,13 +270,22 @@ class OverlayWindowController {
     startSessionKeyboardMonitorsIfNeeded()
   }
 
+  @discardableResult
   func addPill(
     mode: PillContentMode, script: Script, appearance: OverlayAppearance,
     countdownDuration: Int, voiceSyncEnabled: Bool = true,
     spokenWordHighlightingEnabled: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0, voiceSyncMode: VoiceSyncMode = .voice
-  ) {
+  ) -> Bool {
+    guard PillLaunchPolicy.canLaunchPill(with: script) else {
+      AiraLogger.shared.info(
+        "Skipped pill launch for empty scriptId=\(script.id.uuidString)",
+        category: "overlay"
+      )
+      return false
+    }
+
     if !hasActiveOverlays {
       prepareSharedSession(script: script)
     }
@@ -162,9 +323,11 @@ class OverlayWindowController {
     appState?.stealthWarning = !stealthIsHonored
     syncPresenterSessionState()
     startSessionKeyboardMonitorsIfNeeded()
+    return true
   }
 
   func endSession() {
+    let shouldRestoreManagerWindow = hasActiveOverlays
     AiraLogger.shared.info(
       "Ended session notchActive=\(notchController != nil) pillCount=\(pillControllers.count)",
       category: "session"
@@ -181,6 +344,9 @@ class OverlayWindowController {
     pillControllers = []
     stopSessionKeyboardMonitors()
     appState?.setPresenterSessionState(isActive: false, scriptIDs: [])
+    if shouldRestoreManagerWindow {
+      AppWindowCoordinator.restoreManagerWindow()
+    }
   }
 
   func closeLastPill() {
@@ -208,25 +374,6 @@ class OverlayWindowController {
     return notchStealth && pillStealth
   }
 
-  private func resolvedScript(for mode: PillContentMode, fallbackScript: Script) -> Script {
-    guard case .manual(let scriptID) = mode else {
-      return fallbackScript
-    }
-
-    guard let appState else {
-      return fallbackScript
-    }
-
-    do {
-      return try appState.readScript(id: scriptID)
-    } catch {
-      AiraLogger.shared.error(
-        error, category: "overlay",
-        context: "Failed to load manual pill script \(scriptID.uuidString)")
-      return fallbackScript
-    }
-  }
-
   private func removePill(_ pill: PillWindowController) {
     pill.close()
     pillControllers.removeAll { $0 === pill }
@@ -249,7 +396,8 @@ class OverlayWindowController {
   }
 
   private func prepareSharedSession(script: Script) {
-    voiceSync.loadScript(text: script.body)
+    voiceSync.loadScript(text: script.body, scriptID: script.id)
+    voiceSync.voiceScrollMode = appState?.settings.voiceScrollMode ?? .wordTracking
     audioMonitor.sensitivity = appState?.settings.speechSensitivity ?? .medium
     audioMonitor.reset()
     playheadCoordinator.beginSession()
@@ -266,7 +414,7 @@ class OverlayWindowController {
       return
     }
 
-    voiceSync.loadScript(text: pillScript.body)
+    voiceSync.loadScript(text: pillScript.body, scriptID: pillScript.id)
     audioMonitor.reset()
     playheadCoordinator.beginSession()
     scrollCoordinator.clearPrimaryMetrics()

@@ -52,14 +52,14 @@ Tests live in the `AiraTests` XCTest target. A task is **not done** until its te
 - **Empty inputs:** `tokenize("")`, `findMatch` with empty `spokenWindow`, `loadIndex` on a fresh install.
 - **Boundary values:** `nudgeScroll` clamped at 0 and 1; `minimumOverlap` threshold; `maxPillCount` cap at 2.
 - **Codable failure:** corrupt or missing JSON file — stores must throw, not crash.
-- **Nil/missing resources:** `SFSpeechRecognizer` unavailable; `AVAudioEngine` fails to start; `NSScreen.screens` empty.
+- **Nil/missing resources:** bundled WhisperKit model unavailable; `AVAudioEngine` fails to start; `NSScreen.screens` empty.
 - **Concurrent mutation:** two rapid `presentSession` calls — second must not create a duplicate notch window.
 - **Script count extremes:** 0 scripts (empty library); 1 word script; very long script (5000+ words).
 
 ### 2.3 Test isolation rules
 
 - **No real file system in unit tests.** Inject a temp directory via `FileManager` and clean up in `tearDown`. Never write to `~/Library/Application Support/Aira/` in tests.
-- **No real `SFSpeechRecognizer` in unit tests.** Test `VoiceSyncMatching` (pure functions) and engine state machines in isolation.
+- **No real WhisperKit/Core ML model loading in unit tests.** Test `VoiceSyncMatching` (pure functions), fake `SpeechRecognitionBackend`, and engine state machines in isolation.
 - **No `Task.sleep` in tests.** Use `XCTestExpectation` with explicit `fulfill()` callbacks.
 - **No `@MainActor` shortcuts.** If a test requires main-thread execution, annotate the test function with `@MainActor`, not `DispatchQueue.main.sync`.
 
@@ -133,8 +133,8 @@ func test_presentSession_sameScriptTwice_resumesFromLastOffset()
 
 ### 4.2 On-device speech recognition — REQ-006
 
-- `request.requiresOnDeviceRecognition = true` must always be set on `SFSpeechAudioBufferRecognitionRequest`. This is non-negotiable.
-- Do not add a fallback that silently sends audio to Apple's servers if on-device is unavailable. If on-device recognition is unavailable, surface an error state; do not degrade to server recognition.
+- WhisperKit must load bundled app resources with downloads disabled, using `openai_whisper-base.en`.
+- Do not add a fallback that sends audio to Apple's servers or downloads a model at runtime. If the bundled model cannot load, surface an error state; do not degrade to cloud recognition.
 - Audio capture (`AVAudioEngine` input tap) must be stopped and released in `VoiceSyncEngine.stop()`. Verify this is called by every `endSession()` path, including closure-based session endings from overlay context menus.
 
 ### 4.3 No network calls in v1
@@ -148,10 +148,10 @@ func test_presentSession_sameScriptTwice_resumesFromLastOffset()
 - Import via `NSOpenPanel` — the OS provides the sandboxed URL. Do not read arbitrary file paths from user input.
 - Maximum import file size: 10 MB (`ImportError.fileTooLarge`). Always enforce this before reading file contents into memory.
 
-### 4.5 User permissions (microphone + speech recognition)
+### 4.5 User permissions (microphone)
 
-- Request `SFSpeechRecognizer.requestAuthorization` and `AVAudioApplication.requestRecordPermission` before starting the engine, not at app launch.
-- If either permission is denied, surface a clear message and do not attempt to start the engine. Do not crash or silently fail.
+- Request `AVAudioApplication.requestRecordPermission` before starting the engine, not at app launch.
+- If microphone permission is denied, surface a clear message and do not attempt to start the engine. Do not crash or silently fail.
 - `AXIsProcessTrustedWithOptions` (Accessibility) is required for `CGEvent.tapCreate`. Prompt for it when `VoiceSyncKeyboardMonitor.start(...)` is called, not at app launch.
 
 ---
@@ -197,7 +197,7 @@ Before marking any task `[x]` in `todo.md`, verify:
 - [ ] DRY — is there any logic duplication that should be extracted to `Shared/` or a utility enum?
 - [ ] Concurrency — are all `@MainActor` boundaries respected? Are audio-thread callbacks dispatched safely?
 - [ ] Memory — are closures capturing `[weak self]`? Are NSEvent monitors removed?
-- [ ] Security — is stealth verified before setting `sessionActive`? Is `requiresOnDeviceRecognition = true` still set?
+- [ ] Security — is stealth verified before setting `sessionActive`? Is WhisperKit loading only the bundled model with runtime downloads disabled?
 - [ ] Performance — is there any new `Timer`, polling loop, or `DispatchQueue.asyncAfter` where reactive state should be used instead?
-- [ ] Bundle size — no new third-party packages?
+- [ ] Bundle size — does release size include the approved bundled WhisperKit model and stay within the measured gate?
 - [ ] Error handling — are all thrown errors surfaced to the user, not silently swallowed?

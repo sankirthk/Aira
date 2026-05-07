@@ -654,7 +654,6 @@ struct AppStateTests {
     appState.settings.appearanceMode = .light
     appState.settings.managerTypography = .small
     appState.settings.hasCompletedInitialPermissionPrompt = true
-    appState.settings.pillsEnabled = true
     appState.settings.maxPillCount = 2
     appState.settings.shortcutToggleNotch = "⌘⌥N"
     appState.settings.shortcutTogglePill = "⌘⌥P"

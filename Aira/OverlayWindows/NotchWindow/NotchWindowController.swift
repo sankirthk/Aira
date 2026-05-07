@@ -20,6 +20,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
   private var voiceSyncMode: VoiceSyncMode = .voice
   private var voiceSync: VoiceSyncEngine?
   private var audioMonitor: AudioLevelMonitor?
+  private var launchTrace: SessionLaunchTrace?
   private var onEndSession: (() -> Void)?
   private var screenCaptureExclusionEnabled: Bool = true
   private var canUndock: Bool = true
@@ -51,9 +52,11 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     scrollCoordinator: SessionScrollCoordinator,
     voiceSyncMode: VoiceSyncMode = .voice,
     voiceSync: VoiceSyncEngine, audioMonitor: AudioLevelMonitor,
+    launchTrace: SessionLaunchTrace? = nil,
     canUndock: Bool = true,
     onEndSession: @escaping () -> Void
   ) {
+    launchTrace?.mark("notch.present.begin")
     currentAppearance = appearance
     currentScript = script
     defaultAppearance = .default
@@ -71,6 +74,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.launchTrace = launchTrace
     self.canUndock = canUndock
     self.isUndocked = false
     self.isUndockedFullScreen = false
@@ -79,6 +83,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     self.onEndSession = onEndSession
 
     let screen = builtInScreen
+    launchTrace?.mark("notch.screenResolved")
     let notchSize = Self.notchSize(for: screen)
     let notchHeight = notchSize.height
 
@@ -88,6 +93,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
       backing: .buffered,
       defer: false
     )
+    launchTrace?.mark("notch.panelCreated")
 
     panel.sharingType = OverlayStealthConfiguration.configuredSharingType(
       screenCaptureExclusionEnabled: screenCaptureExclusionEnabled)
@@ -101,6 +107,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     panel.delegate = self
 
     let hostingView = NSHostingView(rootView: makeContentView(for: script, notchSize: notchSize))
+    launchTrace?.mark("notch.hostingViewCreated")
     panel.contentView = hostingView
     updateWindowInteractionState(for: panel)
 
@@ -114,6 +121,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     )
 
     panel.orderFrontRegardless()
+    launchTrace?.mark("notch.orderedFront")
     self.panel = panel
     self.hostingView = hostingView
 
@@ -132,6 +140,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     resizeStartFrame = nil
     currentAppearance = .default
     defaultAppearance = .default
+    launchTrace = nil
     canUndock = true
     isUndocked = false
     isUndockedFullScreen = false
@@ -349,6 +358,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync ?? VoiceSyncEngine(),
       audioMonitor: audioMonitor ?? AudioLevelMonitor(),
+      launchTrace: launchTrace,
       defaultAppearance: defaultAppearance,
       onDockToggle: { [weak self] in
         self?.toggleDocking()
@@ -358,6 +368,9 @@ class NotchWindowController: NSObject, NSWindowDelegate {
       },
       onPauseToggle: { [weak self] in
         self?.voiceSync?.togglePause()
+      },
+      onMicrophoneToggle: { [weak self] in
+        self?.voiceSync?.toggleMicrophoneMute()
       },
       onEndSession: { [weak self] in
         self?.onEndSession?()

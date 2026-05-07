@@ -1,7 +1,6 @@
 import AVFoundation
 import AppKit
 import ApplicationServices
-import Speech
 
 @MainActor
 final class AppPermissionCoordinator {
@@ -15,8 +14,6 @@ final class AppPermissionCoordinator {
 
   private var didRequestLaunchPermissions = false
   private let settingsStore: SettingsStore
-  private let speechPermissionState: () -> PermissionState
-  private let requestSpeechPermission: (@escaping @Sendable (PermissionState) -> Void) -> Void
   private let microphonePermissionState: () -> PermissionState
   private let requestMicrophonePermission: (@escaping @Sendable (Bool) -> Void) -> Void
   private let isAccessibilityTrusted: () -> Bool
@@ -24,35 +21,6 @@ final class AppPermissionCoordinator {
 
   init(
     settingsStore: SettingsStore? = nil,
-    speechPermissionState: @escaping () -> PermissionState = {
-      switch SFSpeechRecognizer.authorizationStatus() {
-      case .authorized:
-        return .granted
-      case .notDetermined:
-        return .undetermined
-      case .denied, .restricted:
-        return .denied
-      @unknown default:
-        return .denied
-      }
-    },
-    requestSpeechPermission: @escaping (@escaping @Sendable (PermissionState) -> Void) -> Void = {
-      completion in
-      SFSpeechRecognizer.requestAuthorization { status in
-        let mappedStatus: PermissionState
-        switch status {
-        case .authorized:
-          mappedStatus = .granted
-        case .notDetermined:
-          mappedStatus = .undetermined
-        case .denied, .restricted:
-          mappedStatus = .denied
-        @unknown default:
-          mappedStatus = .denied
-        }
-        completion(mappedStatus)
-      }
-    },
     microphonePermissionState: @escaping () -> PermissionState = {
       switch AVAudioApplication.shared.recordPermission {
       case .granted:
@@ -80,8 +48,6 @@ final class AppPermissionCoordinator {
     }
   ) {
     self.settingsStore = settingsStore ?? SettingsStore()
-    self.speechPermissionState = speechPermissionState
-    self.requestSpeechPermission = requestSpeechPermission
     self.microphonePermissionState = microphonePermissionState
     self.requestMicrophonePermission = requestMicrophonePermission
     self.isAccessibilityTrusted = isAccessibilityTrusted
@@ -103,10 +69,6 @@ final class AppPermissionCoordinator {
 
     if !isAccessibilityTrusted() {
       promptForAccessibilityTrust()
-    }
-
-    if speechPermissionState() == .undetermined {
-      requestSpeechPermission { _ in }
     }
 
     if microphonePermissionState() == .undetermined {

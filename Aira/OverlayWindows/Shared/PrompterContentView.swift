@@ -27,6 +27,7 @@ struct PrompterContentView: View {
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
+  let launchTrace: SessionLaunchTrace?
 
   @State private var sessionStarted: Bool = false
   @State private var isPointerInsideOverlay: Bool = false
@@ -38,6 +39,9 @@ struct PrompterContentView: View {
   @State private var visibleWordRange: Range<Int>?
   @State private var cinematicController = CinematicScrollController()
   @State private var manualScrollDriver = ManualScrollDriver()
+  @State private var deferredVoiceStartupTask: Task<Void, Never>?
+  @State private var highestWordTrackingPlayheadProgress: CGFloat = 0
+  @State private var lastWordTrackingIndex: Int?
 
   private let embeddedAudioIndicatorLaneHeight: CGFloat = 44
   private let embeddedAudioIndicatorTopGap: CGFloat = 10
@@ -65,7 +69,8 @@ struct PrompterContentView: View {
     textExitFadeHeight: CGFloat = 0,
     voiceSyncMode: VoiceSyncMode = .voice,
     voiceSync: VoiceSyncEngine,
-    audioMonitor: AudioLevelMonitor
+    audioMonitor: AudioLevelMonitor,
+    launchTrace: SessionLaunchTrace? = nil
   ) {
     self.script = script
     self.appearance = appearance
@@ -90,6 +95,7 @@ struct PrompterContentView: View {
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
+    self.launchTrace = launchTrace
   }
 
   private var ownsSynchronizedScroll: Bool {
@@ -114,6 +120,14 @@ struct PrompterContentView: View {
       || (sessionStarted && voiceSyncEnabled)
   }
 
+  private var usesWordTrackingScroll: Bool {
+    voiceSyncEnabled && voiceSync.voiceScrollMode == .wordTracking
+  }
+
+  private var usesSoundBasedScroll: Bool {
+    voiceSyncEnabled && voiceSync.voiceScrollMode == .soundBased
+  }
+
   private var usesLegacyLineSyncForVoice: Bool {
     false
   }
@@ -134,11 +148,11 @@ struct PrompterContentView: View {
   }
 
   private var isVoiceMotionActive: Bool {
-    (audioMonitor.isSpeaking || voiceSync.isHumanSpeechActive) && !sharedPauseBlocksAutomaticMotion
+    audioMonitor.isSpeaking && !sharedPauseBlocksAutomaticMotion
   }
 
   private var shouldRunVoiceMotion: Bool {
-    ownsSynchronizedScroll && sessionStarted && voiceSyncEnabled && isVoiceMotionActive
+    ownsSynchronizedScroll && sessionStarted && usesSoundBasedScroll && isVoiceMotionActive
       && !isHoverPauseActive
   }
 
@@ -182,6 +196,10 @@ struct PrompterContentView: View {
               .offset(
                 y: baseContentOffset(for: textGeometry.size.height)
                   - scrollDistance(for: textGeometry.size.height)
+              )
+              .animation(
+                usesWordTrackingScroll ? .spring(response: 0.8, dampingFraction: 0.82) : nil,
+                value: renderedScrollOffset
               )
               .clipped()
               .mask(alignment: .top) {
@@ -254,7 +272,7 @@ struct PrompterContentView: View {
         updateVisibleWordTrackingWindow()
       }
       .onChange(of: voiceSync.isHumanSpeechActive) { _, speaking in
-        guard sessionStarted, voiceSyncEnabled else { return }
+        guard sessionStarted, usesSoundBasedScroll else { return }
         guard ownsSynchronizedScroll else {
           cinematicController.setSpeaking(false)
           return
@@ -262,7 +280,7 @@ struct PrompterContentView: View {
         cinematicController.setSpeaking(shouldRunVoiceMotion)
       }
       .onChange(of: audioMonitor.isSpeaking) { _, _ in
-        guard sessionStarted, voiceSyncEnabled else { return }
+        guard sessionStarted, usesSoundBasedScroll else { return }
         guard ownsSynchronizedScroll else {
           cinematicController.setSpeaking(false)
           return
@@ -271,14 +289,19 @@ struct PrompterContentView: View {
       }
       .onChange(of: voiceSync.manualLineNudgeID) { _, _ in
         guard sessionStarted else { return }
-        guard ownsSynchronizedScroll else { return }
+        guard
+          OverlayScrollShortcutPolicy.respondsToManualLineNudges(
+            syncsSessionScroll: syncsSessionScroll,
+            ownsSynchronizedScroll: ownsSynchronizedScroll
+          )
+        else { return }
         applyManualLineNudge(direction: voiceSync.manualLineNudgeDirection)
       }
       .onHover { hovered in
         let wasHoverPauseActive = isHoverPauseActive
         isPointerInsideOverlay = hovered
         manualScrollDriver.setAutoScrollSuppressed(isHoverPauseActive)
-        if voiceSyncEnabled {
+        if usesSoundBasedScroll {
           cinematicController.setSpeaking(shouldRunVoiceMotion)
         }
         if wasHoverPauseActive && !isHoverPauseActive && !usesDirectPlayheadRendering {
@@ -286,12 +309,13 @@ struct PrompterContentView: View {
         }
       }
       .onAppear {
+        launchTrace?.mark("prompter.onAppear")
         if shouldRestoreRunningSession {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
         }
 
-        voiceSync.setRecognitionDrivesScroll(voiceSyncEnabled)
+        voiceSync.setRecognitionDrivesScroll(usesWordTrackingScroll)
 
         if sessionStarted && spokenWordHighlightingEnabled {
           voiceSync.enableRecognitionIfNeeded()
@@ -301,6 +325,7 @@ struct PrompterContentView: View {
           displayedScrollOffset = fallbackDisplayedScrollOffset()
         }
         refreshRenderedLayout(width: viewportWidth)
+        launchTrace?.mark("prompter.afterFirstLayout")
         updatePrimaryMetrics()
         updateVisibleWordTrackingWindow()
 
@@ -311,7 +336,7 @@ struct PrompterContentView: View {
         )
         cinematicController.setInitialOffset(renderedScrollOffset)
         cinematicController.onScrollTick = { newOffset in
-          if voiceSyncEnabled {
+          if usesSoundBasedScroll {
             playheadCoordinator.updateProgress(Double(newOffset))
           } else {
             displayedScrollOffset = newOffset
@@ -341,11 +366,19 @@ struct PrompterContentView: View {
         } else if countdownDuration == 0 {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
-          startVoiceSubsystemIfNeeded()
+          if PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(
+            countdownDuration: countdownDuration)
+          {
+            startVoiceSubsystemAfterFirstRenderTurnIfNeeded()
+          } else {
+            startVoiceSubsystemIfNeeded()
+          }
           startAutoScrollIfNeeded()
         }
       }
       .onDisappear {
+        deferredVoiceStartupTask?.cancel()
+        deferredVoiceStartupTask = nil
         cinematicController.stop()
         manualScrollDriver.stop()
         manualScrollDriver.onScrollTick = nil
@@ -355,6 +388,8 @@ struct PrompterContentView: View {
       }
       .onChange(of: script.id) { _, _ in
         displayedScrollOffset = 0
+        highestWordTrackingPlayheadProgress = 0
+        lastWordTrackingIndex = nil
         sessionStarted = countdownDuration == 0
         manualScrollDriver.reset(to: 0)
         playheadCoordinator.updateProgress(0)
@@ -389,7 +424,7 @@ struct PrompterContentView: View {
         updateManualScrollDriver()
       }
       .onChange(of: voiceSyncEnabled) { _, _ in
-        voiceSync.setRecognitionDrivesScroll(voiceSyncEnabled)
+        voiceSync.setRecognitionDrivesScroll(usesWordTrackingScroll)
         updateManualScrollDriver()
         updateVisibleWordTrackingWindow()
       }
@@ -429,7 +464,7 @@ struct PrompterContentView: View {
         else { return }
         let newOffset = CGFloat(newProgress)
         manualScrollDriver.setCurrentOffset(newOffset)
-        if voiceSyncEnabled && ownsSynchronizedScroll {
+        if usesSoundBasedScroll && ownsSynchronizedScroll {
           cinematicController.setInitialOffset(newOffset)
         }
         if usesSessionPlayheadForManualScroll {
@@ -437,7 +472,7 @@ struct PrompterContentView: View {
             publishCurrentLineIndex()
             syncVoiceTrackingOffset(newOffset)
           }
-        } else if voiceSyncEnabled && (ownsSynchronizedScroll || !syncsSessionScroll) {
+        } else if usesSoundBasedScroll && (ownsSynchronizedScroll || !syncsSessionScroll) {
           syncVoiceTrackingOffset(newOffset)
         }
         updateVisibleWordTrackingWindow()
@@ -456,82 +491,58 @@ struct PrompterContentView: View {
   private func handleWordIndexUpdate(_ newIndex: Int?) {
     guard sessionStarted else { return }
     guard !isHoverPauseActive else { return }
-    guard voiceSyncEnabled else { return }
+    guard usesWordTrackingScroll else { return }
     guard !voiceSync.isPausedByUser else { return }
     guard ownsSynchronizedScroll else { return }
     guard let idx = newIndex, !layoutSnapshot.lineMetrics.isEmpty else { return }
 
     guard
-      let lineIndex = layoutSnapshot.lineMetrics.firstIndex(where: { $0.wordRange.contains(idx) })
+      let exactNormalized = PrompterScrollMath.wordTrackingProgress(
+        currentWordIndex: idx,
+        lineMetrics: layoutSnapshot.lineMetrics,
+        contentHeight: contentHeight,
+        viewportHeight: viewportHeight,
+        baseContentOffset: baseContentOffset(for: viewportHeight)
+      )
     else {
+      playheadCoordinator.updateProgress(Double(voiceSync.scrollOffset))
+      manualScrollDriver.setCurrentOffset(voiceSync.scrollOffset)
       return
     }
 
-    let maxOffset = max(contentHeight - viewportHeight, 0)
-    guard maxOffset > 0 else { return }
-
-    let trueAnchorLine = layoutSnapshot.lineMetrics[lineIndex]
-
-    // If blank lines follow this line, advance the anchor to the first speakable
-    // line after the gap (≥3 blank lines). The cinematic controller's aggressive
-    // catch-up will then traverse the gap quickly once speech resumes.
-    var anchorY = trueAnchorLine.y
-    let lookahead = layoutSnapshot.lineMetrics[(lineIndex + 1)...]
-    if let nextSpeakableIdx = lookahead.firstIndex(where: { !$0.wordRange.isEmpty }),
-      nextSpeakableIdx - lineIndex >= 2
-    {
-      anchorY = layoutSnapshot.lineMetrics[nextSpeakableIdx].y
-    }
-
-    let exactNormalized = min(anchorY / maxOffset, 1.0)
-    cinematicController.setAnchorOffset(exactNormalized)
+    let monotonicProgress = PrompterScrollMath.monotonicWordTrackingProgress(
+      exactProgress: exactNormalized,
+      currentProgress: CGFloat(playheadCoordinator.progress),
+      highestProgress: highestWordTrackingPlayheadProgress,
+      lastWordIndex: lastWordTrackingIndex,
+      currentWordIndex: idx
+    )
+    let targetProgress = monotonicProgress.targetProgress
+    highestWordTrackingPlayheadProgress = monotonicProgress.highestProgress
+    lastWordTrackingIndex = monotonicProgress.lastWordIndex
+    let currentProgress = CGFloat(playheadCoordinator.progress)
+    guard abs(currentProgress - targetProgress) > 0.0001 else { return }
+    playheadCoordinator.updateProgress(Double(targetProgress))
+    manualScrollDriver.setCurrentOffset(targetProgress)
   }
 
   // MARK: - Manual Scroll (trackpad / mouse wheel)
 
   private func manualScroll(deltaY: CGFloat) {
     let maxOffset = max(contentHeight - viewportHeight, 0)
-    guard maxOffset > 0 else {
-      AiraLogger.shared.info(
-        "wheel manualScroll dropped reason=noScrollableRange deltaY=\(deltaY) contentHeight=\(contentHeight) viewportHeight=\(viewportHeight)",
-        category: "overlay-wheel"
-      )
-      return
-    }
-    guard !syncsSessionScroll || ownsSynchronizedScroll else {
-      AiraLogger.shared.info(
-        "wheel manualScroll dropped reason=syncFollower deltaY=\(deltaY) syncsSessionScroll=\(syncsSessionScroll) ownsSynchronizedScroll=\(ownsSynchronizedScroll)",
-        category: "overlay-wheel"
-      )
-      return
-    }
+    guard maxOffset > 0 else { return }
+    guard !syncsSessionScroll || ownsSynchronizedScroll else { return }
     let normalizedDelta = deltaY / maxOffset
-    AiraLogger.shared.info(
-      "wheel manualScroll accepted deltaY=\(deltaY) normalizedDelta=\(normalizedDelta) maxOffset=\(maxOffset) voiceSyncEnabled=\(voiceSyncEnabled) usesSessionPlayheadForManualScroll=\(usesSessionPlayheadForManualScroll)",
-      category: "overlay-wheel"
-    )
     if voiceSyncEnabled {
       let updated = min(max(CGFloat(playheadCoordinator.progress) - normalizedDelta, 0), 1)
-      AiraLogger.shared.info(
-        "wheel manualScroll path=voice progressBefore=\(playheadCoordinator.progress) progressAfter=\(updated)",
-        category: "overlay-wheel"
-      )
       playheadCoordinator.updateProgress(Double(updated))
-      voiceSync.nudgeScroll(to: updated)
+      voiceSync.nudgeScroll(to: updated, resetSpokenTracking: false)
       if ownsSynchronizedScroll {
         cinematicController.setInitialOffset(updated)
       }
     } else if usesSessionPlayheadForManualScroll {
-      AiraLogger.shared.info(
-        "wheel manualScroll path=sessionPlayhead progressBefore=\(playheadCoordinator.progress) delta=\(-normalizedDelta)",
-        category: "overlay-wheel"
-      )
       playheadCoordinator.nudgeProgress(by: Double(-normalizedDelta))
     } else {
-      AiraLogger.shared.info(
-        "wheel manualScroll path=localDriver enqueueDelta=\(-normalizedDelta)",
-        category: "overlay-wheel"
-      )
       manualScrollDriver.enqueueNormalizedDelta(-normalizedDelta)
     }
   }
@@ -544,7 +555,7 @@ struct PrompterContentView: View {
     if voiceSyncEnabled {
       let updated = min(max(CGFloat(playheadCoordinator.progress) + (delta * direction), 0), 1)
       playheadCoordinator.updateProgress(Double(updated))
-      voiceSync.nudgeScroll(to: updated)
+      voiceSync.nudgeScroll(to: updated, resetSpokenTracking: false)
       if ownsSynchronizedScroll {
         cinematicController.setInitialOffset(updated)
       }
@@ -556,10 +567,11 @@ struct PrompterContentView: View {
   }
 
   private func syncVoiceTrackingOffset(_ offset: CGFloat) {
-    if voiceSyncEnabled {
+    if usesSoundBasedScroll {
       // Passive voice-driven scroll updates should not clear spoken-word visuals.
-      // Explicit user scroll/nudge paths still call nudgeScroll directly.
-      voiceSync.nudgeScroll(to: offset, resetSpokenTracking: false)
+      // They also must not move the recognition cursor; Apple highlighting
+      // should keep following spoken words, not the volume-based scroll offset.
+      voiceSync.updatePassiveScrollOffset(to: offset)
     }
   }
 
@@ -582,8 +594,21 @@ struct PrompterContentView: View {
   }
 
   private func startVoiceSubsystemIfNeeded() {
-    if voiceSyncEnabled || spokenWordHighlightingEnabled {
+    if voiceSync.voiceScrollMode.usesSpeechRecognition(
+      spokenWordHighlightingEnabled: spokenWordHighlightingEnabled)
+    {
       voiceSync.start()
+    } else if voiceSync.voiceScrollMode.usesSoundBasedMotion {
+      voiceSync.startAudioMonitoring()
+    }
+  }
+
+  private func startVoiceSubsystemAfterFirstRenderTurnIfNeeded() {
+    deferredVoiceStartupTask?.cancel()
+    deferredVoiceStartupTask = Task { @MainActor in
+      await Task.yield()
+      guard !Task.isCancelled else { return }
+      startVoiceSubsystemIfNeeded()
     }
   }
 
@@ -818,17 +843,29 @@ struct PrompterContentView: View {
   }
 
   private var visibleHighlightWordRange: Range<Int>? {
-    guard spokenWordHighlightingEnabled else { return nil }
+    guard
+      PrompterHighlightWindow.isEnabledForScript(
+        requested: spokenWordHighlightingEnabled,
+        scriptID: script.id,
+        activeScriptID: voiceSync.activeScriptID
+      )
+    else { return nil }
     return PrompterHighlightWindow.clampedHighlightRange(
-      voiceSync.visualHighlightedWordRange,
+      voiceSync.highlightedWordRange,
       toVisibleWordRange: visibleWordRange
     )
   }
 
   private var visibleCurrentWordIndex: Int? {
-    guard spokenWordHighlightingEnabled else { return nil }
+    guard
+      PrompterHighlightWindow.isEnabledForScript(
+        requested: spokenWordHighlightingEnabled,
+        scriptID: script.id,
+        activeScriptID: voiceSync.activeScriptID
+      )
+    else { return nil }
     return PrompterHighlightWindow.clampedCurrentWordIndex(
-      voiceSync.visualCurrentWordIndex,
+      voiceSync.currentWordIndex,
       toVisibleWordRange: visibleWordRange
     )
   }
@@ -978,12 +1015,27 @@ enum OverlayPausePolicy {
   }
 }
 
+enum OverlayScrollShortcutPolicy {
+  static func respondsToManualLineNudges(
+    syncsSessionScroll: Bool,
+    ownsSynchronizedScroll: Bool
+  ) -> Bool {
+    syncsSessionScroll && ownsSynchronizedScroll
+  }
+}
+
 enum PrompterSessionRestorePolicy {
   static func shouldRestoreRunningSession(
     sharedSessionStarted: Bool,
     voiceSyncState: VoiceSyncEngine.EngineState
   ) -> Bool {
     sharedSessionStarted || voiceSyncState != .idle
+  }
+}
+
+enum PrompterVoiceStartupPolicy {
+  static func shouldDeferVoiceStartup(countdownDuration: Int) -> Bool {
+    countdownDuration == 0
   }
 }
 
@@ -1008,6 +1060,16 @@ enum OverlayWheelDeduplicationPolicy {
 }
 
 enum PrompterHighlightWindow {
+  static func isEnabledForScript(
+    requested: Bool,
+    scriptID: UUID,
+    activeScriptID: UUID?
+  ) -> Bool {
+    guard requested else { return false }
+    guard let activeScriptID else { return true }
+    return activeScriptID == scriptID
+  }
+
   static func clampedHighlightRange(
     _ highlightRange: Range<Int>?,
     toVisibleWordRange visibleWordRange: Range<Int>?
@@ -1118,6 +1180,12 @@ final class SessionScrollCoordinator: ObservableObject {
 }
 
 enum PrompterScrollMath {
+  struct MonotonicWordTrackingProgress: Equatable {
+    let targetProgress: CGFloat
+    let highestProgress: CGFloat
+    let lastWordIndex: Int
+  }
+
   static func lineHeight(fontSize: CGFloat, lineSpacing: CGFloat) -> CGFloat {
     max(fontSize + OverlayLineSpacingConfiguration.clamped(lineSpacing), 1)
   }
@@ -1149,6 +1217,77 @@ enum PrompterScrollMath {
 
     guard totalSpeakableLineHeight > 0, totalSpeakableWords > 0 else { return 0 }
     return totalSpeakableLineHeight / Double(totalSpeakableWords)
+  }
+
+  static func wordTrackingProgress(
+    currentWordIndex: Int,
+    lineMetrics: [LineMetric],
+    contentHeight: CGFloat,
+    viewportHeight: CGFloat,
+    baseContentOffset: CGFloat
+  ) -> CGFloat? {
+    guard
+      let lineIndex = lineMetrics.firstIndex(where: { $0.wordRange.contains(currentWordIndex) })
+    else { return nil }
+
+    let maxOffset = max(contentHeight - viewportHeight, 0)
+    guard maxOffset > 0 else { return nil }
+
+    let currentLine = lineMetrics[lineIndex]
+    let nextSpeakableIndex =
+      lineIndex + 1 < lineMetrics.endIndex
+      ? lineMetrics[(lineIndex + 1)...].firstIndex(where: { !$0.wordRange.isEmpty })
+      : nil
+    var anchorY = currentLine.y
+    var usesUpperReadingBand = false
+
+    if let nextSpeakableIndex,
+      currentWordIndex >= currentLine.wordRange.upperBound - 1
+    {
+      anchorY = lineMetrics[nextSpeakableIndex].y
+      usesUpperReadingBand = true
+    } else if let nextSpeakableIndex,
+      baseContentOffset + currentLine.y - maxOffset > viewportHeight * 0.68
+    {
+      anchorY = lineMetrics[nextSpeakableIndex].y
+      usesUpperReadingBand = true
+    }
+
+    let targetOffset: CGFloat
+    if usesUpperReadingBand {
+      let upperReadingBandY = viewportHeight * 0.2
+      targetOffset = anchorY + baseContentOffset - upperReadingBandY
+    } else {
+      targetOffset = anchorY
+    }
+
+    return min(max(targetOffset / maxOffset, 0), 1.0)
+  }
+
+  static func monotonicWordTrackingProgress(
+    exactProgress: CGFloat,
+    currentProgress: CGFloat,
+    highestProgress: CGFloat,
+    lastWordIndex: Int?,
+    currentWordIndex: Int
+  ) -> MonotonicWordTrackingProgress {
+    let clampedExact = min(max(exactProgress, 0), 1)
+    let clampedCurrent = min(max(currentProgress, 0), 1)
+    let clampedHighest = min(max(highestProgress, 0), 1)
+    if lastWordIndex.map({ currentWordIndex < $0 }) ?? false {
+      return MonotonicWordTrackingProgress(
+        targetProgress: clampedExact,
+        highestProgress: clampedExact,
+        lastWordIndex: currentWordIndex
+      )
+    }
+
+    let target = max(clampedExact, clampedCurrent, clampedHighest)
+    return MonotonicWordTrackingProgress(
+      targetProgress: target,
+      highestProgress: target,
+      lastWordIndex: currentWordIndex
+    )
   }
 }
 
@@ -1296,10 +1435,6 @@ private struct ScrollWheelInterceptor: NSViewRepresentable {
     if let forwardingWindow = nsView.window as? OverlayScrollEventForwardingWindow {
       forwardingWindow.overlayScrollEventHandler = { [weak nsView] event in
         let signature = ScrollWheelEventSignature(event: event)
-        AiraLogger.shared.info(
-          "wheel bridge callback deltaY=\(event.scrollingDeltaY) pixelDeltaY=\(signature.pixelDeltaY)",
-          category: "overlay-wheel"
-        )
         nsView?.onScroll?(signature.pixelDeltaY)
       }
       forwardingWindow.overlayUsesEventDeduplication = usesEventDeduplication
@@ -1412,12 +1547,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
   override var canBecomeMain: Bool { true }
 
   override func sendEvent(_ event: NSEvent) {
-    if event.type == .scrollWheel {
-      AiraLogger.shared.info(
-        "wheel panel sendEvent deltaY=\(event.scrollingDeltaY) phase=\(event.phase.rawValue) momentum=\(event.momentumPhase.rawValue) isKey=\(isKeyWindow) isMain=\(isMainWindow)",
-        category: "overlay-wheel"
-      )
-    }
     super.sendEvent(event)
   }
 
@@ -1436,19 +1565,11 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       localScrollMonitor != nil,
       globalScrollMonitor != nil
     {
-      AiraLogger.shared.info(
-        "wheel panel refreshMonitoring skipped dedupe=\(newConfiguration.usesEventDeduplication) strictRouting=\(newConfiguration.usesStrictActiveAppWheelSourceRouting) hasHandler=\(newConfiguration.hasHandler)",
-        category: "overlay-wheel"
-      )
       return
     }
 
     removeScrollMonitors()
     monitoringConfiguration = newConfiguration
-    AiraLogger.shared.info(
-      "wheel panel refreshMonitoring dedupe=\(newConfiguration.usesEventDeduplication) strictRouting=\(newConfiguration.usesStrictActiveAppWheelSourceRouting) hasHandler=\(newConfiguration.hasHandler)",
-      category: "overlay-wheel"
-    )
 
     localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) {
       [weak self] event in
@@ -1464,10 +1585,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
   }
 
   override func scrollWheel(with event: NSEvent) {
-    AiraLogger.shared.info(
-      "wheel panel direct deltaY=\(event.scrollingDeltaY) phase=\(event.phase.rawValue) momentum=\(event.momentumPhase.rawValue)",
-      category: "overlay-wheel"
-    )
     handleScroll(event, source: .forwardedWindow)
     super.scrollWheel(with: event)
   }
@@ -1481,10 +1598,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       appIsActive: NSApp.isActive,
       mouseIsInsideWindow: mouseInsideWindow
     )
-    AiraLogger.shared.info(
-      "wheel panel monitored source=\(source.debugName) accepted=\(shouldHandle) appIsActive=\(NSApp.isActive) mouseInside=\(mouseInsideWindow) deltaY=\(event.scrollingDeltaY)",
-      category: "overlay-wheel"
-    )
     guard shouldHandle else { return }
 
     handleScroll(event, source: source)
@@ -1492,18 +1605,10 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
 
   private func handleScroll(_ event: NSEvent, source: ScrollWheelMonitorSource) {
     guard let overlayScrollEventHandler else {
-      AiraLogger.shared.info(
-        "wheel panel dropped reason=noHandler source=\(source.debugName) deltaY=\(event.scrollingDeltaY)",
-        category: "overlay-wheel"
-      )
       return
     }
 
     guard overlayUsesEventDeduplication else {
-      AiraLogger.shared.info(
-        "wheel panel pass source=\(source.debugName) dedupe=off deltaY=\(event.scrollingDeltaY)",
-        category: "overlay-wheel"
-      )
       overlayScrollEventHandler(event)
       return
     }
@@ -1515,18 +1620,10 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       lastDelivery: lastHandledScrollDelivery
     )
     if shouldDrop {
-      AiraLogger.shared.info(
-        "wheel panel dropped reason=dedupe source=\(source.debugName) deltaY=\(signature.pixelDeltaY) eventNumber=\(String(describing: signature.eventNumber))",
-        category: "overlay-wheel"
-      )
       return
     }
 
     lastHandledScrollDelivery = (signature, source)
-    AiraLogger.shared.info(
-      "wheel panel pass source=\(source.debugName) deltaY=\(signature.pixelDeltaY) eventNumber=\(String(describing: signature.eventNumber))",
-      category: "overlay-wheel"
-    )
     overlayScrollEventHandler(event)
   }
 
@@ -1595,10 +1692,6 @@ final class ScrollWheelNSView: NSView {
     if let forwardingWindow = window as? OverlayScrollEventForwardingWindow {
       forwardingWindow.overlayScrollEventHandler = { [weak self] event in
         let signature = ScrollWheelEventSignature(event: event)
-        AiraLogger.shared.info(
-          "wheel bridge attach callback deltaY=\(event.scrollingDeltaY) pixelDeltaY=\(signature.pixelDeltaY) eventNumber=\(String(describing: signature.eventNumber))",
-          category: "overlay-wheel"
-        )
         self?.onScroll?(signature.pixelDeltaY)
       }
       forwardingWindow.overlayUsesEventDeduplication = usesEventDeduplication

@@ -1,4 +1,9 @@
-# Aira — Claude Code Guide
+# Aira — Codex Code Guide
+
+    ## Local Tooling Note
+
+    - In this repo, `qmd` must run with Node 22 from `nvm` or it can fail with a native-module ABI mismatch.
+      Use `PATH=/Users/sankirthkalahasti/.nvm/versions/node/v22.17.1/bin:$PATH qmd ...` when needed.
 
     ## What is Aira
 
@@ -24,42 +29,51 @@
 
     Before starting any implementation work, read these documents in order:
 
-    1. `requirements.md` — the normative behavioral spec (33 REQs across 9 areas). This is the source of truth for what the app must
+    1. `docs/requirements.md` — the normative behavioral spec (33 REQs across 9 areas). This is the source of truth for what the app must
     do.
-    2. `design.md` — UI design: screens, components, design tokens, interaction states.
-    3. `architecture.md` — technical design: module structure, API choices, data flow, performance mandates, security checklist.
-    4. `todo.md` — the task list. Check this to understand what has been done and what is next.
-    5. `tests.md` — test plan and status. Check which tests are passing before marking anything done.
+    2. `docs/design.md` — UI design: screens, components, design tokens, interaction states.
+    3. `docs/architecture.md` — technical design: module structure, API choices, data flow, performance mandates, security checklist.
+    4. `docs/todo.md` — the task list. Check this to understand what has been done and what is next.
+    5. `docs/tests.md` — test plan and status. Check which tests are passing before marking anything done.
 
     ---
 
     ## Documentation-First Rule
 
     Before implementing any feature or fix:
-    1. Check `design.md` for contradictions with what will be built — correct them first.
-    2. Add or update the task in `todo.md` (use sub-task IDs like `T-020a` when a parent task was
+    1. Check `docs/design.md` for contradictions with what will be built — correct them first.
+    2. Add or update the task in `docs/todo.md` (use sub-task IDs like `T-020a` when a parent task was
        prematurely marked done).
-    3. Add the test ID to `tests.md` (mark `[w]` once written, `[x]` once passing).
+    3. Add the test ID to `docs/tests.md` (mark `[w]` once written, `[x]` once passing).
     4. Only then write implementation code.
 
-    This order prevents `design.md` from drifting out of sync with the actual implementation.
+    This order prevents `docs/design.md` from drifting out of sync with the actual implementation.
 
     ---
 
-    ## Bug & Security Review Flow
+    ## Git Worktree Workflow
 
-    After each phase is implemented (or on request), run a bug and security review:
-    1. Read `review.md` first — check which issues are already open to avoid duplicating entries.
-    2. Use the Explore agent to deep-read all Swift files in the phase area and look for:
-       - Logic errors, off-by-one, wrong conditions, unhandled edge cases
-       - Force unwraps that can crash at runtime
-       - Concurrency issues (non-`@MainActor` writes to `@Published`, retain cycles)
-       - Security: path traversal via user-controlled filenames, forbidden network calls,
-         stealth violations, hardcoded secrets
-    3. For each finding, add a row to `review.md` with: date, area, P1/P2/P3 severity, file:line,
-       one-sentence summary, `open` status.
-    4. **Dismiss findings that cannot be reproduced** — mark `dismissed` with a reason.
-    5. Fix `open` issues in priority order (P1 first), updating `Status` to `resolved` when done.
+    For all feature work going forward:
+
+    1. Create a **separate git worktree** for the feature before making implementation changes.
+    2. Do **not** implement features directly in the main working tree. Keep the main tree clean.
+    3. Treat each feature worktree as the isolated workspace for its docs, code changes, and tests.
+    4. Run the relevant tests inside that feature worktree before considering the work ready.
+    5. Only after the required tests pass should the worktree changes be merged back to the target branch.
+
+    This is the default workflow unless a task explicitly says otherwise.
+
+    ---
+
+    ## Review Tracking Rule
+
+    Every time a review is provided:
+    1. Add each review finding to `review.md` with its date, area, severity, file, summary, and status.
+    2. Use `open` for unresolved findings, `resolved` once fixed and verified, and `dismissed` when the
+       review is stale or not applicable to the current workspace.
+    3. Update the existing `review.md` row when the status changes instead of creating duplicate entries for
+       the same finding.
+    4. Keep `review.md` current as part of the implementation work, not as a follow-up cleanup task.
 
     ---
 
@@ -67,14 +81,13 @@
 
     A task is **only complete** when ALL of the following are true:
 
-    1. **Implementation matches the requirement** — the behavior described in `requirements.md` for the relevant REQ(s) is fully
+    1. **Implementation matches the requirement** — the behavior described in `docs/requirements.md` for the relevant REQ(s) is fully
     realized in code.
-    2. **Tests pass** — all unit and integration tests for the module are written and passing, as defined in `tests.md` and
-    `architecture.md` Section 6.
-    3. **Security review items cleared** — any security checklist item in `architecture.md` Section 7 that is relevant to the task
+    2. **Tests pass** — all unit and integration tests for the module are written and passing, as defined in `docs/tests.md` and
+    `docs/architecture.md` Section 6.
+    3. **Security review items cleared** — any security checklist item in `docs/architecture.md` Section 7 that is relevant to the task
     has been verified.
-    4. **`review.md` checked** — any `open` finding touching the modified files has been resolved or dismissed.
-    5. **`todo.md` updated** — the task is marked `[x]` in `todo.md` with a brief note on what was done.
+    4. **`docs/todo.md` updated** — the task is marked `[x]` in `docs/todo.md` with a brief note on what was done.
 
     Do not mark a task done if tests are skipped, stubbed, or failing. Do not mark a task done if the security review item for that
     area has not been checked.
@@ -131,6 +144,9 @@
     - Use a custom `VStack` layout: sage green top bar (title + close button + horizontal tab row), then
       cream content area below. Do NOT use the system `TabView`.
     - Tab buttons fill the full row equally: `HStack` with `frame(maxWidth: .infinity)` on each button.
+    - All custom SwiftUI buttons must make the whole visible button area clickable, not only the text or icon.
+      Apply the sizing to the `Button` itself when needed, add a matching `contentShape(...)`, and use a
+      pointing-hand cursor on the full hit target.
     - Do not show a subtitle or description under each tab button label.
     - Do not show a repeated tab title + blurb inside the content area — content starts immediately.
     - The Intelligence/AI tab is **deferred** — only Appearance, The Notch, and System tabs exist in v1.
@@ -174,7 +190,7 @@
     - For **existing scripts** on dismiss: save only if title or body differ from last persisted values.
     - No dirty indicator in the UI. Auto-save on dismiss makes it unnecessary.
     - No limit on script count.
-    - T-004 and T-012 both need rework to implement this — see todo.md.
+    - T-004 and T-012 both need rework to implement this — see `docs/todo.md`.
 
     ### Pill window settings model
     - Pills are **opt-in** — `AppSettings.pillsEnabled = false` by default.

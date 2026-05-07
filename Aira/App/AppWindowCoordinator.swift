@@ -5,12 +5,6 @@ enum AppWindowCoordinator {
   static let settingsWindowIdentifier = NSUserInterfaceItemIdentifier("aira.settings.window")
   static let transientMenuBarWindowIdentifier = NSUserInterfaceItemIdentifier(
     "aira.menu-bar.window")
-  private static let standardManagerWindowStyleMask: NSWindow.StyleMask = [
-    .titled,
-    .closable,
-    .miniaturizable,
-    .resizable,
-  ]
 
   @MainActor
   static func markManagerWindow(_ window: NSWindow?) {
@@ -29,7 +23,17 @@ enum AppWindowCoordinator {
     }
 
     window.identifier = transientMenuBarWindowIdentifier
-    removeStandardWindowChrome(from: window)
+    guard Self.shouldHideTransientTitlebar(styleMask: window.styleMask) else {
+      return
+    }
+
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.toolbar = nil
+  }
+
+  nonisolated static func shouldHideTransientTitlebar(styleMask: NSWindow.StyleMask) -> Bool {
+    styleMask.contains(.titled)
   }
 
   @MainActor
@@ -55,9 +59,22 @@ enum AppWindowCoordinator {
 
   @MainActor
   static func hideManagerWindowForSession(in application: NSApplication? = nil) {
+    prepareForSession(in: application)
+  }
+
+  @MainActor
+  static func prepareForSession(in application: NSApplication? = nil) {
     let application = application ?? .shared
     closeAllTransientMenuBarWindows(in: application)
-    managerWindow(in: application)?.orderOut(nil)
+    let window = managerWindow(in: application)
+
+    guard !shouldPreserveManagerWindowForSession(styleMask: window?.styleMask ?? []) else {
+      AiraLogger.shared.info(
+        "prepareForSession: manager fullscreen, preserving regular app/window", category: "window")
+      return
+    }
+
+    window?.orderOut(nil)
     application.setActivationPolicy(.accessory)
     // Activate Finder asynchronously so the cross-process activation
     // does not block the main thread while overlay windows are being created.
@@ -79,8 +96,18 @@ enum AppWindowCoordinator {
     in application: NSApplication? = nil,
     fallbackWindow: NSWindow? = nil
   ) {
+    restoreFromSession(in: application, fallbackWindow: fallbackWindow)
+  }
+
+  @MainActor
+  static func restoreFromSession(
+    in application: NSApplication? = nil,
+    fallbackWindow: NSWindow? = nil
+  ) {
     let application = application ?? .shared
-    application.setActivationPolicy(.regular)
+    if application.activationPolicy() != .regular {
+      application.setActivationPolicy(.regular)
+    }
 
     let identified = managerWindow(in: application)
     let fallback = validManagerFallbackWindow(fallbackWindow)
@@ -108,14 +135,13 @@ enum AppWindowCoordinator {
       markManagerWindow(window)
     }
 
-    // After orderOut + activation-policy round-trips, macOS can leave a
-    // SwiftUI WindowGroup without the standard titlebar/traffic-light
-    // chrome. Repair only the validated manager candidate selected above;
-    // transient menu-bar windows are rejected before this point.
-    restoreStandardManagerWindowChrome(on: window)
+    window.titleVisibility = .visible
+    window.titlebarAppearsTransparent = false
 
-    window.orderFrontRegardless()
-    window.makeKeyAndOrderFront(nil)
+    if !window.styleMask.contains(.fullScreen) {
+      window.orderFrontRegardless()
+      window.makeKeyAndOrderFront(nil)
+    }
 
     // Force the hosting view to re-layout after the orderOut/orderFront
     // round-trip.  Without this, NSHostingView may skip its first layout
@@ -220,11 +246,8 @@ enum AppWindowCoordinator {
     return isManagerWindowIdentifier(identifier)
   }
 
-  static func repairedManagerWindowStyleMask(_ styleMask: NSWindow.StyleMask) -> NSWindow.StyleMask
-  {
-    var repaired = styleMask
-    repaired.formUnion(standardManagerWindowStyleMask)
-    return repaired
+  static func shouldPreserveManagerWindowForSession(styleMask: NSWindow.StyleMask) -> Bool {
+    styleMask.contains(.fullScreen)
   }
 
   @MainActor
@@ -255,31 +278,4 @@ enum AppWindowCoordinator {
     )
   }
 
-  @MainActor
-  private static func removeStandardWindowChrome(from window: NSWindow) {
-    window.styleMask.subtract(standardManagerWindowStyleMask)
-    window.titleVisibility = .hidden
-    window.titlebarAppearsTransparent = true
-  }
-
-  @MainActor
-  private static func restoreStandardManagerWindowChrome(on window: NSWindow) {
-    let repairedMask = repairedManagerWindowStyleMask(window.styleMask)
-    if window.styleMask != repairedMask {
-      window.styleMask = repairedMask
-    }
-
-    window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = false
-
-    for button in [
-      NSWindow.ButtonType.closeButton,
-      .miniaturizeButton,
-      .zoomButton,
-    ] {
-      let standardButton = window.standardWindowButton(button)
-      standardButton?.isHidden = false
-      standardButton?.isEnabled = true
-    }
-  }
 }

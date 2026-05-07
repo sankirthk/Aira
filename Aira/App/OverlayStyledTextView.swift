@@ -186,11 +186,6 @@ final class OverlayStyledTextContainerView: NSView {
     highlightColor: NSColor,
     underlineColor: NSColor
   ) {
-    updateHighlightedWordRange(
-      characterRange: highlightedWordRange.flatMap(characterRange(for:)),
-      highlightColor: highlightColor
-    )
-
     if let highlightedTokenRange {
       layoutManager.removeTemporaryAttribute(
         .underlineStyle, forCharacterRange: highlightedTokenRange)
@@ -198,6 +193,11 @@ final class OverlayStyledTextContainerView: NSView {
         .underlineColor, forCharacterRange: highlightedTokenRange)
       self.highlightedTokenRange = nil
     }
+
+    updateHighlightedWordRange(
+      characterRange: highlightedWordRange.flatMap(characterRange(for:)),
+      highlightColor: highlightColor
+    )
 
     guard let currentWordIndex else {
       textView.needsDisplay = true
@@ -214,10 +214,7 @@ final class OverlayStyledTextContainerView: NSView {
 
     let range = tokenSpans[clampedIndex].range
     layoutManager.addTemporaryAttributes(
-      [
-        .underlineStyle: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.thick.rawValue,
-        .underlineColor: underlineColor,
-      ],
+      Self.currentWordTemporaryAttributes(underlineColor: underlineColor),
       forCharacterRange: range
     )
     highlightedTokenRange = range
@@ -341,5 +338,14 @@ final class OverlayStyledTextContainerView: NSView {
 
   override var intrinsicContentSize: NSSize {
     NSSize(width: ceil(preferredWidth), height: measuredHeight)
+  }
+
+  static func currentWordTemporaryAttributes(
+    underlineColor: NSColor
+  ) -> [NSAttributedString.Key: Any] {
+    [
+      .underlineStyle: NSUnderlineStyle.single.rawValue | NSUnderlineStyle.thick.rawValue,
+      .underlineColor: underlineColor,
+    ]
   }
 }
