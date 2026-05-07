@@ -798,6 +798,27 @@ struct KeyboardShortcutDisplayTests {
     )
   }
 
+  @Test func notchHoverChromeShowsDockSidePauseOnlyForClassicSpokenWordHighlighting() {
+    #expect(
+      NotchHoverChromePolicy.showsDockSidePauseButton(
+        voiceScrollMode: .classicScroll,
+        spokenWordHighlightingEnabled: true
+      )
+    )
+    #expect(
+      !NotchHoverChromePolicy.showsDockSidePauseButton(
+        voiceScrollMode: .classicScroll,
+        spokenWordHighlightingEnabled: false
+      )
+    )
+    #expect(
+      !NotchHoverChromePolicy.showsDockSidePauseButton(
+        voiceScrollMode: .wordTracking,
+        spokenWordHighlightingEnabled: true
+      )
+    )
+  }
+
   @Test func sessionScrollShortcutsOnlyNudgePrimarySynchronizedOverlays() {
     #expect(
       OverlayScrollShortcutPolicy.respondsToManualLineNudges(
@@ -1083,6 +1104,26 @@ struct VoiceSyncMatchingTests {
     #expect(engine.highlightedWordRange == 0..<2)
   }
 
+  @Test @MainActor func classicHighlightPhraseRecoveryUsesVisibleWindow() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text:
+        "start missed accent gap1 gap2 gap3 gap4 visible phrase target after hidden phrase target end",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .classicScroll
+    engine.updateVisibleWordRange(0..<12)
+
+    backend.emitPartial(["start"])
+    backend.emitPartial(["start", "visible"])
+    backend.emitPartial(["start", "visible", "phrase"])
+
+    #expect(engine.scrollOffset == 0)
+    #expect(engine.currentWordIndex == 8)
+    #expect(engine.highlightedWordRange == 0..<8)
+  }
+
   @Test @MainActor func wordTrackingModeMapsMatchedWordToScrollProgress() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
@@ -1145,6 +1186,27 @@ struct VoiceSyncMatchingTests {
     engine.togglePause()
 
     #expect(engine.isPausedByUser)
+    #expect(engine.state == .paused)
+    #expect(!engine.isHumanSpeechActive)
+    #expect(backend.stopCallCount == 1)
+  }
+
+  @Test @MainActor func microphoneMuteDoesNotSetUserPausedState() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(
+      recognitionBackend: backend,
+      microphonePermissionGranted: { false }
+    )
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.enableRecognitionIfNeeded()
+    await Task.yield()
+
+    engine.state = .running
+    engine.isHumanSpeechActive = true
+    engine.toggleMicrophoneMute()
+
+    #expect(engine.isMicrophoneMutedByUser)
+    #expect(!engine.isPausedByUser)
     #expect(engine.state == .paused)
     #expect(!engine.isHumanSpeechActive)
     #expect(backend.stopCallCount == 1)

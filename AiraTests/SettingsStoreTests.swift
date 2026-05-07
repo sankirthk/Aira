@@ -238,11 +238,13 @@ struct SettingsStoreTests {
 
     #expect(VoiceScrollMode.soundBased.usesVoiceDrivenScroll)
     #expect(VoiceScrollMode.soundBased.usesSoundBasedMotion)
+    #expect(VoiceScrollMode.soundBased.usesSpeechSensitivity)
     #expect(!VoiceScrollMode.soundBased.usesSpeechRecognition(spokenWordHighlightingEnabled: false))
     #expect(VoiceScrollMode.soundBased.usesSpeechRecognition(spokenWordHighlightingEnabled: true))
 
     #expect(VoiceScrollMode.wordTracking.usesVoiceDrivenScroll)
     #expect(!VoiceScrollMode.wordTracking.usesSoundBasedMotion)
+    #expect(VoiceScrollMode.wordTracking.usesSpeechSensitivity)
     #expect(
       VoiceScrollMode.wordTracking.usesSpeechRecognition(spokenWordHighlightingEnabled: false))
   }
@@ -510,9 +512,10 @@ struct SettingsStoreTests {
     #expect(defaults.mirroredSatelliteModes == [.voiceSync])
   }
 
-  @Test func manualScrollConfigurationClampsSupportedWPMRange() {
+  @Test func manualScrollConfigurationClampsSupportedPointsPerSecondRange() {
     #expect(ManualScrollConfiguration.clampedWPM(5) == 10)
-    #expect(ManualScrollConfiguration.clampedWPM(50) == 50)
-    #expect(ManualScrollConfiguration.clampedWPM(135) == 100)
+    #expect(ManualScrollConfiguration.defaultWPM == 10)
+    #expect(ManualScrollConfiguration.clampedWPM(20) == 20)
+    #expect(ManualScrollConfiguration.clampedWPM(50) == 30)
   }
 }

@@ -82,7 +82,7 @@ final class AiraLogger {
           try self.fileManager.removeItem(at: destinationURL)
         }
         try self.fileManager.copyItem(at: self.logFileURL, to: destinationURL)
-        self.info("Exported debug log to \(destinationURL.path)", category: "logging")
+        self.info("Exported debug log", category: "logging")
       } catch {
         self.error(error, category: "logging", context: "Failed to export debug log")
       }

@@ -50,10 +50,7 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
       download: false
     )
     whisper = try await WhisperKit(config)
-    AiraLogger.shared.info(
-      "whisperBackend.prepared modelPath=\(modelURL.path)",
-      category: "voice"
-    )
+    AiraLogger.shared.info("Voice recognition ready", category: "voice")
   }
 
   func acceptAudio(_ samples: [Float]) async {
@@ -106,10 +103,6 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
         if emittedTokens.count > Self.maximumEmittedTokenCacheSize {
           emittedTokens.removeFirst(min(Self.emittedTokenCacheTrimCount, emittedTokens.count))
         }
-        AiraLogger.shared.info(
-          "whisperBackend.emit word=\"\(word.word)\" start=\(absoluteStart) confidence=\(word.probability)",
-          category: "voice"
-        )
         onRecognizedWord?(token)
       }
     } catch {

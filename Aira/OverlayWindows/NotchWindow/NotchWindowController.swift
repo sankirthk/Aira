@@ -369,6 +369,9 @@ class NotchWindowController: NSObject, NSWindowDelegate {
       onPauseToggle: { [weak self] in
         self?.voiceSync?.togglePause()
       },
+      onMicrophoneToggle: { [weak self] in
+        self?.voiceSync?.toggleMicrophoneMute()
+      },
       onEndSession: { [weak self] in
         self?.onEndSession?()
       },

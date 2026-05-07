@@ -137,6 +137,7 @@ struct NotchContentView: View {
   let onDockToggle: () -> Void
   let onFullscreenToggle: () -> Void
   let onPauseToggle: () -> Void
+  let onMicrophoneToggle: () -> Void
   let onEndSession: () -> Void
   let onAppearanceChange: (OverlayAppearance) -> Void
   let onResize: (NotchResizeEdge, CGSize) -> Void
@@ -164,6 +165,7 @@ struct NotchContentView: View {
     onDockToggle: @escaping () -> Void = {},
     onFullscreenToggle: @escaping () -> Void = {},
     onPauseToggle: @escaping () -> Void = {},
+    onMicrophoneToggle: @escaping () -> Void = {},
     onEndSession: @escaping () -> Void,
     onAppearanceChange: @escaping (OverlayAppearance) -> Void = { _ in },
     onResize: @escaping (NotchResizeEdge, CGSize) -> Void = { _, _ in },
@@ -193,6 +195,7 @@ struct NotchContentView: View {
     self.onDockToggle = onDockToggle
     self.onFullscreenToggle = onFullscreenToggle
     self.onPauseToggle = onPauseToggle
+    self.onMicrophoneToggle = onMicrophoneToggle
     self.onEndSession = onEndSession
     self.onAppearanceChange = onAppearanceChange
     self.onResize = onResize
@@ -279,11 +282,17 @@ struct NotchContentView: View {
           isDocked: isDocked,
           canUndock: canUndock,
           isFullScreen: isFullScreen,
-          showsMicrophoneToggle: voiceSyncEnabled,
+          showsMicrophoneToggle: voiceSyncEnabled || spokenWordHighlightingEnabled,
+          showsDockSidePauseButton: NotchHoverChromePolicy.showsDockSidePauseButton(
+            voiceScrollMode: voiceSync.voiceScrollMode,
+            spokenWordHighlightingEnabled: spokenWordHighlightingEnabled
+          ),
           onDockToggle: onDockToggle,
           onFullscreenToggle: onFullscreenToggle,
           isPaused: voiceSync.isPausedByUser,
+          isMicrophoneMuted: voiceSync.isMicrophoneMutedByUser,
           onPauseToggle: onPauseToggle,
+          onMicrophoneToggle: onMicrophoneToggle,
           onEndSession: onEndSession
         )
       }
@@ -315,10 +324,13 @@ private struct NotchHoverChrome: View {
   let canUndock: Bool
   let isFullScreen: Bool
   let showsMicrophoneToggle: Bool
+  let showsDockSidePauseButton: Bool
   let onDockToggle: () -> Void
   let onFullscreenToggle: () -> Void
   let isPaused: Bool
+  let isMicrophoneMuted: Bool
   let onPauseToggle: () -> Void
+  let onMicrophoneToggle: () -> Void
   let onEndSession: () -> Void
 
   var body: some View {
@@ -330,6 +342,19 @@ private struct NotchHoverChrome: View {
           isEnabled: isDocked ? canUndock : true
         ) {
           OverlayDockArrowIcon(pointsDown: isDocked)
+        }
+
+        if showsDockSidePauseButton {
+          overlayButton(
+            help: isPaused ? "Resume Session" : "Pause Session",
+            action: onPauseToggle
+          ) {
+            if isPaused {
+              OverlayResumeIcon()
+            } else {
+              OverlayPauseIcon()
+            }
+          }
         }
 
         if !isDocked {
@@ -345,19 +370,23 @@ private struct NotchHoverChrome: View {
       Spacer()
 
       HStack(spacing: 4) {
-        overlayButton(
-          help: showsMicrophoneToggle
-            ? (isPaused ? "Turn Microphone On" : "Turn Microphone Off")
-            : (isPaused ? "Resume Session" : "Pause Session"),
-          action: onPauseToggle
-        ) {
-          if showsMicrophoneToggle {
-            OverlayVoiceMicIcon(isMuted: isPaused)
-          } else {
-            if isPaused {
-              OverlayResumeIcon()
+        if showsMicrophoneToggle || !showsDockSidePauseButton {
+          overlayButton(
+            help: showsMicrophoneToggle
+              ? (isMicrophoneMuted ? "Turn Microphone On" : "Turn Microphone Off")
+              : (isPaused ? "Resume Session" : "Pause Session"),
+            action: showsDockSidePauseButton && showsMicrophoneToggle
+              ? onMicrophoneToggle
+              : onPauseToggle
+          ) {
+            if showsMicrophoneToggle {
+              OverlayVoiceMicIcon(isMuted: isMicrophoneMuted)
             } else {
-              OverlayPauseIcon()
+              if isPaused {
+                OverlayResumeIcon()
+              } else {
+                OverlayPauseIcon()
+              }
             }
           }
         }
@@ -386,6 +415,15 @@ private struct NotchHoverChrome: View {
     .buttonStyle(OverlayChromeIconButtonStyle())
     .disabled(!isEnabled)
     .help(action == nil ? "\(help) (not wired yet)" : help)
+  }
+}
+
+enum NotchHoverChromePolicy {
+  static func showsDockSidePauseButton(
+    voiceScrollMode: VoiceScrollMode,
+    spokenWordHighlightingEnabled: Bool
+  ) -> Bool {
+    voiceScrollMode == .classicScroll && spokenWordHighlightingEnabled
   }
 }
 
@@ -605,7 +643,8 @@ private struct OverlayVoiceMicIcon: View {
             path.move(to: CGPoint(x: 5, y: 20))
             path.addLine(to: CGPoint(x: 19, y: 4))
           }
-          stroke(slash, color: strokeColor, width: 2.2)
+          stroke(slash, color: .black, width: 3.8, opacity: 0.7)
+          stroke(slash, color: .white, width: 2.2, opacity: 0.96)
         }
       }
       .frame(width: 24, height: 24)

@@ -72,11 +72,11 @@ struct ScriptCardView: View {
 
       // MARK: Metadata
       Text("Last edited: \(lastEditedFormatted)")
-        .font(.custom("Inter-Regular", size: scaled(12)))
+        .font(.custom("CrimsonText-Regular", size: scaled(12)))
         .foregroundStyle(Color("colorMuted"))
 
       Text("Duration: \(estimatedDuration)")
-        .font(.custom("Inter-Regular", size: scaled(12)))
+        .font(.custom("CrimsonText-Regular", size: scaled(12)))
         .foregroundStyle(Color("colorMuted"))
 
       Spacer(minLength: 0)
@@ -317,7 +317,7 @@ private struct ScriptCardCastSplitButton: View {
         .frame(width: 210)
       }
     }
-    .font(.custom("Manrope-Bold", size: 14 * managerFontScale))
+    .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
     .foregroundStyle(.white)
     .background(Color("colorSecondary"))
     .clipShape(RoundedRectangle(cornerRadius: 8))

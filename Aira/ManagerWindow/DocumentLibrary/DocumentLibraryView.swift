@@ -99,7 +99,7 @@ struct DocumentLibraryView: View {
             .font(.custom("IndieFlower", size: scaled(36)))
             .foregroundStyle(Color("colorText"))
           Text(pageSubtitle)
-            .font(.custom("Inter-Regular", size: scaled(14)))
+            .font(.custom("CrimsonText-Regular", size: scaled(14)))
             .foregroundStyle(Color("colorMuted"))
         }
         Spacer()

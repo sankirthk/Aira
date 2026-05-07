@@ -613,7 +613,6 @@ private struct AppearanceTabContent: View {
       SettingsPanel {
         SectionTitle(text: "Typography")
         VStack(alignment: .leading, spacing: 14) {
-
           // Size buttons
           VStack(alignment: .leading, spacing: 8) {
             Text("Base Size")
@@ -2033,7 +2032,7 @@ private struct SystemTabContent: View {
     )
   }
 
-  private var autoScrollWPMSliderBinding: Binding<Double> {
+  private var autoScrollSpeedSliderBinding: Binding<Double> {
     Binding(
       get: { ManualScrollConfiguration.clampedWPM(appState.settings.autoScrollWPM) },
       set: { appState.settings.autoScrollWPM = ManualScrollConfiguration.clampedWPM($0) }
@@ -2160,19 +2159,19 @@ private struct SystemTabContent: View {
                   .font(.custom("CrimsonText-Regular", size: 18))
                   .foregroundStyle(Color("colorText"))
                 Text(
-                  "Sets the physical scroll speed before you begin and still drives Manual mode when Voice-Sync is off."
+                  "Sets the manual reading pace before you begin and still drives Manual mode when Voice-Sync is off."
                 )
                 .font(.custom("CrimsonText-Regular", size: 14))
                 .foregroundStyle(Color("colorText").opacity(0.6))
               }
               Spacer()
-              Text("\(Int(autoScrollWPMSliderBinding.wrappedValue.rounded())) pt/s")
+              Text("\(Int(autoScrollSpeedSliderBinding.wrappedValue.rounded())) pt/s")
                 .font(.custom("CrimsonText-Regular", size: 18))
                 .foregroundStyle(Color("colorPrimary"))
             }
 
             Slider(
-              value: autoScrollWPMSliderBinding,
+              value: autoScrollSpeedSliderBinding,
               in: ManualScrollConfiguration.minimumWPM...ManualScrollConfiguration.maximumWPM,
               step: 1
             )
@@ -2215,10 +2214,10 @@ private struct SystemTabContent: View {
             }
           }
 
-          // Sensitivity only affects sound-based scrolling.
+          // Sensitivity affects microphone-driven scroll modes.
           VStack(alignment: .leading, spacing: 10) {
-            let isSoundBased = appState.settings.voiceScrollMode == .soundBased
-            systemFieldLabel("Sound Sensitivity")
+            let usesSpeechSensitivity = appState.settings.voiceScrollMode.usesSpeechSensitivity
+            systemFieldLabel("Mic Sensitivity")
             HStack(spacing: 8) {
               ForEach(SpeechSensitivity.allCases, id: \.self) { level in
                 let isActive = appState.settings.speechSensitivity == level
@@ -2229,12 +2228,12 @@ private struct SystemTabContent: View {
                     .font(.custom("CrimsonText-Regular", size: 17))
                     .foregroundStyle(
                       Color("colorText")
-                        .opacity(isSoundBased ? 1 : 0.35)
+                        .opacity(usesSpeechSensitivity ? 1 : 0.35)
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(
-                      isActive && isSoundBased
+                      isActive && usesSpeechSensitivity
                         ? Color("colorPrimary").opacity(0.1)
                         : Color("colorBackground").opacity(0.75)
                     )
@@ -2242,25 +2241,25 @@ private struct SystemTabContent: View {
                     .overlay(
                       RoundedRectangle(cornerRadius: 12)
                         .stroke(
-                          isActive && isSoundBased
+                          isActive && usesSpeechSensitivity
                             ? Color("colorPrimary")
                             : Color("colorText").opacity(0.14),
-                          lineWidth: isActive && isSoundBased ? 3 : 2
+                          lineWidth: isActive && usesSpeechSensitivity ? 3 : 2
                         ))
                 }
                 .buttonStyle(.plain)
-                .disabled(!isSoundBased)
+                .disabled(!usesSpeechSensitivity)
               }
             }
             Text(
-              "Applies only to Sound-based mode. Classic and Word tracking do not use volume to move."
+              "Applies to Sound-based and Word tracking modes. Classic uses the manual scroll speed."
             )
             .font(.custom("CrimsonText-Regular", size: 14))
             .foregroundStyle(
               Color("colorText")
-                .opacity(isSoundBased ? 0.64 : 0.3))
+                .opacity(usesSpeechSensitivity ? 0.64 : 0.3))
           }
-          .opacity(appState.settings.voiceScrollMode == .soundBased ? 1 : 0.5)
+          .opacity(appState.settings.voiceScrollMode.usesSpeechSensitivity ? 1 : 0.5)
           .animation(.easeInOut(duration: 0.2), value: appState.settings.voiceScrollMode)
 
           Divider().opacity(0.2)

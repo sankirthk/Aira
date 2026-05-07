@@ -2,8 +2,8 @@ import Foundation
 
 enum ManualScrollConfiguration {
   static let minimumWPM: Double = 10
-  static let maximumWPM: Double = 100
-  static let defaultWPM: Double = 50
+  static let maximumWPM: Double = 30
+  static let defaultWPM: Double = 10
 
   static func clampedWPM(_ value: Double) -> Double {
     min(max(value, minimumWPM), maximumWPM)
@@ -391,6 +391,10 @@ enum VoiceScrollMode: String, Codable, CaseIterable {
 
   var usesSoundBasedMotion: Bool {
     self == .soundBased
+  }
+
+  var usesSpeechSensitivity: Bool {
+    self == .soundBased || self == .wordTracking
   }
 
   var usesSpeechRecognitionForScroll: Bool {

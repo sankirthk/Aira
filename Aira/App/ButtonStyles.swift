@@ -7,7 +7,7 @@ struct AiraPrimaryButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.custom("Manrope-Bold", size: 14 * managerFontScale))
+      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
       .foregroundStyle(.white)
       .padding(.horizontal, 16)
       .padding(.vertical, 8)
@@ -21,7 +21,7 @@ struct AiraSecondaryButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.custom("Manrope-Bold", size: 14 * managerFontScale))
+      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
       .foregroundStyle(Color("colorSecondary"))
       .padding(.horizontal, 16)
       .padding(.vertical, 8)
@@ -86,7 +86,7 @@ struct AiraCueButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.custom("Inter-Regular", size: 13 * managerFontScale))
+      .font(.custom("CrimsonText-Regular", size: 13 * managerFontScale))
       .foregroundStyle(Color("colorSecondary"))
       .padding(.horizontal, 12)
       .padding(.vertical, 6)
@@ -174,7 +174,7 @@ struct AiraCardEditButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.custom("Manrope-Bold", size: 14 * managerFontScale))
+      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
       .foregroundStyle(.white)
       .frame(maxWidth: .infinity)
       .padding(.vertical, 10)
@@ -189,7 +189,7 @@ struct AiraCardCastButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.custom("Manrope-Bold", size: 14 * managerFontScale))
+      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
       .foregroundStyle(.white)
       .padding(.horizontal, 16)
       .padding(.vertical, 10)

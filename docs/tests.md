@@ -148,7 +148,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027 | ScriptMeta Codable round-trip | `[ ]` |
 | UT-028 | OverlayAppearance Codable round-trip, including alignment, spacing, shadow, and padding defaults | `[w]` |
 | UT-030 | AppSettings default countdown + related settings values match the configured defaults | `[x]` |
-| UT-030a | `AppSettings.autoScrollWPM` defaults to 50 and is clamped to the supported `10...100` range by the System-tab binding/helpers | `[x]` |
+| UT-030a | `AppSettings.autoScrollWPM` defaults to 10 pt/s and is clamped to the supported `10...30 pt/s` range by the System-tab binding/helpers | `[x]` |
 | UT-030b | `PrompterScrollMath.lineHeight(fontSize:lineSpacing:)` reflects the configured overlay line spacing and stays positive | `[x]` |
 | UT-030c | Overlay readability settings persist through `SettingsStore` save/load and `AppState` mutations, including justified alignment, tracking, word spacing, text shadow, and padding | `[w]` |
 | UT-030d | Overlay text measurement uses the same TextKit layout path as the AppKit renderer, and readability spacing changes still yield a positive multi-line scrollable height instead of collapsing the prompter range | `[x]` |
@@ -172,6 +172,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030ap | Word-tracking physical playhead progress blocks backward correction after line-end overshoot while permitting explicit backward reseed | `[x]` |
 | UT-030aq | Sound-based passive scroll offset updates preserve the Apple speech highlight cursor and existing dull-prefix state, so volume-driven motion cannot starve spoken-word highlighting | `[x]` |
 | UT-030ar | Spoken-word highlight rendering is scoped to the shared voice engine's active script ID, so synced pill windows with a different script after a notch/manual-pill swap do not render stale index-based highlights | `[x]` |
+| UT-030as | Classic spoken-word highlighting uses 2+ word visible-window phrase recovery so skipped visible lines can become the new highlight anchor without moving scroll offset | `[x]` |
 | UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
 | UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
 | UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |
@@ -216,6 +217,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-035 | Inserting a cue at a mid-text cursor position inserts the token at that position and preserves surrounding words | `[x]` |
 | UT-036 | Inserting a cue adjacent to existing whitespace does not add duplicate spaces | `[x]` |
 | UT-036a | Cue annotation styling identifies inline cue tokens and applies distinct editor attributes so cues remain visually separate from prose | `[x]` |
+| MT-036c | Editable Script Editor cue sidebar tells users they can type custom cues inside square brackets, while active-session read-only copy remains focused on disabled editing | `[x]` |
 | UT-036b | Script editor word counts treat newlines and tabs as separators so live editor metadata matches the library index for multiline scripts | `[x]` |
 
 ### Keyboard Shortcuts (Task T-025)
@@ -369,6 +371,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-044b | Runtime notch overlay top shoulders bow outward into the menu-bar edge instead of cutting inward or ending square | `[ ]` |
 | MT-044a | Runtime notch overlay exposes no drag-resize affordance or size-reset menu item during an active session; notch size changes only through Preferences > The Notch | `[ ]` |
 | MT-045 | Appearance tab preview chips keep Light Paper light and Dark Studio dark in both app themes | `[ ]` |
+| MT-045a | Appearance typography does not expose manager font dropdown rows; manager UI keeps fixed `CrimsonText-Regular` readable text and `IndieFlower` decorative labels, while overlay script font selection remains in The Notch/Pill Window settings | `[x]` |
 | MT-046 | System tab manual-scroll copy refers to Manual mode / Voice-Sync-off behavior, and the Speech Sensitivity field label matches the surrounding Crimson Text control styling | `[ ]` |
 | MT-047 | Overlay audio beam uses the shared primary color token and no overlay-local `Color(hex:)` helper remains in the Phase 6 window stack | `[ ]` |
 | MT-005 | Pill window is freely movable to a second display | `[ ]` |
@@ -403,13 +406,16 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-021 | The Notch Window keeps active text below the notch cutout, unread lines rise upward from lower in the overlay like a teleprompter, and the live voice indicator appears as corner sound waves outside the script text area | `[ ]` |
 | MT-022 | Overlay text shows a downward start marker above the opening line, ignores stray single-line breaks from the editor by flowing paragraphs cleanly, and does not visibly emphasize the currently spoken word | `[ ]` |
 | MT-023 | During the countdown, the overlay shows only the countdown treatment with no script text visible behind it; the script appears only after the countdown finishes | `[ ]` |
-| MT-024 | Manual scroll starts at the beginning of a fresh session, gets visibly faster as WPM increases, does not snap back toward the middle after manual repositioning, remains smooth under timer, keyboard, and wheel input, and shows a clear speed difference between low and high presets such as `100 WPM` and `260 WPM` | `[ ]` |
+| MT-024 | Manual scroll starts at the beginning of a fresh session, gets visibly faster as `pt/s` increases within the supported `10...30 pt/s` range, does not snap back toward the middle after manual repositioning, and remains smooth under timer, keyboard, and wheel input | `[ ]` |
+| MT-024a | System > During Session keeps Mic Sensitivity enabled for Sound-based and Word tracking modes, and disables it only for Classic mode | `[x]` |
 | MT-025 | Manual scroll remains visually smooth on the display refresh cadence with no micro-stutter from timer-style cadence mismatch during long runs at both low and high WPM | `[ ]` |
 | MT-026 | Keyboard nudges, wheel scrolling, and WPM auto-scroll no longer fight each other or snap the script back after a fresh session launch, and repeated line nudges do not get overridden by any mirrored offset channel | `[ ]` |
 | MT-027 | The pause keyboard shortcut pauses and resumes the active scrolling mode itself, including manual WPM scroll and voice-driven scroll, without needing to end the session | `[ ]` |
 | MT-028 | In Sync mode, the notch and every synced pill scroll and pause together; only Manual pills can diverge to a different script or offset | `[ ]` |
 | MT-050 | Turning Pause on mouse hover off keeps notch sessions scrolling while hovered; turning it on restores notch pause/resume behavior without changing scroll-position continuity, and pill windows remain unaffected in both cases | `[ ]` |
-| MT-054 | Hovering notch and pill overlays reveals action chrome in expected corners: notch shows undock on left plus pause/close on right, pill shows swap/fullscreen/close on right, and non-hover state hides the chrome | `[ ]` |
+| MT-054 | Hovering notch and pill overlays reveals action chrome in expected corners: notch shows undock on left, Classic + spoken-word highlighting adds pause/resume beside undock, mic/close stays on the right when the mic is active, pill shows swap/fullscreen/close on right, and non-hover state hides the chrome | `[ ]` |
+| UT-030ay | Notch hover chrome policy shows the dock-side pause/resume button only for Classic mode with spoken-word highlighting enabled | `[x]` |
+| UT-030az | Notch microphone mute control stops active capture without setting the user-paused session state, keeping mic mute separate from pause/resume semantics | `[x]` |
 | MT-060 | Clicking hover `Swap` on manual pill performs same script exchange as prior pill swap control, updating both manual pill and notch immediately from top of script | `[ ]` |
 | MT-061 | Clicking notch hover `Pause` toggles live session pause/resume, and clicking notch hover `Close` ends active presenter session with same behavior as Escape / prior end-session action | `[ ]` |
 | MT-062 | Pill hover `Fullscreen` is disabled on built-in/main display, becomes enabled after moving pill to a secondary display, and enters/exits macOS fullscreen there without affecting the notch overlay | `[ ]` |

@@ -271,6 +271,7 @@ The full-screen authoring experience within the content area.
 - Header: "Performance Cues" in Manrope Bold
 - Cue buttons: pill-shaped `RoundedRectangle` buttons in cream with terracotta border
 - Clicking a cue inserts the annotation at the current cursor position
+- Supporting copy tells users they can create custom cues by typing any cue inside square brackets, such as `[Look up]`.
 
 **No AI button in v1.** The AI enhancement feature is deferred. No AI-related controls appear in the editor.
 
@@ -284,8 +285,8 @@ A four-tab modal sheet (SwiftUI `.sheet` / AppKit panel), accessible from the si
 
 #### Tab 1: Appearance
 - Light / Dark mode toggle (system default is an additional option)
-- Manager App font selector: dropdown with Crimson Text (default), Manrope, Inter
-- Text size: segmented control with S / M / L options (maps to 16pt / 20pt / 26pt in the prompter)
+- Typography panel controls only manager app UI scale. Manager app font faces are fixed: `CrimsonText-Regular` for readable UI text and `IndieFlower` for decorative/display labels.
+- Text size: segmented control with Small / Medium / Large options for manager app UI scale
 
 #### Tab 2: The Notch
 This tab sets the **shared overlay appearance defaults** plus notch-only sizing controls. Per-window overrides are applied directly on the overlay window via hover chrome / per-window controls (see Screen 8).
@@ -326,11 +327,11 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 #### Tab 4: System
 - **Before your session**
   - Countdown duration: stepper control (0–10 seconds, default 3)
-  - Scroll speed: points-per-second slider with live value label, shown as `NNN pt/s`
+  - Scroll speed: points-per-second slider with live value label, default `10 pt/s`, clamped to `10...30 pt/s`
 - **During your session**
   - Voice-activated scroll: toggle (on by default)
   - Spoken-word highlighting: toggle (off by default, visual only, does not alter scroll behavior)
-  - Speech sensitivity: slider (Low / Medium / High), disabled when voice tracking is off
+  - Mic sensitivity: Low / Medium / High segmented control, enabled for Sound-based and Word tracking modes, disabled for Classic
   - Pause on mouse hover: toggle (on by default)
 - **Controls**
   - Keyboard shortcuts: 6 editable shortcut rows
@@ -393,7 +394,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - Blank-line paragraph breaks remain visible as paragraph spacing
 - Spoken-word tracking visibly highlights the current spoken word or matched phrase inline
 - When spoken-word highlighting is enabled, clicking a visible word in the notch or pill overlay reseeds the spoken-word highlight/search anchor to that word without changing the current scroll position
-- Spoken-word highlighting is visual only and is clipped to the currently visible overlay word window so off-screen spoken ranges cannot trigger large redraws or influence scroll pacing
+- Spoken-word highlighting is visual only and is clipped to the currently visible overlay word window so off-screen spoken ranges cannot trigger large redraws or influence scroll pacing. If the user skips ahead and speaks a different visible line, a meaningful 2+ word phrase match may become the new highlight anchor without moving the scroll offset.
 - Regression note: do not feed whole spoken-prefix ranges into live overlay rendering for classic/manual mode. Large off-screen dull-prefix redraws made classic scroll look jerky and slower even though scroll math itself was unchanged.
 - Session-mode switches must fully reset voice-session state. Ending a voice-driven session and later starting a classic/manual session must not inherit any prior recognition callbacks, speech-activity flags, scroll offsets, or voice-mode rendering behavior; a fresh post-quit launch and a post-voice mode switch must behave identically.
 - Overlay wheel input must accept intentional manual scrolling without amplifying one physical wheel gesture into multiple scroll mutations. When app is active, global scroll monitors must not double-apply same gesture already delivered through local/AppKit paths, and repeated back-and-forth wheel input in classic/manual highlight-only sessions must never yank script to top or random offset.
@@ -420,7 +421,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - When cursor enters the window: scroll pauses, cursor changes to a hand icon with a pause indicator
 - When cursor exits: scroll resumes from the exact paused position
 - No visual change to the overlay content during pause — the pause state is communicated solely through cursor change
-- Hover chrome appears only while hovered: top-left `Undock` + `Fullscreen`, top-right `Pause` + `Close`. In this pass the buttons are present visually only; behavior wiring can follow later.
+- Hover chrome appears only while hovered: top-left `Undock`; when Classic mode is using spoken-word highlighting, a separate `Pause` / `Resume` button appears beside `Undock` so session pause is not conflated with the microphone affordance. Undocked mode also shows `Fullscreen` on the left. Top-right shows microphone and close controls when the mic is active, otherwise pause/resume and close. The microphone button mutes/unmutes capture without marking the session as paused.
 - Scope: hover-to-pause applies to the Notch Window only. Pill Windows keep hover chrome but never pause on hover.
 
 **Background appearance (per-window, inherits global defaults):**
@@ -432,8 +433,9 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 
 **Hover chrome on the Notch Window:**
 - Left-side button undocks the notch only when no pill windows are active
-- Once undocked, the button becomes a dock action and a fullscreen action appears beside it
-- Right-side buttons expose pause/resume and close affordances
+- In Classic mode with spoken-word highlighting enabled, a pause/resume button appears beside the dock/undock button
+- Once undocked, the dock action remains left-aligned and a fullscreen action appears beside it
+- Right-side buttons expose microphone and close affordances when the mic is active; otherwise they expose pause/resume and close. In Classic spoken-word highlighting, the microphone button only mutes/unmutes capture, while the left-side pause button owns session pause/resume.
 - The close button ends the active presenter session for the notch, matching Escape / prior end-session action
 
 **Notch sizing during session:**
@@ -704,7 +706,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 |---|---|
 | REQ-001 Voice-Driven Scroll | Notch Window, Voice-Sync mode Pill Windows — script advances with speech |
 | REQ-002 Pause On Silence | All Voice-Sync windows — scroll halts; VisualBeam dims |
-| REQ-003 Manual Scroll Override | Mouse wheel / trackpad scrolling in overlay windows; line-by-line keyboard nudges; WPM speed slider in Settings > System |
+| REQ-003 Manual Scroll Override | Mouse wheel / trackpad scrolling in overlay windows; line-by-line keyboard nudges; `pt/s` speed slider in Settings > System |
 | REQ-004 Visual Beam Feedback | VisualBeam component in all overlay windows |
 | REQ-005 Prompter Hidden From Screen Share | OverlayWindow uses stealth flag; no visual cue needed |
 | REQ-006 Prompter Visible To User | Overlay windows fully visible on local display at all times |

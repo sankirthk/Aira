@@ -530,47 +530,19 @@ struct PrompterContentView: View {
 
   private func manualScroll(deltaY: CGFloat) {
     let maxOffset = max(contentHeight - viewportHeight, 0)
-    guard maxOffset > 0 else {
-      AiraLogger.shared.info(
-        "wheel manualScroll dropped reason=noScrollableRange deltaY=\(deltaY) contentHeight=\(contentHeight) viewportHeight=\(viewportHeight)",
-        category: "overlay-wheel"
-      )
-      return
-    }
-    guard !syncsSessionScroll || ownsSynchronizedScroll else {
-      AiraLogger.shared.info(
-        "wheel manualScroll dropped reason=syncFollower deltaY=\(deltaY) syncsSessionScroll=\(syncsSessionScroll) ownsSynchronizedScroll=\(ownsSynchronizedScroll)",
-        category: "overlay-wheel"
-      )
-      return
-    }
+    guard maxOffset > 0 else { return }
+    guard !syncsSessionScroll || ownsSynchronizedScroll else { return }
     let normalizedDelta = deltaY / maxOffset
-    AiraLogger.shared.info(
-      "wheel manualScroll accepted deltaY=\(deltaY) normalizedDelta=\(normalizedDelta) maxOffset=\(maxOffset) voiceSyncEnabled=\(voiceSyncEnabled) usesSessionPlayheadForManualScroll=\(usesSessionPlayheadForManualScroll)",
-      category: "overlay-wheel"
-    )
     if voiceSyncEnabled {
       let updated = min(max(CGFloat(playheadCoordinator.progress) - normalizedDelta, 0), 1)
-      AiraLogger.shared.info(
-        "wheel manualScroll path=voice progressBefore=\(playheadCoordinator.progress) progressAfter=\(updated)",
-        category: "overlay-wheel"
-      )
       playheadCoordinator.updateProgress(Double(updated))
       voiceSync.nudgeScroll(to: updated, resetSpokenTracking: false)
       if ownsSynchronizedScroll {
         cinematicController.setInitialOffset(updated)
       }
     } else if usesSessionPlayheadForManualScroll {
-      AiraLogger.shared.info(
-        "wheel manualScroll path=sessionPlayhead progressBefore=\(playheadCoordinator.progress) delta=\(-normalizedDelta)",
-        category: "overlay-wheel"
-      )
       playheadCoordinator.nudgeProgress(by: Double(-normalizedDelta))
     } else {
-      AiraLogger.shared.info(
-        "wheel manualScroll path=localDriver enqueueDelta=\(-normalizedDelta)",
-        category: "overlay-wheel"
-      )
       manualScrollDriver.enqueueNormalizedDelta(-normalizedDelta)
     }
   }
@@ -1463,10 +1435,6 @@ private struct ScrollWheelInterceptor: NSViewRepresentable {
     if let forwardingWindow = nsView.window as? OverlayScrollEventForwardingWindow {
       forwardingWindow.overlayScrollEventHandler = { [weak nsView] event in
         let signature = ScrollWheelEventSignature(event: event)
-        AiraLogger.shared.info(
-          "wheel bridge callback deltaY=\(event.scrollingDeltaY) pixelDeltaY=\(signature.pixelDeltaY)",
-          category: "overlay-wheel"
-        )
         nsView?.onScroll?(signature.pixelDeltaY)
       }
       forwardingWindow.overlayUsesEventDeduplication = usesEventDeduplication
@@ -1579,12 +1547,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
   override var canBecomeMain: Bool { true }
 
   override func sendEvent(_ event: NSEvent) {
-    if event.type == .scrollWheel {
-      AiraLogger.shared.info(
-        "wheel panel sendEvent deltaY=\(event.scrollingDeltaY) phase=\(event.phase.rawValue) momentum=\(event.momentumPhase.rawValue) isKey=\(isKeyWindow) isMain=\(isMainWindow)",
-        category: "overlay-wheel"
-      )
-    }
     super.sendEvent(event)
   }
 
@@ -1608,10 +1570,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
 
     removeScrollMonitors()
     monitoringConfiguration = newConfiguration
-    AiraLogger.shared.info(
-      "wheel panel refreshMonitoring dedupe=\(newConfiguration.usesEventDeduplication) strictRouting=\(newConfiguration.usesStrictActiveAppWheelSourceRouting) hasHandler=\(newConfiguration.hasHandler)",
-      category: "overlay-wheel"
-    )
 
     localScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) {
       [weak self] event in
@@ -1627,10 +1585,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
   }
 
   override func scrollWheel(with event: NSEvent) {
-    AiraLogger.shared.info(
-      "wheel panel direct deltaY=\(event.scrollingDeltaY) phase=\(event.phase.rawValue) momentum=\(event.momentumPhase.rawValue)",
-      category: "overlay-wheel"
-    )
     handleScroll(event, source: .forwardedWindow)
     super.scrollWheel(with: event)
   }
@@ -1644,10 +1598,6 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       appIsActive: NSApp.isActive,
       mouseIsInsideWindow: mouseInsideWindow
     )
-    AiraLogger.shared.info(
-      "wheel panel monitored source=\(source.debugName) accepted=\(shouldHandle) appIsActive=\(NSApp.isActive) mouseInside=\(mouseInsideWindow) deltaY=\(event.scrollingDeltaY)",
-      category: "overlay-wheel"
-    )
     guard shouldHandle else { return }
 
     handleScroll(event, source: source)
@@ -1655,18 +1605,10 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
 
   private func handleScroll(_ event: NSEvent, source: ScrollWheelMonitorSource) {
     guard let overlayScrollEventHandler else {
-      AiraLogger.shared.info(
-        "wheel panel dropped reason=noHandler source=\(source.debugName) deltaY=\(event.scrollingDeltaY)",
-        category: "overlay-wheel"
-      )
       return
     }
 
     guard overlayUsesEventDeduplication else {
-      AiraLogger.shared.info(
-        "wheel panel pass source=\(source.debugName) dedupe=off deltaY=\(event.scrollingDeltaY)",
-        category: "overlay-wheel"
-      )
       overlayScrollEventHandler(event)
       return
     }
@@ -1678,18 +1620,10 @@ final class OverlayScrollForwardingPanel: NSPanel, OverlayScrollEventForwardingW
       lastDelivery: lastHandledScrollDelivery
     )
     if shouldDrop {
-      AiraLogger.shared.info(
-        "wheel panel dropped reason=dedupe source=\(source.debugName) deltaY=\(signature.pixelDeltaY) eventNumber=\(String(describing: signature.eventNumber))",
-        category: "overlay-wheel"
-      )
       return
     }
 
     lastHandledScrollDelivery = (signature, source)
-    AiraLogger.shared.info(
-      "wheel panel pass source=\(source.debugName) deltaY=\(signature.pixelDeltaY) eventNumber=\(String(describing: signature.eventNumber))",
-      category: "overlay-wheel"
-    )
     overlayScrollEventHandler(event)
   }
 
@@ -1758,10 +1692,6 @@ final class ScrollWheelNSView: NSView {
     if let forwardingWindow = window as? OverlayScrollEventForwardingWindow {
       forwardingWindow.overlayScrollEventHandler = { [weak self] event in
         let signature = ScrollWheelEventSignature(event: event)
-        AiraLogger.shared.info(
-          "wheel bridge attach callback deltaY=\(event.scrollingDeltaY) pixelDeltaY=\(signature.pixelDeltaY) eventNumber=\(String(describing: signature.eventNumber))",
-          category: "overlay-wheel"
-        )
         self?.onScroll?(signature.pixelDeltaY)
       }
       forwardingWindow.overlayUsesEventDeduplication = usesEventDeduplication

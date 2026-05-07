@@ -9,6 +9,7 @@ class VoiceSyncEngine: ObservableObject {
 
   @Published var state: EngineState = .idle
   @Published var isPausedByUser: Bool = false
+  @Published var isMicrophoneMutedByUser: Bool = false
   @Published var scrollOffset: CGFloat = 0
   @Published var manualLineNudgeID: Int = 0
   @Published var manualLineNudgeDirection: CGFloat = 0
@@ -134,6 +135,7 @@ class VoiceSyncEngine: ObservableObject {
     scrollOffset = offset
     highestWordTrackingScrollOffset = offset
     isPausedByUser = false
+    isMicrophoneMutedByUser = false
     resumesAudioCaptureAfterUserPause = false
     currentWordIndex = nil
     highlightedWordRange = nil
@@ -182,6 +184,7 @@ class VoiceSyncEngine: ObservableObject {
     currentWordIndex = nil
     highlightedWordRange = nil
     isHumanSpeechActive = false
+    isMicrophoneMutedByUser = false
     audioLevelMonitor?.reset()
     recognitionEnabled = false
     recognitionDrivesScroll = true
@@ -198,6 +201,15 @@ class VoiceSyncEngine: ObservableObject {
   func togglePause() {
     isPausedByUser.toggle()
     if isPausedByUser {
+      muteMicrophoneCaptureForUserPause()
+    } else {
+      resumeMicrophoneCaptureAfterUserPauseIfNeeded()
+    }
+  }
+
+  func toggleMicrophoneMute() {
+    isMicrophoneMutedByUser.toggle()
+    if isMicrophoneMutedByUser {
       muteMicrophoneCaptureForUserPause()
     } else {
       resumeMicrophoneCaptureAfterUserPauseIfNeeded()
@@ -478,15 +490,29 @@ class VoiceSyncEngine: ObservableObject {
     }
 
     for token in partialTokens.dropFirst(stablePrefixCount) {
+      guard let normalized = VoiceSyncMatching.normalizeToken(token) else { continue }
+      appendRecentSpokenWord(normalized)
+
+      if let match = VoiceSyncMatching.findSequentialMatch(
+        scriptWords: scriptWords,
+        spokenWord: normalized,
+        currentIndex: cursorIndex
+      ) {
+        publishHighlightOnlyMatch(match)
+        continue
+      }
+
       guard
-        let match = VoiceSyncMatching.findSequentialMatch(
+        let recoveryMatch = VoiceSyncMatching.findVisiblePhraseRecoveryMatch(
           scriptWords: scriptWords,
-          spokenWord: token,
-          currentIndex: cursorIndex
+          recentSpokenWords: recentSpokenWords,
+          currentIndex: cursorIndex,
+          searchUpperBound: searchRange.upperBound,
+          fallbackLookAhead: 0
         )
       else { continue }
 
-      publishHighlightOnlyMatch(match)
+      publishHighlightOnlyMatch(recoveryMatch)
     }
 
     previousPartialTokens = partialTokens
@@ -510,7 +536,7 @@ class VoiceSyncEngine: ObservableObject {
     isHumanSpeechActive = true
     guard let match = matchRecognizedWordToken(token) else {
       AiraLogger.shared.info(
-        "voiceSync.wordTokenNoMatch token=\"\(token.word)\" cursorIndex=\(cursorIndex) words=\(scriptWords.count)",
+        "voiceSync.wordTokenNoMatch cursorIndex=\(cursorIndex) words=\(scriptWords.count)",
         category: "voice"
       )
       return
@@ -536,7 +562,7 @@ class VoiceSyncEngine: ObservableObject {
           scrollOffset = targetOffset
         }
         AiraLogger.shared.info(
-          "voiceSync.wordTrackingScroll token=\"\(token.word)\" currentWordIndex=\(match.currentWordIndex) scrollOffset=\(scrollOffset)",
+          "voiceSync.wordTrackingScroll currentWordIndex=\(match.currentWordIndex) scrollOffset=\(scrollOffset)",
           category: "voice"
         )
       }
@@ -548,7 +574,7 @@ class VoiceSyncEngine: ObservableObject {
     let confidence = token.confidence ?? 1
     guard confidence >= minimumRecognizedWordConfidence else {
       AiraLogger.shared.info(
-        "voiceSync.wordTokenRejected reason=lowConfidence token=\"\(token.word)\" confidence=\(confidence)",
+        "voiceSync.wordTokenRejected reason=lowConfidence confidence=\(confidence)",
         category: "voice"
       )
       return nil
@@ -720,7 +746,7 @@ class VoiceSyncEngine: ObservableObject {
     diagnostics.recognitionPartialCount += 1
     if diagnostics.recognitionPartialCount <= 3 {
       AiraLogger.shared.info(
-        "voiceSync.recognition token seq=\(diagnostics.recognitionPartialCount) word=\"\(token.word)\" confidence=\(token.confidence ?? -1) t=\(diagnosticElapsedText())",
+        "voiceSync.recognition token seq=\(diagnostics.recognitionPartialCount) confidence=\(token.confidence ?? -1) t=\(diagnosticElapsedText())",
         category: "voice"
       )
     }
@@ -729,7 +755,7 @@ class VoiceSyncEngine: ObservableObject {
       firstRecognitionTimeoutTask?.cancel()
       firstRecognitionTimeoutTask = nil
       AiraLogger.shared.info(
-        "voiceSync.recognition firstToken word=\"\(token.word)\" t=\(diagnosticElapsedText())",
+        "voiceSync.recognition firstToken t=\(diagnosticElapsedText())",
         category: "voice"
       )
     }
@@ -741,9 +767,8 @@ class VoiceSyncEngine: ObservableObject {
   ) {
     diagnostics.recognitionPartialCount += 1
     if diagnostics.recognitionPartialCount <= 3 {
-      let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
       AiraLogger.shared.info(
-        "voiceSync.recognition applePartial seq=\(diagnostics.recognitionPartialCount) isFinal=\(isFinal) words=\(recognizedWords.count) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+        "voiceSync.recognition applePartial seq=\(diagnostics.recognitionPartialCount) isFinal=\(isFinal) words=\(recognizedWords.count) t=\(diagnosticElapsedText())",
         category: "voice"
       )
     }
@@ -784,9 +809,8 @@ class VoiceSyncEngine: ObservableObject {
   ) {
     guard !diagnostics.didLogFirstStartupSeed else { return }
     diagnostics.didLogFirstStartupSeed = true
-    let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
     AiraLogger.shared.info(
-      "voiceSync.startupSeed startIndex=\(match.startIndex) currentWordIndex=\(match.currentWordIndex) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      "voiceSync.startupSeed startIndex=\(match.startIndex) currentWordIndex=\(match.currentWordIndex) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) words=\(recognizedWords.count) t=\(diagnosticElapsedText())",
       category: "voice"
     )
   }
@@ -797,9 +821,8 @@ class VoiceSyncEngine: ObservableObject {
   ) {
     guard !diagnostics.didLogFirstStartupSeedMiss else { return }
     diagnostics.didLogFirstStartupSeedMiss = true
-    let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
     AiraLogger.shared.info(
-      "voiceSync.startupSeed miss search=\(searchRange.lowerBound)..<\(searchRange.upperBound) cursor=\(cursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      "voiceSync.startupSeed miss search=\(searchRange.lowerBound)..<\(searchRange.upperBound) cursor=\(cursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) words=\(recognizedWords.count) t=\(diagnosticElapsedText())",
       category: "voice"
     )
   }
@@ -823,9 +846,8 @@ class VoiceSyncEngine: ObservableObject {
     searchRange: Range<Int>
   ) {
     guard diagnostics.recognitionPartialCount <= 3 else { return }
-    let tokenPreview = recognizedWords.prefix(6).map(\.token).joined(separator: " ")
     AiraLogger.shared.info(
-      "voiceSync.searchWindow seq=\(diagnostics.recognitionPartialCount) cursor=\(cursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) t=\(diagnosticElapsedText()) tokens=\"\(tokenPreview)\"",
+      "voiceSync.searchWindow seq=\(diagnostics.recognitionPartialCount) cursor=\(cursorIndex) visible=\(visibleWordRange.lowerBound)..<\(visibleWordRange.upperBound) search=\(searchRange.lowerBound)..<\(searchRange.upperBound) words=\(recognizedWords.count) t=\(diagnosticElapsedText())",
       category: "voice"
     )
   }

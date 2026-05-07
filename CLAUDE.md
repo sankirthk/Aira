@@ -1,4 +1,4 @@
-# Aira — Claude Code Guide
+# Aira — Codex Code Guide
 
     ## Local Tooling Note
 
@@ -144,6 +144,9 @@
     - Use a custom `VStack` layout: sage green top bar (title + close button + horizontal tab row), then
       cream content area below. Do NOT use the system `TabView`.
     - Tab buttons fill the full row equally: `HStack` with `frame(maxWidth: .infinity)` on each button.
+    - All custom SwiftUI buttons must make the whole visible button area clickable, not only the text or icon.
+      Apply the sizing to the `Button` itself when needed, add a matching `contentShape(...)`, and use a
+      pointing-hand cursor on the full hit target.
     - Do not show a subtitle or description under each tab button label.
     - Do not show a repeated tab title + blurb inside the content area — content starts immediately.
     - The Intelligence/AI tab is **deferred** — only Appearance, The Notch, and System tabs exist in v1.
