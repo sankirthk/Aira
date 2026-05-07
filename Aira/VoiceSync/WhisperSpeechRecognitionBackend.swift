@@ -13,8 +13,7 @@ final class WhisperSpeechRecognitionBackend: SpeechRecognitionBackend {
     "tokenizer_config.json",
   ]
   nonisolated static let preferredBundledModelNames = [
-    "openai_whisper-base.en",
-    "openai_whisper-tiny.en",
+    "openai_whisper-base.en"
   ]
   nonisolated static let maximumContextSamples = 48_000
   nonisolated static let transcriptionTriggerSamples = 8_000

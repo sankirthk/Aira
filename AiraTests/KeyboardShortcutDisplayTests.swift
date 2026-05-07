@@ -1446,8 +1446,7 @@ struct VoiceSyncMatchingTests {
     #expect(WhisperSpeechRecognitionBackend.emittedTokenCacheTrimCount == 100)
     #expect(
       WhisperSpeechRecognitionBackend.preferredBundledModelNames.first == "openai_whisper-base.en")
-    #expect(
-      WhisperSpeechRecognitionBackend.preferredBundledModelNames.contains("openai_whisper-tiny.en"))
+    #expect(WhisperSpeechRecognitionBackend.preferredBundledModelNames.count == 1)
   }
 
   @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {

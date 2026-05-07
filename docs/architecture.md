@@ -14,7 +14,7 @@ The developer is new to Swift. Technical decisions are explained clearly, includ
 
 These constraints apply to every decision in this document. They are non-negotiable.
 
-- **Binary size.** Keep dependencies minimal. Sparkle is approved only for the direct-distribution updater path. WhisperKit and its bundled `openai_whisper-base.en` model plus `openai_whisper-tiny.en` fallback are approved for offline Voice-Sync. The old sub-10 MB archive target is superseded by a measured release-size gate that includes the bundled speech models.
+- **Binary size.** Keep dependencies minimal. Sparkle is approved only for the direct-distribution updater path. WhisperKit and its bundled `openai_whisper-base.en` model are approved for offline Voice-Sync. The old sub-10 MB archive target is superseded by a measured release-size gate that includes the bundled speech model.
 - **Memory.** Overlay windows hold only the active script segment in memory during a session, not the full document.
 - **Battery.** The microphone tap (`AVAudioEngine`) runs **only during an active presenter session**. It is fully stopped and released when the session ends or the overlays are closed. Zero audio capture at idle.
 - **CPU.** No polling loops. Use Combine publishers or `async/await` for all reactive state. Scroll animation is driven by a single frame-synced session playhead clock (`CADisplayLink` / AppKit display link host) rather than `Timer` loops or per-view sleep loops.
@@ -248,7 +248,7 @@ This is Aira's core technical feature. The app supports a single Voice mode buil
 ```
 AVAudioEngine (microphone input)
     ↓
-WhisperKit backend (bundled openai_whisper-base.en, fallback openai_whisper-tiny.en)
+WhisperKit backend (bundled openai_whisper-base.en)
     ↓ stable spoken word tokens with timestamps
 VoiceSyncEngine.alignSpokenWord(_ token: SpokenWordToken)
     ↓ matched word index / anchor information
@@ -838,7 +838,7 @@ All views that need global state receive it via `@EnvironmentObject`. Nested vie
 <string>Aira uses your microphone to follow along with your script as you speak.</string>
 ```
 
-**On-device enforcement:** WhisperKit loads the bundled `openai_whisper-base.en` model from the app bundle, falling back to bundled `openai_whisper-tiny.en` only if the base model is unavailable. Voice-Sync must not fall back to cloud speech recognition or trigger a runtime model download. If no bundled model can be loaded, Aira disables Voice-Sync for that session and reports the local model-load error.
+**On-device enforcement:** WhisperKit loads the bundled `openai_whisper-base.en` model from the app bundle. Voice-Sync must not fall back to cloud speech recognition or trigger a runtime model download. If the bundled model cannot be loaded, Aira disables Voice-Sync for that session and reports the local model-load error.
 
 **Sandbox and entitlements:**
 ```xml
@@ -924,7 +924,7 @@ The release workflow should avoid rerunning full `xcodebuild build` and `xcodebu
 - Confirm per-window appearance popover changes apply live without lag
 - Confirm keyboard shortcut fires correctly when Manager App window is in focus (not the overlay)
 - Confirm Accessibility permission prompt appears on first use of keyboard shortcut
-- Confirm app bundle size is measured after Archive build and includes the bundled `openai_whisper-base.en` and `openai_whisper-tiny.en` models (`du -sh Aira.app`)
+- Confirm app bundle size is measured after Archive build and includes the bundled `openai_whisper-base.en` model (`du -sh Aira.app`)
 - Confirm `otool -L Aira` shows no third-party analytics or telemetry libraries
 - Confirm Charles Proxy trace shows zero outbound network traffic during a full session
 - Confirm `.txt` file over 10 MB is rejected gracefully with a user-facing error message
@@ -948,7 +948,7 @@ The following must be verified before any release build is signed and distribute
 | Gatekeeper passes | Notarized `.dmg` passes `spctl --assess --verbose Aira.dmg` without warnings |
 | Sparkle sandbox wiring present | `SUEnableInstallerLauncherService = true`, app sandbox entitlement enabled, Sparkle mach-lookup exceptions present, and feed/public key values resolve in the built app |
 | Hardened Runtime enabled | Xcode build settings: Hardened Runtime = Yes. Sandbox entitlements present and signing succeeds |
-| On-device recognition enforced | WhisperKit loads from bundled `openai_whisper-base.en` or fallback `openai_whisper-tiny.en` and no speech data leaves the device |
+| On-device recognition enforced | WhisperKit loads from bundled `openai_whisper-base.en` and no speech data leaves the device |
 
 ---
 
