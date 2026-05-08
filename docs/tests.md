@@ -139,6 +139,9 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027o | Bundled Whisper resources include the preferred `base.en` model with offline tokenizer files | `[x]` |
 | UT-027p | Word-tracking fallback scroll progress uses bounded optical lookahead so the current spoken word is carried into the readable area instead of hugging the bottom edge | `[x]` |
 | UT-027q | Exact word-tracking scroll progress advances to the next speakable rendered line when the spoken word is the last word on its line | `[x]` |
+| UT-027r | Word-tracking recognition can prewarm the bundled Whisper backend while idle without starting a presenter session or microphone capture | `[x]` |
+| UT-027s | Sound-based cinematic scrolling can restart after naturally reaching the end when the user manually seeks back up the script | `[x]` |
+| UT-027t | A rebuilt active Classic/highlight-only prompter must start the voice subsystem instead of only preparing recognition, so live spoken-word highlighting resumes after settings/view refresh | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
 | MT-049g | Voice-Sync startup search-window diagnostics show first-partial cursor state, visible range, normalized search range, and startup-seed misses during one live session | `[ ]` |
 
@@ -158,7 +161,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030m | Overlay spoken-word highlight updates use temporary TextKit display attributes and do not alter intrinsic height when only the current spoken token changes | `[x]` |
 | UT-030n | Expanding the spoken-word dull prefix across repeated temporary-attribute updates does not alter intrinsic height, covering the incremental prefix-update path used during live classic/voice highlighting | `[x]` |
 | UT-030o | Exact word-tracking scroll progress places line-end and final-paragraph targets in the upper reading band instead of leaving only the lower half of the sentence visible | `[x]` |
-| UT-030ad | Audio level monitoring uses speech-focused activation thresholds, and reseeding/highlighting updates the same current-word cursor used by Whisper word tracking | `[x]` |
+| UT-030ad | Audio level monitoring uses elevated but normal-speech-accessible Sound-based activation thresholds so background noise does not start volume-driven scrolling, and reseeding/highlighting updates the same current-word cursor used by Whisper word tracking | `[x]` |
 | UT-030ae | Voice-sync startup uses the plain capture input path without enabling platform voice-processing DSP, avoiding repeated downlink timestamp faults while keeping software audio thresholds active | `[x]` |
 | UT-030af | Whisper recognition keeps a 3-second sliding context window but triggers inference every 0.5 seconds of new 16 kHz audio, with bounded emitted-token deduplication across overlapping windows | `[x]` |
 | UT-030ag | Whisper word tracking keeps single-token matches local, allows deep jumps only after a three-word spoken phrase, and clears spoken context when the user manually reseeds by clicking a word | `[x]` |
@@ -169,11 +172,12 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030al | Passive non-consuming session keyboard shortcuts use a listen-only event tap so Escape can still reach macOS fullscreen while ending the presenter session | `[x]` |
 | UT-030am | Manager window session transition preserves fullscreen manager windows and avoids style-mask repair/stripping during hide/restore | `[x]` |
 | UT-030an | Spoken-word highlight matching accepts content words up to two positions ahead while keeping stop-word jumps constrained to one position | `[x]` |
-| UT-030ao | Word-tracking recovery accepts 2+ word clean phrases inside the visible forward window, rejects phrase matches beyond that window, and clamps scroll to monotonic forward progress | `[x]` |
+| UT-030ao | Word-tracking recovery requires 3-word clean phrases inside the visible forward window, rejects 2-word snippets and phrase matches beyond that window, and clamps scroll to monotonic forward progress | `[x]` |
 | UT-030ap | Word-tracking physical playhead progress blocks backward correction after line-end overshoot while permitting explicit backward reseed | `[x]` |
 | UT-030aq | Sound-based passive scroll offset updates preserve the Apple speech highlight cursor and existing dull-prefix state, so volume-driven motion cannot starve spoken-word highlighting | `[x]` |
 | UT-030ar | Spoken-word highlight rendering is scoped to the shared voice engine's active script ID, so synced pill windows with a different script after a notch/manual-pill swap do not render stale index-based highlights | `[x]` |
-| UT-030as | Classic spoken-word highlighting uses 2+ word visible-window phrase recovery so skipped visible lines can become the new highlight anchor without moving scroll offset | `[x]` |
+| UT-030as | Classic spoken-word highlighting uses 3-word visible-window phrase recovery so skipped visible lines can become the new highlight anchor without moving scroll offset | `[x]` |
+| UT-030at | First-session Classic/Sound Apple speech highlighting starts microphone capture before speech recognition preparation completes, so the first launch does not require ending and restarting the session before highlights can update | `[x]` |
 | UT-030n-a | Overlay spoken-word dull-prefix updates only emit the changed tail when the visible range moves forward, backward, or shifts after a reseed | `[x]` |
 | UT-030n-b | Spoken-word dulling stays monotonic when the incoming visible highlight window jumps forward or shrinks during manual navigation | `[x]` |
 | UT-030n-c | Current-word underline attributes stay separate from committed spoken-history dulling so manual navigation does not clear the active marker | `[x]` |

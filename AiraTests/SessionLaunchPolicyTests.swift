@@ -28,6 +28,27 @@ struct SessionLaunchPolicyTests {
     #expect(PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(countdownDuration: 0))
   }
 
+  @Test func activePrompterRefreshStartsRequiredVoiceSubsystem() {
+    #expect(
+      PrompterVoiceStartupPolicy.shouldStartVoiceSubsystemOnAppear(
+        sessionStarted: true,
+        requiresVoiceSubsystem: true
+      )
+    )
+    #expect(
+      !PrompterVoiceStartupPolicy.shouldStartVoiceSubsystemOnAppear(
+        sessionStarted: false,
+        requiresVoiceSubsystem: true
+      )
+    )
+    #expect(
+      !PrompterVoiceStartupPolicy.shouldStartVoiceSubsystemOnAppear(
+        sessionStarted: true,
+        requiresVoiceSubsystem: false
+      )
+    )
+  }
+
   @Test func positiveCountdownDoesNotNeedExtraVoiceStartupDeferral() {
     #expect(!PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(countdownDuration: 3))
   }

@@ -256,6 +256,10 @@ VoiceSyncEngine.alignSpokenWord(_ token: SpokenWordToken)
     └── Voice Mode: update playhead motion state and anchor correction
 ```
 
+The bundled WhisperKit backend may be prepared asynchronously while the app is idle when Word tracking is the selected mode. This prewarm is model preparation only: it must not create `AVAudioEngine`, install a microphone tap, or show microphone activity before a presenter session starts.
+
+For Classic and Sound modes with spoken-word highlighting enabled, Apple speech recognition preparation must not block session audio capture. `VoiceSyncEngine.start()` starts the shared `AVAudioEngine` tap immediately, prepares the Apple recognition backend asynchronously, buffers a bounded three seconds of early recognition samples, and flushes those samples once the backend is ready. This keeps first-session highlighting responsive without running the microphone while idle.
+
 **The Tiered Word-Matching Algorithm (The Engine):**
 
 To handle repeated/common words and recognition latency, Aira uses a forward-only matcher with **Tiered Look-Ahead Bounds** to prevent jitter (false jumps).
