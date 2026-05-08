@@ -52,4 +52,46 @@ struct SessionLaunchPolicyTests {
   @Test func positiveCountdownDoesNotNeedExtraVoiceStartupDeferral() {
     #expect(!PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(countdownDuration: 3))
   }
+
+  @Test func coldWordTrackingForcesPreparationCountdownOnlyUntilBackendIsReady() {
+    #expect(
+      PrompterVoiceStartupPolicy.requiresWordTrackingPreparationGate(
+        usesWordTrackingScroll: true,
+        wordTrackingRecognitionPrepared: false
+      )
+    )
+    #expect(
+      !PrompterVoiceStartupPolicy.requiresWordTrackingPreparationGate(
+        usesWordTrackingScroll: true,
+        wordTrackingRecognitionPrepared: true
+      )
+    )
+    #expect(
+      !PrompterVoiceStartupPolicy.requiresWordTrackingPreparationGate(
+        usesWordTrackingScroll: false,
+        wordTrackingRecognitionPrepared: false
+      )
+    )
+  }
+
+  @Test func wordTrackingPreparationUsesRequestedCountdownAfterBackendIsReady() {
+    #expect(
+      PrompterVoiceStartupPolicy.effectiveCountdownDuration(
+        requestedDuration: 0,
+        forcedWordTrackingPreparation: true
+      ) == 0
+    )
+    #expect(
+      PrompterVoiceStartupPolicy.effectiveCountdownDuration(
+        requestedDuration: 5,
+        forcedWordTrackingPreparation: true
+      ) == 5
+    )
+    #expect(
+      PrompterVoiceStartupPolicy.effectiveCountdownDuration(
+        requestedDuration: 0,
+        forcedWordTrackingPreparation: false
+      ) == 0
+    )
+  }
 }

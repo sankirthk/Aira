@@ -123,3 +123,18 @@ struct CountdownView: View {
     onComplete()
   }
 }
+
+struct WordTrackingPreparationView: View {
+  let appearance: OverlayAppearance
+
+  var body: some View {
+    ZStack {
+      Color(hex: appearance.backgroundColor)
+        .opacity(appearance.opacity)
+
+      Text("Getting ready...")
+        .font(.custom("Manrope-Bold", size: 28))
+        .foregroundStyle(Color(hex: appearance.textColor))
+    }
+  }
+}

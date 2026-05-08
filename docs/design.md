@@ -418,6 +418,7 @@ The primary prompter surface. Fixed in position, anchored beneath the camera not
 - Counts 3 → 2 → 1 → fades out, revealing script text as Voice-Sync starts
 - The script text is fully hidden while the countdown is visible; no background copy shows through behind the numeral
 - If countdown is set to 0 in Settings, this overlay is skipped entirely
+- On the first cold Word Tracking session after app launch, if the Whisper backend is not prepared yet, the overlay shows `Getting ready...` while model preparation completes, then continues with the normal configured countdown. If countdown is set to 0, the session starts immediately after the backend is ready. Once Word Tracking has prepared in that launch, later Word Tracking sessions use the normal configured countdown directly.
 
 **Hover-to-pause behavior:**
 - When cursor enters the window: scroll pauses, cursor changes to a hand icon with a pause indicator
