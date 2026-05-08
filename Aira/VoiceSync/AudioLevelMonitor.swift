@@ -51,11 +51,11 @@ class AudioLevelMonitor: ObservableObject {
   static func speakingThreshold(for sensitivity: SpeechSensitivity) -> Float {
     switch sensitivity {
     case .low:
-      return 0.35
+      return 0.42
     case .medium:
-      return 0.20
+      return 0.27
     case .high:
-      return 0.12
+      return 0.18
     }
   }
 

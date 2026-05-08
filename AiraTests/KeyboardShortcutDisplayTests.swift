@@ -13,16 +13,41 @@ private final class ShortcutActionRecorder {
 }
 
 @MainActor
+private func waitUntil(
+  timeoutNanoseconds: UInt64,
+  condition: @MainActor () -> Bool
+) async throws {
+  let start = ContinuousClock.now
+  while !condition() {
+    try await Task.sleep(nanoseconds: 20_000_000)
+    if start.duration(to: ContinuousClock.now) >= .nanoseconds(Int64(timeoutNanoseconds)) {
+      return
+    }
+  }
+}
+
+@MainActor
 private final class FakeSpeechRecognitionBackend: PartialSpeechRecognitionBackend {
   var onRecognizedWord: (@MainActor (SpokenWordToken) -> Void)?
   var onRecognizedWords: (@MainActor ([VoiceSyncMatching.RecognizedWord], Bool) -> Void)?
   var onProcessingChanged: (@MainActor (Bool) -> Void)?
+  var suspendsPrepare = false
+  var prepareError: Error?
   private(set) var prepareCallCount = 0
   private(set) var acceptedAudio: [[Float]] = []
   private(set) var stopCallCount = 0
+  private var prepareContinuations: [CheckedContinuation<Void, Error>] = []
 
   func prepare() async throws {
     prepareCallCount += 1
+    if suspendsPrepare {
+      try await withCheckedThrowingContinuation { continuation in
+        prepareContinuations.append(continuation)
+      }
+    }
+    if let prepareError {
+      throw prepareError
+    }
   }
 
   func acceptAudio(_ samples: [Float]) async {
@@ -43,6 +68,18 @@ private final class FakeSpeechRecognitionBackend: PartialSpeechRecognitionBacken
       isFinal
     )
   }
+
+  func finishSuspendedPrepare() {
+    let continuations = prepareContinuations
+    prepareContinuations.removeAll()
+    for continuation in continuations {
+      continuation.resume()
+    }
+  }
+}
+
+private enum FakeSpeechRecognitionBackendError: Error {
+  case prepareFailed
 }
 
 struct KeyboardShortcutDisplayTests {
@@ -1113,6 +1150,56 @@ struct VoiceSyncMatchingTests {
     #expect(engine.highlightedWordRange == 0..<2)
   }
 
+  @Test @MainActor func firstClassicHighlightStartupDoesNotPrepareAppleRecognitionTwice()
+    async throws
+  {
+    let backend = FakeSpeechRecognitionBackend()
+    backend.suspendsPrepare = true
+    backend.prepareError = FakeSpeechRecognitionBackendError.prepareFailed
+    let engine = VoiceSyncEngine(
+      recognitionBackend: backend,
+      microphonePermissionGranted: { true }
+    )
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.voiceScrollMode = .classicScroll
+
+    engine.start()
+    engine.start()
+    try await waitUntil(timeoutNanoseconds: 500_000_000) {
+      backend.prepareCallCount > 0
+    }
+    try await Task.sleep(for: .milliseconds(100))
+
+    #expect(backend.prepareCallCount == 1)
+
+    backend.finishSuspendedPrepare()
+    try await Task.sleep(for: .milliseconds(20))
+  }
+
+  @Test @MainActor func firstClassicHighlightStartupBeginsCaptureBeforeSpeechPrepareCompletes()
+    async throws
+  {
+    let backend = FakeSpeechRecognitionBackend()
+    backend.suspendsPrepare = true
+    backend.prepareError = FakeSpeechRecognitionBackendError.prepareFailed
+    let engine = VoiceSyncEngine(
+      recognitionBackend: backend,
+      microphonePermissionGranted: { true }
+    )
+    engine.loadScript(text: "one two three four", startingAt: 0)
+    engine.voiceScrollMode = .classicScroll
+
+    engine.start()
+    try await waitUntil(timeoutNanoseconds: 1_000_000_000) {
+      engine.state == .running
+    }
+
+    #expect(engine.state == .running)
+
+    engine.stop()
+    backend.finishSuspendedPrepare()
+  }
+
   @Test @MainActor func classicHighlightPhraseRecoveryUsesVisibleWindow() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
@@ -1127,10 +1214,29 @@ struct VoiceSyncMatchingTests {
     backend.emitPartial(["start"])
     backend.emitPartial(["start", "visible"])
     backend.emitPartial(["start", "visible", "phrase"])
+    backend.emitPartial(["start", "visible", "phrase", "target"])
 
     #expect(engine.scrollOffset == 0)
-    #expect(engine.currentWordIndex == 8)
-    #expect(engine.highlightedWordRange == 0..<8)
+    #expect(engine.currentWordIndex == 9)
+    #expect(engine.highlightedWordRange == 0..<9)
+  }
+
+  @Test @MainActor func classicHighlightPhraseRecoveryRequiresThreeWordPhrase() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text: "start missed gap1 gap2 gap3 visible phrase target after",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .classicScroll
+    engine.updateVisibleWordRange(0..<9)
+
+    backend.emitPartial(["start"])
+    backend.emitPartial(["start", "visible"])
+    backend.emitPartial(["start", "visible", "phrase"])
+
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.highlightedWordRange == 0..<0)
   }
 
   @Test @MainActor func wordTrackingModeMapsMatchedWordToScrollProgress() async throws {
@@ -1287,9 +1393,43 @@ struct VoiceSyncMatchingTests {
     backend.emit("start", confidence: 0.9)
     backend.emit("visible", confidence: 0.95)
     backend.emit("phrase", confidence: 0.95)
+    backend.emit("target", confidence: 0.95)
 
-    #expect(engine.currentWordIndex == 8)
-    #expect(engine.highlightedWordRange == 0..<8)
+    #expect(engine.currentWordIndex == 9)
+    #expect(engine.highlightedWordRange == 0..<9)
+  }
+
+  @Test @MainActor func wordTrackingPhraseRecoveryRequiresThreeWordPhrase() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+    engine.loadScript(
+      text: "start missed gap1 gap2 gap3 visible phrase target after",
+      startingAt: 0
+    )
+    engine.voiceScrollMode = .wordTracking
+    engine.updateVisibleWordRange(0..<9)
+
+    backend.emit("start", confidence: 0.9)
+    backend.emit("visible", confidence: 0.95)
+    backend.emit("phrase", confidence: 0.95)
+
+    #expect(engine.currentWordIndex == 0)
+    #expect(engine.scrollOffset == 0)
+  }
+
+  @Test func visiblePhraseRecoveryRejectsTwoWordPhrase() {
+    let scriptWords = VoiceSyncMatching.tokenize(
+      "start missed gap1 gap2 gap3 visible phrase target after")
+
+    let match = VoiceSyncMatching.findVisiblePhraseRecoveryMatch(
+      scriptWords: scriptWords,
+      recentSpokenWords: ["visible", "phrase"],
+      currentIndex: 1,
+      searchUpperBound: scriptWords.count,
+      fallbackLookAhead: 0
+    )
+
+    #expect(match == nil)
   }
 
   @Test @MainActor func wordTrackingPhraseRecoveryRejectsMatchesPastVisibleWindow() async throws {
@@ -1306,6 +1446,7 @@ struct VoiceSyncMatchingTests {
     backend.emit("start", confidence: 0.9)
     backend.emit("hidden", confidence: 0.95)
     backend.emit("phrase", confidence: 0.95)
+    backend.emit("target", confidence: 0.95)
 
     #expect(engine.currentWordIndex == 0)
     #expect(engine.scrollOffset == 0)
@@ -1322,6 +1463,7 @@ struct VoiceSyncMatchingTests {
     let offsetAfterStart = engine.scrollOffset
     backend.emit("far", confidence: 0.95)
     backend.emit("phrase", confidence: 0.95)
+    backend.emit("target", confidence: 0.95)
 
     #expect(engine.currentWordIndex == 0)
     #expect(engine.scrollOffset == offsetAfterStart)
@@ -1458,6 +1600,18 @@ struct VoiceSyncMatchingTests {
     #expect(WhisperSpeechRecognitionBackend.preferredBundledModelNames.count == 1)
   }
 
+  @Test @MainActor func wordTrackingRecognitionCanPrewarmBeforeSessionStart() async throws {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+
+    engine.prewarmWordTrackingRecognitionIfNeeded()
+    await Task.yield()
+
+    #expect(backend.prepareCallCount == 1)
+    #expect(engine.state == .idle)
+    #expect(backend.acceptedAudio.isEmpty)
+  }
+
   @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)
@@ -1488,6 +1642,30 @@ struct VoiceSyncMatchingTests {
     #expect(engine.currentWordIndex == 1)
     #expect(engine.highlightedWordRange == 0..<1)
     #expect(engine.scrollOffset == 0.85)
+  }
+
+  @Test @MainActor func cinematicScrollCanRestartAfterEndThenManualSeekBack() async throws {
+    let controller = CinematicScrollController()
+    var ticks: [CGFloat] = []
+    controller.configure(pointsPerSecond: 10_000, contentHeight: 1_100, viewportHeight: 100)
+    controller.onScrollTick = { ticks.append($0) }
+    controller.setInitialOffset(0.99)
+    controller.setSpeaking(true)
+
+    try await waitUntil(timeoutNanoseconds: 1_000_000_000) {
+      ticks.last == 1.0
+    }
+    let tickCountAtEnd = ticks.count
+    #expect(ticks.last == 1.0)
+
+    controller.setInitialOffset(0.4)
+    controller.setSpeaking(true)
+    try await waitUntil(timeoutNanoseconds: 1_000_000_000) {
+      ticks.count > tickCountAtEnd
+    }
+
+    #expect(ticks.count > tickCountAtEnd)
+    controller.stop()
   }
 
   @Test @MainActor func passiveScrollOffsetDoesNotClearExistingHighlightState() async throws {
@@ -1717,9 +1895,37 @@ struct VoiceSyncMatchingTests {
   }
 
   @Test @MainActor func audioLevelMonitorUsesSpeechFocusedSpeakingThresholds() {
-    #expect(AudioLevelMonitor.speakingThreshold(for: .low) == 0.35)
-    #expect(AudioLevelMonitor.speakingThreshold(for: .medium) == 0.20)
-    #expect(AudioLevelMonitor.speakingThreshold(for: .high) == 0.12)
+    #expect(AudioLevelMonitor.speakingThreshold(for: .low) == 0.42)
+    #expect(AudioLevelMonitor.speakingThreshold(for: .medium) == 0.27)
+    #expect(AudioLevelMonitor.speakingThreshold(for: .high) == 0.18)
+  }
+
+  @Test @MainActor func audioLevelMonitorActivatesSoundModeForUsableSpeechLevel() async throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 1,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let usableSpeech: [Float] = [0.0010, -0.0023, 0.0016, -0.0012]
+    let destination = UnsafeMutableBufferPointer(
+      start: buffer.floatChannelData![0],
+      count: Int(buffer.frameLength)
+    )
+    for (frameIndex, sample) in usableSpeech.enumerated() {
+      destination[frameIndex] = sample
+    }
+
+    let monitor = AudioLevelMonitor()
+    monitor.sensitivity = .medium
+    monitor.processBuffer(buffer)
+    try await Task.sleep(for: .milliseconds(120))
+    monitor.processBuffer(buffer)
+
+    #expect(monitor.isSpeaking)
   }
 
   @Test @MainActor func voiceSyncUsesPlainCaptureInputPathByDefault() {
@@ -2200,7 +2406,9 @@ struct SessionPlayheadCoordinatorTests {
     }
     controller.setAnchorOffset(0.8)
 
-    try? await Task.sleep(nanoseconds: 80_000_000)
+    try? await waitUntil(timeoutNanoseconds: 500_000_000) {
+      tickCounter.value > 0
+    }
     let ticksBeforeStop = tickCounter.value
     #expect(ticksBeforeStop > 0)
 
