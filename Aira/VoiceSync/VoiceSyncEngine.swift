@@ -32,7 +32,11 @@ class VoiceSyncEngine: ObservableObject {
   private let firstTapTimeoutNanoseconds: UInt64 = 2_000_000_000
   private let firstRecognitionTimeoutNanoseconds: UInt64 = 4_000_000_000
   private let diagnosticAudioFloor: Float = 0.003
+  private let maxPendingRecognitionSampleCount = Int(VoiceSyncRecognitionInput.targetSampleRate * 3)
   private var recognitionEnabled: Bool = false
+  private var recognitionBackendReady = false
+  private var pendingRecognitionSampleChunks: [[Float]] = []
+  private var pendingRecognitionSampleCount = 0
   private var recognitionDrivesScroll: Bool = true
   private var recognitionGeneration: UInt64 = 0
   private var audioEngineConfigurationObserver: NSObjectProtocol?
@@ -53,6 +57,7 @@ class VoiceSyncEngine: ObservableObject {
   private var highestWordTrackingScrollOffset: CGFloat = 0
   private var acceptsRecognitionCallbacks = false
   private var resumesAudioCaptureAfterUserPause = false
+  private var wordTrackingPrewarmTask: Task<Void, Never>?
 
   enum MatcherMode: Equatable {
     case startup
@@ -142,6 +147,9 @@ class VoiceSyncEngine: ObservableObject {
     isHumanSpeechActive = false
     recentSpokenWords = []
     previousPartialTokens = []
+    recognitionBackendReady = false
+    pendingRecognitionSampleChunks = []
+    pendingRecognitionSampleCount = 0
     acceptsRecognitionCallbacks = true
   }
 
@@ -187,6 +195,9 @@ class VoiceSyncEngine: ObservableObject {
     isMicrophoneMutedByUser = false
     audioLevelMonitor?.reset()
     recognitionEnabled = false
+    recognitionBackendReady = false
+    pendingRecognitionSampleChunks = []
+    pendingRecognitionSampleCount = 0
     recognitionDrivesScroll = true
     activeScriptID = nil
     scriptWords = []
@@ -224,6 +235,22 @@ class VoiceSyncEngine: ObservableObject {
 
   func setRecognitionDrivesScroll(_ drivesScroll: Bool) {
     recognitionDrivesScroll = drivesScroll
+  }
+
+  func prewarmWordTrackingRecognitionIfNeeded() {
+    guard state == .idle, !recognitionEnabled else { return }
+    guard wordTrackingPrewarmTask == nil else { return }
+    let backend = wordTrackingRecognitionBackend
+    wordTrackingPrewarmTask = Task { @MainActor [weak self] in
+      defer { self?.wordTrackingPrewarmTask = nil }
+      do {
+        try await backend?.prepare()
+        AiraLogger.shared.info("voiceSync.wordTrackingPrewarm completed", category: "voice")
+      } catch {
+        AiraLogger.shared.error(
+          error, category: "voice", context: "Failed to prewarm word-tracking backend")
+      }
+    }
   }
 
   func nudgeScroll(by delta: CGFloat, resetSpokenTracking: Bool = true) {
@@ -293,11 +320,7 @@ class VoiceSyncEngine: ObservableObject {
     )
 
     if microphoneGranted {
-      if voiceScrollMode == .wordTracking {
-        startEngine()
-        return
-      }
-      prepareRecognitionBackendThenStartEngine()
+      startEngine()
     }
   }
 
@@ -313,24 +336,6 @@ class VoiceSyncEngine: ObservableObject {
   }
 
   // MARK: - Engine
-
-  private func prepareRecognitionBackendThenStartEngine() {
-    let generation = recognitionGeneration
-    AiraLogger.shared.info("voiceSync.prepareBackend begin", category: "voice")
-    Task { @MainActor [weak self] in
-      guard let self, generation == self.recognitionGeneration else { return }
-      do {
-        try await self.activeRecognitionBackend?.prepare()
-        guard generation == self.recognitionGeneration else { return }
-        AiraLogger.shared.info("voiceSync.prepareBackend completed", category: "voice")
-        self.startEngine()
-      } catch {
-        self.recognitionEnabled = false
-        AiraLogger.shared.error(
-          error, category: "voice", context: "Failed to prepare speech backend")
-      }
-    }
-  }
 
   private func startEngine() {
     AiraLogger.shared.info("voiceSync.startEngine begin", category: "voice")
@@ -370,7 +375,7 @@ class VoiceSyncEngine: ObservableObject {
         let samples = VoiceSyncRecognitionInput.makeRecognitionSamples(from: buffer)
       {
         Task { @MainActor [weak self] in
-          await self?.activeRecognitionBackend?.acceptAudio(samples)
+          await self?.acceptRecognitionSamples(samples)
         }
       }
       Task { @MainActor [weak self] in
@@ -407,6 +412,8 @@ class VoiceSyncEngine: ObservableObject {
     firstTapTimeoutTask = nil
     firstRecognitionTimeoutTask?.cancel()
     firstRecognitionTimeoutTask = nil
+    wordTrackingPrewarmTask?.cancel()
+    wordTrackingPrewarmTask = nil
     silenceDeadlineTask?.cancel()
     silenceDeadlineTask = nil
     for backend in uniqueRecognitionBackends {
@@ -432,15 +439,60 @@ class VoiceSyncEngine: ObservableObject {
 
   private func prepareRecognitionBackendIfNeeded() {
     guard recognitionEnabled else { return }
+    recognitionBackendReady = false
     let generation = recognitionGeneration
+    let prewarmTask =
+      voiceScrollMode == .wordTracking
+      ? wordTrackingPrewarmTask
+      : nil
     Task { @MainActor [weak self] in
       guard let self, generation == self.recognitionGeneration else { return }
+      if let prewarmTask {
+        await prewarmTask.value
+        guard generation == self.recognitionGeneration else { return }
+      }
       do {
         try await self.activeRecognitionBackend?.prepare()
+        guard generation == self.recognitionGeneration else { return }
+        self.recognitionBackendReady = true
+        await self.flushPendingRecognitionSamples()
       } catch {
+        self.recognitionBackendReady = false
+        self.pendingRecognitionSampleChunks = []
+        self.pendingRecognitionSampleCount = 0
         AiraLogger.shared.error(
           error, category: "voice", context: "Failed to prepare speech backend")
       }
+    }
+  }
+
+  private func acceptRecognitionSamples(_ samples: [Float]) async {
+    guard recognitionEnabled, !samples.isEmpty else { return }
+    guard recognitionBackendReady else {
+      appendPendingRecognitionSamples(samples)
+      return
+    }
+    await activeRecognitionBackend?.acceptAudio(samples)
+  }
+
+  private func appendPendingRecognitionSamples(_ samples: [Float]) {
+    pendingRecognitionSampleChunks.append(samples)
+    pendingRecognitionSampleCount += samples.count
+    while pendingRecognitionSampleCount > maxPendingRecognitionSampleCount,
+      let firstChunk = pendingRecognitionSampleChunks.first
+    {
+      pendingRecognitionSampleCount -= firstChunk.count
+      pendingRecognitionSampleChunks.removeFirst()
+    }
+  }
+
+  private func flushPendingRecognitionSamples() async {
+    let chunks = pendingRecognitionSampleChunks
+    pendingRecognitionSampleChunks = []
+    pendingRecognitionSampleCount = 0
+    for samples in chunks {
+      guard recognitionEnabled, recognitionBackendReady else { return }
+      await activeRecognitionBackend?.acceptAudio(samples)
     }
   }
 
@@ -1476,7 +1528,7 @@ struct VoiceSyncMatching {
     let searchEnd = min(requestedUpperBound, scriptWords.count)
     guard searchStart < searchEnd else { return nil }
 
-    let phraseLengths = [3, 2]
+    let phraseLengths = [3]
     for phraseLength in phraseLengths {
       guard recentSpokenWords.count >= phraseLength else { continue }
       let phrase = Array(recentSpokenWords.suffix(phraseLength))

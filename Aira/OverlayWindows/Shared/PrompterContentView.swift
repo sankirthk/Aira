@@ -131,6 +131,12 @@ struct PrompterContentView: View {
     voiceSyncEnabled && voiceSync.voiceScrollMode == .soundBased
   }
 
+  private var requiresVoiceSubsystem: Bool {
+    voiceSync.voiceScrollMode.usesSpeechRecognition(
+      spokenWordHighlightingEnabled: spokenWordHighlightingEnabled)
+      || voiceSync.voiceScrollMode.usesSoundBasedMotion
+  }
+
   private var usesLegacyLineSyncForVoice: Bool {
     false
   }
@@ -329,8 +335,11 @@ struct PrompterContentView: View {
 
         voiceSync.setRecognitionDrivesScroll(usesWordTrackingScroll)
 
-        if sessionStarted && spokenWordHighlightingEnabled {
-          voiceSync.enableRecognitionIfNeeded()
+        if PrompterVoiceStartupPolicy.shouldStartVoiceSubsystemOnAppear(
+          sessionStarted: sessionStarted,
+          requiresVoiceSubsystem: requiresVoiceSubsystem
+        ) {
+          startVoiceSubsystemIfNeeded()
         }
 
         if !usesDirectPlayheadRendering {
@@ -442,7 +451,7 @@ struct PrompterContentView: View {
       }
       .onChange(of: spokenWordHighlightingEnabled) { _, isEnabled in
         if sessionStarted && isEnabled {
-          voiceSync.enableRecognitionIfNeeded()
+          startVoiceSubsystemIfNeeded()
         }
       }
       .onChange(of: voiceSync.isPausedByUser) { _, isPausedByUser in
@@ -1081,6 +1090,13 @@ enum PrompterSessionRestorePolicy {
 }
 
 enum PrompterVoiceStartupPolicy {
+  static func shouldStartVoiceSubsystemOnAppear(
+    sessionStarted: Bool,
+    requiresVoiceSubsystem: Bool
+  ) -> Bool {
+    sessionStarted && requiresVoiceSubsystem
+  }
+
   static func shouldDeferVoiceStartup(countdownDuration: Int) -> Bool {
     countdownDuration == 0
   }

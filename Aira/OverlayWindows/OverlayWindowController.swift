@@ -125,6 +125,9 @@ class OverlayWindowController {
     settingsCancellable = appState?.$settings
       .sink { [weak self] settings in
         self?.voiceSync.voiceScrollMode = settings.voiceScrollMode
+        if settings.voiceScrollMode == .wordTracking {
+          self?.voiceSync.prewarmWordTrackingRecognitionIfNeeded()
+        }
         self?.notchController?.updateSessionBehavior(
           voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
           spokenWordHighlightingEnabled: settings.spokenWordHighlightingEnabled,
@@ -352,6 +355,9 @@ class OverlayWindowController {
     appState?.setPresenterSessionState(isActive: false, scriptIDs: [])
     if shouldRestoreManagerWindow {
       AppWindowCoordinator.restoreManagerWindow()
+    }
+    if appState?.settings.voiceScrollMode == .wordTracking {
+      voiceSync.prewarmWordTrackingRecognitionIfNeeded()
     }
   }
 

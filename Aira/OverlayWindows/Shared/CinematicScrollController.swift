@@ -56,12 +56,18 @@ class CinematicScrollController {
   }
 
   func stop() {
+    haltMotion(clearCallback: true)
+  }
+
+  private func haltMotion(clearCallback: Bool) {
     scrollTask?.cancel()
     scrollTask = nil
     isSpeaking = false
     remainingPostSpeechGlide = 0
     anchorOffset = nil
-    onScrollTick = nil
+    if clearCallback {
+      onScrollTick = nil
+    }
   }
 
   private var anchorDriftPixels: Double {
@@ -159,7 +165,7 @@ class CinematicScrollController {
     onScrollTick?(currentScrollOffset)
 
     if currentScrollOffset >= 1.0 {
-      stop()
+      haltMotion(clearCallback: false)
     } else if !isSpeaking && remainingPostSpeechGlide <= 0 && anchorDriftPixels <= 4 {
       // Gap fully traversed (or no gap) — stop the task.
       scrollTask?.cancel()
