@@ -140,6 +140,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-027p | Word-tracking fallback scroll progress uses bounded optical lookahead so the current spoken word is carried into the readable area instead of hugging the bottom edge | `[x]` |
 | UT-027q | Exact word-tracking scroll progress advances to the next speakable rendered line when the spoken word is the last word on its line | `[x]` |
 | UT-027r | Word-tracking recognition can prewarm the bundled Whisper backend while idle without starting a presenter session or microphone capture | `[x]` |
+| UT-027r.1 | Word-tracking recognition readiness becomes true after the first successful prewarm and persists after session stop so the preparation gate is first-launch-only | `[x]` |
 | UT-027s | Sound-based cinematic scrolling can restart after naturally reaching the end when the user manually seeks back up the script | `[x]` |
 | UT-027t | A rebuilt active Classic/highlight-only prompter must start the voice subsystem instead of only preparing recognition, so live spoken-word highlighting resumes after settings/view refresh | `[x]` |
 | MT-049f | Voice-Sync startup diagnostics show exact ordering and timing for first recognition partial, startup seed, first strict match, and first published highlight during one live session | `[ ]` |
@@ -168,6 +169,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-030ah | Whisper word tracking rejects deep jumps for repeated low-information stop-word phrases while preserving meaningful phrase recovery | `[x]` |
 | UT-030ai | Voice recognition source policy routes Classic and Sound-based spoken-word highlighting through Apple's speech backend, and Word Tracking through WhisperKit only | `[x]` |
 | UT-030aj | Spoken-word highlighting and word tracking use sequential cursor-only matching so speech cannot jump the highlight to repeated words ahead; manual click/reseed remains the jump path | `[x]` |
+| UT-030aj.1 | Cold Word Tracking launch policy shows the preparation gate only while the Whisper backend is unprepared, then honors the configured countdown once the backend is ready | `[x]` |
 | UT-030ak | User pause/mic control stops active recognition capture and restarts it on resume without clearing script/highlight state | `[x]` |
 | UT-030al | Passive non-consuming session keyboard shortcuts use a listen-only event tap so Escape can still reach macOS fullscreen while ending the presenter session | `[x]` |
 | UT-030am | Manager window session transition preserves fullscreen manager windows and avoids style-mask repair/stripping during hide/restore | `[x]` |

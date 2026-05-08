@@ -41,6 +41,7 @@ struct PrompterContentView: View {
   @State private var cinematicController = CinematicScrollController()
   @State private var manualScrollDriver = ManualScrollDriver()
   @State private var deferredVoiceStartupTask: Task<Void, Never>?
+  @State private var forcesWordTrackingPreparationCountdown = false
   @State private var highestWordTrackingPlayheadProgress: CGFloat = 0
   @State private var lastWordTrackingIndex: Int?
 
@@ -129,6 +130,20 @@ struct PrompterContentView: View {
 
   private var usesSoundBasedScroll: Bool {
     voiceSyncEnabled && voiceSync.voiceScrollMode == .soundBased
+  }
+
+  private var requiresWordTrackingPreparationGate: Bool {
+    PrompterVoiceStartupPolicy.requiresWordTrackingPreparationGate(
+      usesWordTrackingScroll: usesWordTrackingScroll,
+      wordTrackingRecognitionPrepared: voiceSync.isWordTrackingRecognitionPrepared
+    )
+  }
+
+  private var effectiveCountdownDuration: Int {
+    PrompterVoiceStartupPolicy.effectiveCountdownDuration(
+      requestedDuration: countdownDuration,
+      forcedWordTrackingPreparation: forcesWordTrackingPreparationCountdown
+    )
   }
 
   private var requiresVoiceSubsystem: Bool {
@@ -251,14 +266,19 @@ struct PrompterContentView: View {
         }
 
         if !sessionStarted {
-          CountdownView(
-            duration: countdownDuration,
-            appearance: appearance
-          ) {
-            sessionStarted = true
-            playheadCoordinator.markSessionStarted()
-            startVoiceSubsystemIfNeeded()
-            startAutoScrollIfNeeded()
+          if requiresWordTrackingPreparationGate {
+            WordTrackingPreparationView(appearance: appearance)
+          } else {
+            CountdownView(
+              duration: effectiveCountdownDuration,
+              appearance: appearance
+            ) {
+              sessionStarted = true
+              forcesWordTrackingPreparationCountdown = false
+              playheadCoordinator.markSessionStarted()
+              startVoiceSubsystemIfNeeded()
+              startAutoScrollIfNeeded()
+            }
           }
         }
 
@@ -334,6 +354,10 @@ struct PrompterContentView: View {
         }
 
         voiceSync.setRecognitionDrivesScroll(usesWordTrackingScroll)
+        forcesWordTrackingPreparationCountdown = requiresWordTrackingPreparationGate
+        if forcesWordTrackingPreparationCountdown {
+          voiceSync.prewarmWordTrackingRecognitionIfNeeded()
+        }
 
         if PrompterVoiceStartupPolicy.shouldStartVoiceSubsystemOnAppear(
           sessionStarted: sessionStarted,
@@ -384,11 +408,11 @@ struct PrompterContentView: View {
 
         if shouldRestoreRunningSession {
           startAutoScrollIfNeeded()
-        } else if countdownDuration == 0 {
+        } else if effectiveCountdownDuration == 0 && !requiresWordTrackingPreparationGate {
           sessionStarted = true
           playheadCoordinator.markSessionStarted()
           if PrompterVoiceStartupPolicy.shouldDeferVoiceStartup(
-            countdownDuration: countdownDuration)
+            countdownDuration: effectiveCountdownDuration)
           {
             startVoiceSubsystemAfterFirstRenderTurnIfNeeded()
           } else {
@@ -400,6 +424,7 @@ struct PrompterContentView: View {
       .onDisappear {
         deferredVoiceStartupTask?.cancel()
         deferredVoiceStartupTask = nil
+        forcesWordTrackingPreparationCountdown = false
         cinematicController.stop()
         manualScrollDriver.stop()
         manualScrollDriver.onScrollTick = nil
@@ -411,7 +436,11 @@ struct PrompterContentView: View {
         displayedScrollOffset = 0
         highestWordTrackingPlayheadProgress = 0
         lastWordTrackingIndex = nil
-        sessionStarted = countdownDuration == 0
+        forcesWordTrackingPreparationCountdown = requiresWordTrackingPreparationGate
+        if forcesWordTrackingPreparationCountdown {
+          voiceSync.prewarmWordTrackingRecognitionIfNeeded()
+        }
+        sessionStarted = effectiveCountdownDuration == 0 && !requiresWordTrackingPreparationGate
         manualScrollDriver.reset(to: 0)
         playheadCoordinator.updateProgress(0)
         if usesLegacyLineSyncForVoice && ownsSynchronizedScroll {
@@ -1099,6 +1128,20 @@ enum PrompterVoiceStartupPolicy {
 
   static func shouldDeferVoiceStartup(countdownDuration: Int) -> Bool {
     countdownDuration == 0
+  }
+
+  static func requiresWordTrackingPreparationGate(
+    usesWordTrackingScroll: Bool,
+    wordTrackingRecognitionPrepared: Bool
+  ) -> Bool {
+    usesWordTrackingScroll && !wordTrackingRecognitionPrepared
+  }
+
+  static func effectiveCountdownDuration(
+    requestedDuration: Int,
+    forcedWordTrackingPreparation: Bool
+  ) -> Int {
+    requestedDuration
   }
 }
 
