@@ -17,6 +17,7 @@ class VoiceSyncEngine: ObservableObject {
   @Published var highlightedWordRange: Range<Int>?
   @Published var isHumanSpeechActive: Bool = false
   @Published var voiceScrollMode: VoiceScrollMode = .wordTracking
+  @Published private(set) var isWordTrackingRecognitionPrepared = false
   @Published private(set) var activeScriptID: UUID?
 
   private var audioEngine: AVAudioEngine?
@@ -245,6 +246,7 @@ class VoiceSyncEngine: ObservableObject {
       defer { self?.wordTrackingPrewarmTask = nil }
       do {
         try await backend?.prepare()
+        self?.isWordTrackingRecognitionPrepared = true
         AiraLogger.shared.info("voiceSync.wordTrackingPrewarm completed", category: "voice")
       } catch {
         AiraLogger.shared.error(
@@ -455,6 +457,9 @@ class VoiceSyncEngine: ObservableObject {
         try await self.activeRecognitionBackend?.prepare()
         guard generation == self.recognitionGeneration else { return }
         self.recognitionBackendReady = true
+        if self.voiceScrollMode == .wordTracking {
+          self.isWordTrackingRecognitionPrepared = true
+        }
         await self.flushPendingRecognitionSamples()
       } catch {
         self.recognitionBackendReady = false

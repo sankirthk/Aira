@@ -1612,6 +1612,24 @@ struct VoiceSyncMatchingTests {
     #expect(backend.acceptedAudio.isEmpty)
   }
 
+  @Test @MainActor func wordTrackingRecognitionPreparationReadinessPersistsAfterPrewarm()
+    async throws
+  {
+    let backend = FakeSpeechRecognitionBackend()
+    let engine = VoiceSyncEngine(recognitionBackend: backend)
+
+    #expect(!engine.isWordTrackingRecognitionPrepared)
+
+    engine.prewarmWordTrackingRecognitionIfNeeded()
+    await Task.yield()
+
+    #expect(engine.isWordTrackingRecognitionPrepared)
+
+    engine.stop()
+
+    #expect(engine.isWordTrackingRecognitionPrepared)
+  }
+
   @Test @MainActor func soundBasedModeDoesNotScrollFromRecognizedWords() async throws {
     let backend = FakeSpeechRecognitionBackend()
     let engine = VoiceSyncEngine(recognitionBackend: backend)

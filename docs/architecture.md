@@ -256,7 +256,7 @@ VoiceSyncEngine.alignSpokenWord(_ token: SpokenWordToken)
     └── Voice Mode: update playhead motion state and anchor correction
 ```
 
-The bundled WhisperKit backend may be prepared asynchronously while the app is idle when Word tracking is the selected mode. This prewarm is model preparation only: it must not create `AVAudioEngine`, install a microphone tap, or show microphone activity before a presenter session starts.
+The bundled WhisperKit backend may be prepared asynchronously while the app is idle when Word tracking is the selected mode. This prewarm is model preparation only: it must not create `AVAudioEngine`, install a microphone tap, or show microphone activity before a presenter session starts. `VoiceSyncEngine` publishes whether the Word Tracking backend has prepared during the current app launch; this readiness flag persists across session stop and script changes so cold-start UX is applied only once.
 
 For Classic and Sound modes with spoken-word highlighting enabled, Apple speech recognition preparation must not block session audio capture. `VoiceSyncEngine.start()` starts the shared `AVAudioEngine` tap immediately, prepares the Apple recognition backend asynchronously, buffers a bounded three seconds of early recognition samples, and flushes those samples once the backend is ready. This keeps first-session highlighting responsive without running the microphone while idle.
 
@@ -410,7 +410,7 @@ func startCountdown(from duration: Int) async {
 }
 ```
 
-If countdown duration is 0 (user set to zero in Settings), `CountdownView` is not shown and `VoiceSyncEngine.start()` is called immediately.
+If countdown duration is 0 (user set to zero in Settings), `CountdownView` is not shown and `VoiceSyncEngine.start()` is called immediately, except for a cold Word Tracking launch. When Word Tracking is selected and the Whisper backend has not prepared yet, `PrompterContentView` first shows `WordTrackingPreparationView` with `Getting ready...`, starts model-only prewarm, then honors the configured countdown once the readiness flag is true. Later Word Tracking sessions in the same app launch skip this preparation gate and honor the configured countdown normally.
 
 `CountdownView` uses the window's `OverlayAppearance` for its background and numeral colors so it respects per-window appearance settings.
 
