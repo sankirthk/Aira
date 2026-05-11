@@ -24,7 +24,7 @@ export const latestRelease: ReleaseMetadata = {
   version: "__VERSION__",
   tag: "__TAG__",
   releaseDate: "__RELEASE_DATE__",
-  betaLabel: "Public Beta",
+  betaLabel: "__RELEASE_LABEL__",
   notarized: true,
   dmgUrl: "__DMG_URL__",
   releaseNotesUrl: "__RELEASE_NOTES_URL__",
