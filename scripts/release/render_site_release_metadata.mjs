@@ -135,18 +135,22 @@ const releaseNotesUrl = getArg("--release-notes-url");
 
 const version = tag.replace(/^v/, "");
 const tagKind = tag.includes("-beta.") ? "beta" : "release";
+const releaseLabel = tagKind === "beta" ? "Public Beta" : "Official Launch";
 
 const template = fs.readFileSync(templatePath, "utf8");
 const notes = fs.readFileSync(notesPath, "utf8");
 const existing = fs.readFileSync(existingPath, "utf8");
 
 const summaryItems = extractBullets(extractSection(notes, "Highlights"));
-const changes = extractBullets(extractSection(notes, "Site Changelog")).map(parseChangeBullet);
+const changes = extractBullets(extractSection(notes, "Site Changelog")).map(
+  parseChangeBullet
+);
 
 const latestReleaseBlock = template
   .replaceAll("__VERSION__", version)
   .replaceAll("__TAG__", tag)
   .replaceAll("__RELEASE_DATE__", releaseDate)
+  .replaceAll("__RELEASE_LABEL__", releaseLabel)
   .replaceAll("__DMG_URL__", dmgUrl)
   .replaceAll("__RELEASE_NOTES_URL__", releaseNotesUrl)
   .replace("__SUMMARY_ITEMS__", renderSummaryItems(summaryItems));
@@ -156,7 +160,11 @@ const changelogMatch = existing.match(
 );
 
 const existingEntries = changelogMatch
-  ? splitEntries(changelogMatch[1]).filter((entry) => !entry.includes(`version: ${jsonString(version)}`))
+  ? tagKind === "release"
+    ? []
+    : splitEntries(changelogMatch[1]).filter(
+        (entry) => !entry.includes(`version: ${jsonString(version)}`)
+      )
   : [];
 const trailingContent = changelogMatch ? changelogMatch[2] : "\n";
 
