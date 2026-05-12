@@ -160,11 +160,9 @@ const changelogMatch = existing.match(
 );
 
 const existingEntries = changelogMatch
-  ? tagKind === "release"
-    ? []
-    : splitEntries(changelogMatch[1]).filter(
-        (entry) => !entry.includes(`version: ${jsonString(version)}`)
-      )
+  ? splitEntries(changelogMatch[1]).filter(
+      (entry) => !entry.includes(`version: ${jsonString(version)}`)
+    )
   : [];
 const trailingContent = changelogMatch ? changelogMatch[2] : "\n";
 

@@ -367,6 +367,8 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-056 | Direct release workflow from tag produces notarized DMG, Sparkle ZIP, appcast update, public GitHub release, and website metadata update without involving App Store upload steps | `[ ]` |
 | MT-057 | App Store workflow uploads `AppStoreRelease` artifact to App Store Connect, build finishes Apple processing, and uploaded build contains no updater UI or Sparkle config | `[ ]` |
 | MT-058 | Optional review-submission automation, if enabled later, only runs after explicit approval/manual dispatch and never from direct-release tag flow | `[ ]` |
+| UT-056 | Release metadata rendering for `v1.0.1` preserves an existing `v1.0.0` changelog entry while prepending the new release entry | `[x]` |
+| UT-057 | `AiraAppStore` `AppStoreRelease` build settings resolve `MARKETING_VERSION` to `1.0.1` for the next App Store upload train | `[x]` |
 
 | ID | Test | Status |
 |---|---|---|
