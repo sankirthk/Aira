@@ -132,6 +132,39 @@ struct KeyboardShortcutDisplayTests {
     )
   }
 
+  @Test func voiceSyncRecognitionPreprocessingAcceptsCallProcessedSpeechBelowOldGate() throws {
+    let format = AVAudioFormat(
+      commonFormat: .pcmFormatFloat32,
+      sampleRate: 48_000,
+      channels: 1,
+      interleaved: false
+    )!
+    let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4)!
+    buffer.frameLength = 4
+
+    let callProcessedSpeech: [Float] = [0.0010, -0.0023, 0.0016, -0.0012]
+    let destination = UnsafeMutableBufferPointer(
+      start: buffer.floatChannelData![0],
+      count: Int(buffer.frameLength)
+    )
+    for (frameIndex, sample) in callProcessedSpeech.enumerated() {
+      destination[frameIndex] = sample
+    }
+
+    let recognitionBuffer = try #require(
+      VoiceSyncRecognitionInput.makeRecognitionBuffer(from: buffer)
+    )
+
+    let samples = UnsafeBufferPointer(
+      start: recognitionBuffer.floatChannelData![0],
+      count: Int(recognitionBuffer.frameLength)
+    )
+    let peak = samples.reduce(into: Float(0)) { runningPeak, sample in
+      runningPeak = max(runningPeak, abs(sample))
+    }
+    #expect(peak > 0.06)
+  }
+
   @Test func matchesBareArrowShortcuts() {
     #expect(
       KeyboardShortcutDisplay.matches(

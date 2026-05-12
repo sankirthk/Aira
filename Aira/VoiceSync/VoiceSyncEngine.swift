@@ -1110,9 +1110,9 @@ extension AVAudioPCMBuffer {
 }
 
 struct VoiceSyncRecognitionInput {
-  static let minimumInputPeak: Float = 0.004
+  static let minimumInputPeak: Float = 0.0018
   static let targetPeak: Float = 0.18
-  static let maxGain: Float = 12
+  static let maxGain: Float = 32
   static let targetSampleRate: Double = 16_000
 
   static func dominantChannelIndex(for buffer: AVAudioPCMBuffer) -> Int? {
