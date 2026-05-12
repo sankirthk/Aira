@@ -106,6 +106,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-026g | Active overlay controllers accept live updates for voice-driven scroll and pause-on-hover flags so session behavior can switch cleanly without relaunching the app | `[x]` |
 | UT-026h | Voice-Sync recognition preprocessing selects the strongest captured input channel instead of always using channel 0 when creating the speech-recognition buffer | `[ ]` |
 | UT-026i | Voice-Sync recognition preprocessing applies bounded gain normalization to quiet speech buffers before appending them to speech recognition, while preserving frame count and mono float format | `[ ]` |
+| UT-026i-a | Voice-Sync recognition preprocessing accepts usable Zoom/call-processed speech below the old pre-gain peak gate while still rejecting lower environmental noise | `[x]` |
 | UT-026j | Audio-level metering uses the strongest captured channel instead of always channel 0, so call-route voice arcs react to normal speaking volume when the dominant speech channel is not the first channel | `[x]` |
 | UT-026k | Audio-level metering applies bounded gain normalization for quiet speech so call-route voice arcs respond at normal volume without clipping direct-mic sessions to full scale | `[ ]` |
 | UT-026l | Voice-Sync accepts early single-word partials during startup highlighting so the first spoken-word visual feedback does not wait for a long/high-confidence suffix window | `[x]` |
