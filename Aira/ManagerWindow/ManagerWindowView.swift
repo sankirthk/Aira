@@ -28,7 +28,6 @@ struct ManagerWindowView: View {
     contentView
       .frame(minWidth: 900, minHeight: 600)
       .ignoresSafeArea(.container, edges: .top)
-      .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
       .modifier(GlassToolbarModifier(enabled: true))
       .environment(
         \.managerTheme,
@@ -121,7 +120,7 @@ struct ManagerWindowView: View {
   private enum LayoutMetrics {
     static let outerHorizontal: CGFloat = 8
     static let outerBottom: CGFloat = 8
-    static let topInset: CGFloat = 8
+    static let topInset: CGFloat = 0
     /// Vertical space the chrome band occupies — content area top aligns here.
     static let chromeBandHeight: CGFloat = SidebarView.SidebarChromeMetrics.height
     static let gap: CGFloat = 10
@@ -129,7 +128,8 @@ struct ManagerWindowView: View {
 
   /// Unified layout for both modes:
   /// - Sidebar spans full height with chrome band at top.
-  /// - Content area starts below the chrome band height.
+  /// - Content area starts below the app chrome band while the root substrate
+  ///   paints into the transparent native titlebar.
   /// - When collapsed, the sidebar disappears entirely. A compact toggle
   ///   pill sits top-left (overlaid), and the content area fills the width.
   ///   Traffic lights remain in the window's standard position.
@@ -974,8 +974,9 @@ final class ManagerShortcutCoordinator {
   }
 }
 
-/// Removes SwiftUI toolbar/title chrome so the borderless Manager content owns
-/// the whole window surface.
+/// Removes visible SwiftUI title chrome while keeping the native window
+/// controls alive. Hiding the entire window toolbar also hides the traffic
+/// lights on current macOS.
 private struct GlassToolbarModifier: ViewModifier {
   let enabled: Bool
 
@@ -986,7 +987,6 @@ private struct GlassToolbarModifier: ViewModifier {
         content
           .toolbar(removing: .title)
           .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-          .toolbarVisibility(.hidden, for: .windowToolbar)
       } else {
         content
       }
@@ -1071,10 +1071,12 @@ private struct GlassWindowBackgroundModifier: ViewModifier {
               center: .center, startRadius: 80, endRadius: 520
             )
           }
+          .ignoresSafeArea(.container, edges: .top)
         }
     } else {
       content
         .background(isDark ? Color(hex: "#465649") : Color("colorPrimary"))
+        .ignoresSafeArea(.container, edges: .top)
     }
   }
 }
