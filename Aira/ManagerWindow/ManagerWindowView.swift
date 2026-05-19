@@ -119,7 +119,7 @@ struct ManagerWindowView: View {
   private enum LayoutMetrics {
     static let outerHorizontal: CGFloat = 8
     static let outerBottom: CGFloat = 8
-    static let topInset: CGFloat = 0
+    static let topInset: CGFloat = 8
     /// Vertical space the chrome band occupies — content area top aligns here.
     static let chromeBandHeight: CGFloat = SidebarView.SidebarChromeMetrics.height
     static let gap: CGFloat = 10
@@ -514,9 +514,9 @@ struct ManagerWindowView: View {
   }
 
   private func configureManagerFullscreenBehavior(_ window: NSWindow) {
-    window.collectionBehavior.remove(.fullScreenPrimary)
-    window.collectionBehavior.remove(.fullScreenAuxiliary)
-    window.collectionBehavior.insert(.fullScreenNone)
+    // Explicitly assign — don't insert/remove, because macOS 26 may have pre-set
+    // fullScreenPrimary or fullScreenAllowsTiling in the default behavior.
+    window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
   }
 
   private func navigateToSidebarDestination(_ destination: SidebarNav) {

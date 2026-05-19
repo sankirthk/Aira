@@ -141,9 +141,9 @@ struct SidebarView: View {
       }
     }
     .modifier(ManagerSidebarBackgroundModifier())
-    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     .overlay {
-      RoundedRectangle(cornerRadius: 24, style: .continuous)
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
         .strokeBorder(
           usesLiquidSidebar
             ? (colorScheme == .dark
@@ -249,6 +249,10 @@ struct SidebarView: View {
   final class SidebarTrafficLightHostView: NSView {
     var sidebarVisible: Bool = true
     private var windowObservers: [NSObjectProtocol] = []
+    /// Natural (macOS-set) y origin of the traffic light row. Captured before applying our offset.
+    private var trafficLightBaseY: CGFloat?
+    /// How far to shift the traffic lights downward (AppKit: decrease y = visually lower).
+    private let trafficLightDownShift: CGFloat = 8
 
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
@@ -282,26 +286,48 @@ struct SidebarView: View {
 
     private func installWindowObservers(_ window: NSWindow) {
       let nc = NotificationCenter.default
-      let names: [Notification.Name] = [
+
+      // Normal window state changes — just re-sync traffic light position/visibility.
+      let syncNames: [Notification.Name] = [
         NSWindow.didDeminiaturizeNotification,
         NSWindow.didBecomeKeyNotification,
         NSWindow.didBecomeMainNotification,
         NSWindow.didResizeNotification,
         NSWindow.didEndLiveResizeNotification,
-        NSWindow.willEnterFullScreenNotification,
-        NSWindow.didEnterFullScreenNotification,
         NSWindow.didExitFullScreenNotification,
       ]
-      for name in names {
-        let observer = nc.addObserver(
-          forName: name,
-          object: window,
-          queue: .main
-        ) { [weak self] _ in
+      for name in syncNames {
+        windowObservers.append(
+          nc.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+            self?.syncTrafficLights()
+          }
+        )
+      }
+
+      // Fullscreen prevention: re-enforce collection behavior the moment macOS
+      // tries to push the window into fullscreen.
+      windowObservers.append(
+        nc.addObserver(
+          forName: NSWindow.willEnterFullScreenNotification,
+          object: window, queue: .main
+        ) { [weak self, weak window] _ in
+          guard let window else { return }
+          // Re-apply no-fullscreen policy (macOS may have reset it).
+          window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
           self?.syncTrafficLights()
         }
-        windowObservers.append(observer)
-      }
+      )
+
+      // Emergency exit: if the window enters fullscreen despite prevention,
+      // immediately toggle back out.
+      windowObservers.append(
+        nc.addObserver(
+          forName: NSWindow.didEnterFullScreenNotification,
+          object: window, queue: .main
+        ) { [weak window] _ in
+          window?.toggleFullScreen(nil)
+        }
+      )
     }
 
     private func removeWindowObservers() {
@@ -323,14 +349,38 @@ struct SidebarView: View {
     func syncTrafficLights() {
       guard let window else { return }
       preserveNativeTitlebarForSystemControls(in: window)
-      [
+      let buttons = [
         window.standardWindowButton(.closeButton),
         window.standardWindowButton(.miniaturizeButton),
         window.standardWindowButton(.zoomButton),
-      ].compactMap { $0 }.forEach { button in
+      ].compactMap { $0 }
+
+      buttons.forEach { button in
         button.isHidden = false
         button.alphaValue = 1
         button.isEnabled = true
+      }
+
+      shiftTrafficLightsDown(buttons: buttons)
+    }
+
+    private func shiftTrafficLightsDown(buttons: [NSButton]) {
+      guard let reference = buttons.first else { return }
+      let currentY = reference.frame.origin.y
+      let shiftedY = (trafficLightBaseY ?? currentY) - trafficLightDownShift
+
+      if abs(currentY - shiftedY) < 0.5 {
+        // Already at target position — no-op to prevent drift.
+        buttons.forEach { $0.needsDisplay = true }
+        return
+      }
+
+      // macOS reset buttons to natural position — capture it and re-apply offset.
+      trafficLightBaseY = currentY
+      buttons.forEach { button in
+        var frame = button.frame
+        frame.origin.y -= trafficLightDownShift
+        button.frame = frame
         button.needsDisplay = true
       }
     }
@@ -359,6 +409,12 @@ struct SidebarView: View {
       }
       if window.backgroundColor != .clear {
         window.backgroundColor = .clear
+      }
+      // Re-enforce no-fullscreen policy on every sync — macOS 26 may reset it.
+      if window.collectionBehavior.contains(.fullScreenPrimary)
+        || !window.collectionBehavior.contains(.fullScreenNone)
+      {
+        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
       }
     }
 
