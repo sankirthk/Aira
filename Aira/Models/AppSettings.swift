@@ -53,6 +53,9 @@ struct AppSettings: Codable, Equatable {
   }
   var screenCaptureExclusionEnabled: Bool = true
   var appearanceMode: AppearanceMode = .system
+  var notchFrostedGlassEnabled: Bool = false
+  var pillFrostedGlassEnabled: Bool = false
+  var managerInterfaceStyle: ManagerInterfaceStyle = .classic
   var managerTypography: ManagerTypography = .medium
   var liveAnswerDisclosureAccepted: Bool = false
   var hasCompletedInitialPermissionPrompt: Bool = false
@@ -92,6 +95,9 @@ struct AppSettings: Codable, Equatable {
     autoScrollWPM: Double = ManualScrollConfiguration.defaultWPM,
     screenCaptureExclusionEnabled: Bool = true,
     appearanceMode: AppearanceMode = .system,
+    notchFrostedGlassEnabled: Bool = false,
+    pillFrostedGlassEnabled: Bool = false,
+    managerInterfaceStyle: ManagerInterfaceStyle = .classic,
     managerTypography: ManagerTypography = .medium,
     liveAnswerDisclosureAccepted: Bool = false,
     hasCompletedInitialPermissionPrompt: Bool = false,
@@ -118,6 +124,9 @@ struct AppSettings: Codable, Equatable {
     self.autoScrollWPM = ManualScrollConfiguration.clampedWPM(autoScrollWPM)
     self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
     self.appearanceMode = appearanceMode
+    self.notchFrostedGlassEnabled = notchFrostedGlassEnabled
+    self.pillFrostedGlassEnabled = pillFrostedGlassEnabled
+    self.managerInterfaceStyle = managerInterfaceStyle
     self.managerTypography = managerTypography
     self.liveAnswerDisclosureAccepted = liveAnswerDisclosureAccepted
     self.hasCompletedInitialPermissionPrompt = hasCompletedInitialPermissionPrompt
@@ -211,6 +220,9 @@ struct AppSettings: Codable, Equatable {
     case autoScrollWPM
     case screenCaptureExclusionEnabled
     case appearanceMode
+    case notchFrostedGlassEnabled
+    case pillFrostedGlassEnabled
+    case managerInterfaceStyle
     case managerTypography
     case liveAnswerDisclosureAccepted
     case hasCompletedInitialPermissionPrompt
@@ -260,6 +272,13 @@ struct AppSettings: Codable, Equatable {
       try container.decodeIfPresent(Bool.self, forKey: .screenCaptureExclusionEnabled) ?? true
     appearanceMode =
       try container.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
+    notchFrostedGlassEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .notchFrostedGlassEnabled) ?? false
+    pillFrostedGlassEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .pillFrostedGlassEnabled) ?? false
+    managerInterfaceStyle =
+      try container.decodeIfPresent(ManagerInterfaceStyle.self, forKey: .managerInterfaceStyle)
+      ?? .classic
     managerTypography =
       try container.decodeIfPresent(ManagerTypography.self, forKey: .managerTypography) ?? .medium
     hasCompletedInitialPermissionPrompt =
@@ -304,6 +323,9 @@ struct AppSettings: Codable, Equatable {
     try container.encode(autoScrollWPM, forKey: .autoScrollWPM)
     try container.encode(screenCaptureExclusionEnabled, forKey: .screenCaptureExclusionEnabled)
     try container.encode(appearanceMode, forKey: .appearanceMode)
+    try container.encode(notchFrostedGlassEnabled, forKey: .notchFrostedGlassEnabled)
+    try container.encode(pillFrostedGlassEnabled, forKey: .pillFrostedGlassEnabled)
+    try container.encode(managerInterfaceStyle, forKey: .managerInterfaceStyle)
     try container.encode(managerTypography, forKey: .managerTypography)
     try container.encode(
       hasCompletedInitialPermissionPrompt, forKey: .hasCompletedInitialPermissionPrompt)
@@ -415,6 +437,29 @@ enum VoiceScrollMode: String, Codable, CaseIterable {
 
 enum AppearanceMode: String, Codable, CaseIterable {
   case light, dark, system
+}
+
+enum ManagerInterfaceStyle: String, Codable, CaseIterable {
+  case classic
+  case liquidGlass
+
+  var settingsTitle: String {
+    switch self {
+    case .classic:
+      return "Classic"
+    case .liquidGlass:
+      return "Liquid Glass"
+    }
+  }
+
+  var settingsDescription: String {
+    switch self {
+    case .classic:
+      return "Keep Aira's current handcrafted manager chrome."
+    case .liquidGlass:
+      return "Use native glass surfaces with warm Aira accents."
+    }
+  }
 }
 
 enum ManagerTypography: String, Codable, CaseIterable {

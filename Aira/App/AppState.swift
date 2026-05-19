@@ -190,6 +190,11 @@ class AppState: ObservableObject {
     return script
   }
 
+  /// Extracts plain text from a supported file (txt, pdf, docx) without creating a new script.
+  func extractText(from url: URL) throws -> String {
+    try scriptStore.extractText(from: url)
+  }
+
   func updateScriptCollections(id: UUID, collectionIDs: [UUID]) throws {
     let originalScript = try scriptStore.load(id: id)
     let originalCollections = try collectionStore.loadAll()

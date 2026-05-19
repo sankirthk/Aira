@@ -43,6 +43,83 @@ enum SettingsControlAffordances {
   )
 }
 
+enum SettingsSelectionAffordances {
+  static let managerInterfaceStyleUsesNativeProminentGlass = false
+  static let managerInterfaceStyleOuterSpacing: CGFloat = 0
+  static let managerInterfaceStyleSelectedTextUsesWhite = true
+}
+
+private enum SettingsFontRole {
+  case display
+  case body
+  case bodyBold
+  case compact
+
+  func font(size: CGFloat, usesGlass: Bool) -> Font {
+    guard usesGlass else {
+      switch self {
+      case .display:
+        return .custom("IndieFlower", size: size)
+      case .body, .compact:
+        return .custom("CrimsonText-Regular", size: size)
+      case .bodyBold:
+        return .custom("Manrope-Bold", size: size)
+      }
+    }
+
+    switch self {
+    case .display:
+      return .system(size: size, weight: .medium, design: .default)
+    case .body:
+      return .system(size: size, weight: .light, design: .default)
+    case .bodyBold:
+      return .system(size: size, weight: .medium, design: .default)
+    case .compact:
+      return .system(size: size, weight: .regular, design: .default)
+    }
+  }
+}
+
+private struct SettingsFontModifier: ViewModifier {
+  @Environment(\.managerTheme) private var managerTheme
+  let role: SettingsFontRole
+  let size: CGFloat
+
+  func body(content: Content) -> some View {
+    content.font(role.font(size: size, usesGlass: managerTheme.usesLiquidGlassMode))
+  }
+}
+
+extension View {
+  fileprivate func settingsFont(_ role: SettingsFontRole, size: CGFloat) -> some View {
+    modifier(SettingsFontModifier(role: role, size: size))
+  }
+}
+
+enum SettingsChromePalette {
+  static let classicDarkSurfaceHex = "#465649"
+  static let liquidGlassDarkSurfaceHex = "#253D2E"
+  static let liquidGlassLightSurfaceHex = "#849688"
+  static let liquidGlassParentSurfaceOpacity = 0.08
+  static let liquidGlassTitlebarSurfaceOpacity = 0.34
+  static let liquidGlassPanelTintOpacity = 0.16
+
+  static func classicSurface(appearanceMode: AppearanceMode) -> Color {
+    appearanceMode == .dark ? Color(hex: classicDarkSurfaceHex) : Color("colorBackground")
+  }
+}
+
+enum SettingsLayoutParity {
+  static let sectionSpacing: CGFloat = 16
+  static let panelPadding: CGFloat = 20
+  static let panelCornerRadius: CGFloat = 20
+  static let sectionTitleHeight: CGFloat = 34
+  static let sectionDescriptionHeight: CGFloat = 40
+  static let appearanceThemeCardHeight: CGFloat = 160
+  static let managerInterfaceCardHeight: CGFloat = 92
+  static let typographyControlHeight: CGFloat = 46
+}
+
 private struct SettingsPointingHandCursorModifier: ViewModifier {
   @State private var isHovering = false
 
@@ -148,10 +225,28 @@ struct SettingsView: View {
     )
   }
 
+  private var usesLiquidGlassMode: Bool {
+    appState.settings.managerInterfaceStyle == .liquidGlass
+  }
+
   private var topChromeColor: Color {
+    if usesLiquidGlassMode {
+      return settingsLiquidGlassSubstrateColor
+    }
+
+    return SettingsChromePalette.classicSurface(appearanceMode: appState.settings.appearanceMode)
+  }
+
+  private var settingsLiquidGlassSubstrateColor: Color {
     appState.settings.appearanceMode == .dark
-      ? Color(hex: "#484C49")
-      : Color("colorBackground")
+      ? Color(hex: SettingsChromePalette.liquidGlassDarkSurfaceHex)
+      : Color(hex: SettingsChromePalette.liquidGlassLightSurfaceHex)
+  }
+
+  private var settingsContentBackgroundColor: Color {
+    usesLiquidGlassMode
+      ? settingsLiquidGlassSubstrateColor
+      : SettingsChromePalette.classicSurface(appearanceMode: appState.settings.appearanceMode)
   }
 
   var body: some View {
@@ -164,7 +259,18 @@ struct SettingsView: View {
         width: availableSize == nil ? nil : resolvedSize.width,
         height: availableSize == nil ? nil : resolvedSize.height
       )
-      .modifier(SettingsChromeModifier(isStandaloneWindow: availableSize == nil))
+      .environment(
+        \.managerTheme,
+        ManagerTheme(interfaceStyle: appState.settings.managerInterfaceStyle)
+      )
+      .modifier(
+        SettingsChromeModifier(
+          isStandaloneWindow: availableSize == nil,
+          backgroundColor: settingsContentBackgroundColor,
+          usesLiquidGlassMode: usesLiquidGlassMode
+        )
+      )
+      .background(SettingsWindowAppearanceAccessor(usesLiquidGlassMode: usesLiquidGlassMode))
   }
 
   private var rootContent: some View {
@@ -179,14 +285,20 @@ struct SettingsView: View {
   private var windowHeader: some View {
     HStack(alignment: .center, spacing: 12) {
       Text("Preferences")
-        .font(.custom("IndieFlower", size: 30))
+        .settingsFont(.display, size: 30)
         .foregroundStyle(Color("colorText"))
       Spacer(minLength: 0)
     }
     .padding(.horizontal, 24)
     .padding(.top, 20)
     .padding(.bottom, 18)
-    .background(topChromeColor)
+    .modifier(
+      SettingsParentSurfaceModifier(
+        fillColor: topChromeColor,
+        usesLiquidGlassMode: usesLiquidGlassMode,
+        isTitlebarSurface: true
+      )
+    )
     .overlay(alignment: .bottom) {
       Rectangle()
         .fill(Color("colorText").opacity(0.12))
@@ -201,7 +313,7 @@ struct SettingsView: View {
     } label: {
       HStack(spacing: 10) {
         Text(tab.label)
-          .font(.custom("IndieFlower", size: 23))
+          .settingsFont(.display, size: 23)
           .foregroundStyle(
             appState.settings.appearanceMode == .dark
               ? Color.white
@@ -232,7 +344,9 @@ struct SettingsView: View {
       .padding(16)
       .frame(width: sidebarWidth)
       .frame(maxHeight: .infinity, alignment: .top)
-      .background(topChromeColor)
+      .modifier(
+        SettingsParentSurfaceModifier(
+          fillColor: topChromeColor, usesLiquidGlassMode: usesLiquidGlassMode))
 
       Rectangle()
         .fill(Color("colorText").opacity(0.12))
@@ -258,7 +372,12 @@ struct SettingsView: View {
           }
         }
       }
-      .background(Color("colorBackground"))
+      .modifier(
+        SettingsParentSurfaceModifier(
+          fillColor: settingsContentBackgroundColor,
+          usesLiquidGlassMode: usesLiquidGlassMode
+        )
+      )
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -287,11 +406,18 @@ struct SettingsView: View {
 
 private struct SettingsChromeModifier: ViewModifier {
   let isStandaloneWindow: Bool
+  let backgroundColor: Color
+  let usesLiquidGlassMode: Bool
 
   func body(content: Content) -> some View {
     if isStandaloneWindow {
       content
-        .background(Color("colorBackground"))
+        .modifier(
+          SettingsParentSurfaceModifier(
+            fillColor: backgroundColor,
+            usesLiquidGlassMode: usesLiquidGlassMode
+          )
+        )
     } else {
       content
         .clipShape(RoundedRectangle(cornerRadius: 28))
@@ -303,19 +429,122 @@ private struct SettingsChromeModifier: ViewModifier {
   }
 }
 
+private struct SettingsParentSurfaceModifier: ViewModifier {
+  let fillColor: Color
+  let usesLiquidGlassMode: Bool
+  var isTitlebarSurface = false
+  @Environment(\.colorScheme) private var colorScheme
+
+  private var isDark: Bool { colorScheme == .dark }
+
+  func body(content: Content) -> some View {
+    content
+      .background {
+        if usesLiquidGlassMode {
+          ZStack {
+            if isTitlebarSurface {
+              Rectangle().fill(.regularMaterial)
+              fillColor.opacity(SettingsChromePalette.liquidGlassTitlebarSurfaceOpacity)
+            } else {
+              Rectangle().fill(.ultraThinMaterial)
+              fillColor.opacity(SettingsChromePalette.liquidGlassParentSurfaceOpacity)
+            }
+          }
+        } else {
+          fillColor
+        }
+      }
+  }
+}
+
+private struct SettingsWindowAppearanceAccessor: NSViewRepresentable {
+  let usesLiquidGlassMode: Bool
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView(frame: .zero)
+    Task { @MainActor in
+      context.coordinator.configureIfNeeded(
+        view.window, usesLiquidGlassMode: usesLiquidGlassMode)
+    }
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    Task { @MainActor in
+      context.coordinator.configureIfNeeded(
+        nsView.window, usesLiquidGlassMode: usesLiquidGlassMode)
+    }
+  }
+
+  @MainActor
+  final class Coordinator {
+    private weak var lastWindow: NSWindow?
+    private var lastMode: Bool?
+
+    func configureIfNeeded(_ window: NSWindow?, usesLiquidGlassMode: Bool) {
+      guard let window else { return }
+      // Only reconfigure when the window or mode actually changed.
+      guard window !== lastWindow || usesLiquidGlassMode != lastMode else { return }
+      lastWindow = window
+      lastMode = usesLiquidGlassMode
+
+      if usesLiquidGlassMode {
+        if window.isOpaque { window.isOpaque = false }
+        if window.backgroundColor != .clear { window.backgroundColor = .clear }
+        if window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = false }
+        if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
+      } else {
+        if !window.isOpaque { window.isOpaque = true }
+        if window.backgroundColor != .windowBackgroundColor {
+          window.backgroundColor = .windowBackgroundColor
+        }
+      }
+    }
+  }
+}
+
 // MARK: - Shared Helpers
 
 private struct SettingsPanel<Content: View>: View {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   @ViewBuilder let content: () -> Content
+
   var body: some View {
+    let shape = RoundedRectangle(
+      cornerRadius: SettingsLayoutParity.panelCornerRadius,
+      style: .continuous
+    )
+    let usesGlass = managerTheme.usesLiquidGlassMode
+
     VStack(alignment: .leading, spacing: 0) { content() }
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(20)
-      .background(Color("colorSurface").opacity(0.82))
-      .clipShape(RoundedRectangle(cornerRadius: 20))
-      .overlay(
-        RoundedRectangle(cornerRadius: 20)
-          .stroke(Color("colorText").opacity(0.1), lineWidth: 2))
+      .padding(SettingsLayoutParity.panelPadding)
+      .background {
+        if usesGlass {
+          ZStack {
+            shape.fill(.ultraThinMaterial)
+            shape.fill(
+              colorScheme == .dark
+                ? Color.black.opacity(SettingsChromePalette.liquidGlassPanelTintOpacity)
+                : Color.white.opacity(SettingsChromePalette.liquidGlassPanelTintOpacity)
+            )
+          }
+        } else {
+          shape.fill(Color("colorSurface").opacity(0.82))
+        }
+      }
+      .clipShape(shape)
+      .overlay {
+        shape.stroke(
+          Color("colorText").opacity(usesGlass ? 0.08 : 0.10),
+          lineWidth: usesGlass ? 1 : 1.5
+        )
+      }
   }
 }
 
@@ -323,8 +552,9 @@ private struct SectionTitle: View {
   let text: String
   var body: some View {
     Text(text)
-      .font(.custom("IndieFlower", size: 28))
+      .settingsFont(.display, size: 28)
       .foregroundStyle(Color("colorText"))
+      .frame(height: SettingsLayoutParity.sectionTitleHeight, alignment: .leading)
   }
 }
 
@@ -332,8 +562,35 @@ private struct FieldLabel: View {
   let text: String
   var body: some View {
     Text(text)
-      .font(.custom("IndieFlower", size: 14))
+      .settingsFont(.display, size: 14)
       .foregroundStyle(Color("colorText").opacity(0.66))
+  }
+}
+
+private struct FrostedGlassToggleRow: View {
+  let title: String
+  var description: String? = nil
+  @Binding var isOn: Bool
+
+  var body: some View {
+    HStack {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(title)
+          .settingsFont(.body, size: 18)
+          .foregroundStyle(Color("colorText"))
+        if let description {
+          Text(description)
+            .settingsFont(.body, size: 14)
+            .foregroundStyle(Color("colorText").opacity(0.6))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      Spacer()
+      Toggle("", isOn: $isOn)
+        .toggleStyle(.switch)
+        .tint(Color("colorPrimary"))
+        .labelsHidden()
+    }
   }
 }
 
@@ -563,7 +820,7 @@ private struct SystemFontPicker: View {
 
       HStack {
         Text("Preview")
-          .font(.custom("CrimsonText-Regular", size: 14))
+          .settingsFont(.body, size: 14)
           .foregroundStyle(Color("colorMuted"))
         Spacer()
         Text("The quick brown fox jumps over the lazy dog")
@@ -586,25 +843,55 @@ private struct AppearanceTabContent: View {
   ]
 
   var body: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: SettingsLayoutParity.sectionSpacing) {
 
       // App Theme
       SettingsPanel {
-        SectionTitle(text: "App Theme")
-        Text("Pick the room tone the control hub opens with.")
-          .font(.custom("CrimsonText-Regular", size: 16))
+        SectionTitle(text: "Theme")
+        Text("Choose the Manager App color mode.")
+          .settingsFont(.body, size: 16)
           .foregroundStyle(Color("colorText").opacity(0.68))
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(
+            maxWidth: .infinity,
+            minHeight: SettingsLayoutParity.sectionDescriptionHeight,
+            maxHeight: SettingsLayoutParity.sectionDescriptionHeight,
+            alignment: .topLeading
+          )
           .padding(.top, 4)
 
         HStack(spacing: 14) {
           themeCard(
-            "Light Paper",
-            "Warm cream workspace with charcoal ink and sage accents.",
+            "Light",
+            "Light background with dark text.",
             Color(hex: "#F5F2EC"), .light)
           themeCard(
-            "Dark Studio",
-            "Low-light rehearsal mode with paper ink flipped to cream.",
+            "Dark",
+            "Dark background with light text.",
             Color(hex: "#2B2B2B"), .dark)
+        }
+        .padding(.top, 14)
+      }
+
+      SettingsPanel {
+        SectionTitle(text: "Manager UI")
+        Text(
+          "Choose how the Manager App chrome is drawn. Overlay windows keep their current presentation."
+        )
+        .settingsFont(.body, size: 16)
+        .foregroundStyle(Color("colorText").opacity(0.68))
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(
+          maxWidth: .infinity,
+          minHeight: SettingsLayoutParity.sectionDescriptionHeight,
+          maxHeight: SettingsLayoutParity.sectionDescriptionHeight,
+          alignment: .topLeading
+        )
+        .padding(.top, 4)
+
+        HStack(spacing: 10) {
+          managerInterfaceStyleButton(.classic)
+          managerInterfaceStyleButton(.liquidGlass)
         }
         .padding(.top, 14)
       }
@@ -616,8 +903,9 @@ private struct AppearanceTabContent: View {
           // Size buttons
           VStack(alignment: .leading, spacing: 8) {
             Text("Base Size")
-              .font(.custom("CrimsonText-Regular", size: 14))
+              .settingsFont(.body, size: 14)
               .foregroundStyle(Color("colorText").opacity(0.66))
+              .frame(height: 18, alignment: .leading)
             HStack(spacing: 8) {
               ForEach(sizes, id: \.0) { label, size in
                 let isActive = appState.settings.managerTypography == size
@@ -625,10 +913,10 @@ private struct AppearanceTabContent: View {
                   appState.settings.managerTypography = size
                 } label: {
                   Text(label)
-                    .font(.custom("CrimsonText-Regular", size: 18))
+                    .settingsFont(.body, size: 18)
                     .foregroundStyle(Color("colorText"))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .frame(height: SettingsLayoutParity.typographyControlHeight)
                     .background(
                       isActive
                         ? Color("colorPrimary").opacity(0.1)
@@ -670,17 +958,18 @@ private struct AppearanceTabContent: View {
           Spacer(minLength: 0)
         }
         Text(label)
-          .font(.custom("IndieFlower", size: 24))
+          .settingsFont(.display, size: 24)
           .foregroundStyle(Color("colorText"))
           .padding(.top, 10)
         Text(tone)
-          .font(.custom("CrimsonText-Regular", size: 14))
+          .settingsFont(.body, size: 14)
           .foregroundStyle(Color("colorText").opacity(0.64))
           .lineSpacing(2)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.top, 4)
       }
       .padding(14)
+      .frame(height: SettingsLayoutParity.appearanceThemeCardHeight, alignment: .topLeading)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         isActive ? Color("colorPrimary").opacity(0.1) : Color("colorSurface").opacity(0.82)
@@ -691,6 +980,44 @@ private struct AppearanceTabContent: View {
           .stroke(
             isActive ? Color("colorPrimary") : Color("colorText").opacity(0.16),
             lineWidth: isActive ? 3 : 2))
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func managerInterfaceStyleButton(_ style: ManagerInterfaceStyle) -> some View {
+    let isActive = appState.settings.managerInterfaceStyle == style
+    return Button {
+      appState.settings.managerInterfaceStyle = style
+    } label: {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(style.settingsTitle)
+          .settingsFont(.body, size: 18)
+          .foregroundStyle(isActive ? Color.white : Color("colorText"))
+        Text(style.settingsDescription)
+          .settingsFont(.body, size: 13)
+          .foregroundStyle(
+            isActive ? Color.white.opacity(0.82) : Color("colorText").opacity(0.64)
+          )
+          .lineSpacing(2)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(14)
+      .frame(height: SettingsLayoutParity.managerInterfaceCardHeight, alignment: .topLeading)
+      .background(
+        isActive
+          ? Color("colorPrimary")
+          : Color("colorBackground").opacity(0.72)
+      )
+      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .stroke(
+            Color("colorText").opacity(isActive ? 0.08 : 0.14),
+            lineWidth: isActive ? 2 : 1.5
+          )
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     .buttonStyle(.plain)
   }
@@ -931,8 +1258,12 @@ private struct NotchTabContent: View {
         Color(hex: "#434343")
 
         ZStack(alignment: .top) {
-          Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor)
-            .opacity(appState.settings.defaultOverlayAppearance.opacity)
+          if appState.settings.notchFrostedGlassEnabled {
+            OverlayFrostedGlassBackground(appearance: appState.settings.defaultOverlayAppearance)
+          } else {
+            Color(hex: appState.settings.defaultOverlayAppearance.backgroundColor)
+              .opacity(appState.settings.defaultOverlayAppearance.opacity)
+          }
           OverlayAppearancePreviewText(
             text: previewSampleText,
             appearance: appState.settings.defaultOverlayAppearance,
@@ -976,6 +1307,10 @@ private struct NotchTabContent: View {
             "\(Int(appState.settings.defaultOverlayAppearance.opacity * 100))%",
             $appState.settings.defaultOverlayAppearance.opacity,
             0.2...1.0)
+          FrostedGlassToggleRow(
+            title: "Frosted Glass",
+            isOn: $appState.settings.notchFrostedGlassEnabled
+          )
           sliderRow(
             "Font Size",
             "\(Int(appState.settings.defaultOverlayAppearance.fontSize))pt",
@@ -988,7 +1323,7 @@ private struct NotchTabContent: View {
               resetOverlayFeelToDefaults()
             } label: {
               Text("Reset to Defaults")
-                .font(.custom("CrimsonText-Regular", size: 16))
+                .settingsFont(.body, size: 16)
                 .foregroundStyle(Color("colorBackground"))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
@@ -1006,7 +1341,7 @@ private struct NotchTabContent: View {
       SettingsPanel {
         SectionTitle(text: "Overlay Font")
         Text("Use this as the single place to choose the overlay typeface, including OpenDyslexic.")
-          .font(.custom("CrimsonText-Regular", size: 14))
+          .settingsFont(.body, size: 14)
           .foregroundStyle(Color("colorText").opacity(0.6))
           .padding(.top, 2)
         SystemFontPicker(selectedFont: $appState.settings.defaultOverlayAppearance.fontName)
@@ -1016,7 +1351,7 @@ private struct NotchTabContent: View {
       SettingsPanel {
         SectionTitle(text: "Accessibility")
         Text("Use layout-focused readability controls here without duplicating font choice.")
-          .font(.custom("CrimsonText-Regular", size: 14))
+          .settingsFont(.body, size: 14)
           .foregroundStyle(Color("colorText").opacity(0.6))
           .padding(.top, 2)
 
@@ -1103,9 +1438,9 @@ private struct NotchTabContent: View {
   ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(label).font(.custom("IndieFlower", size: 22)).foregroundStyle(Color("colorText"))
+        Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
-        Text(valueText).font(.custom("IndieFlower", size: 20)).foregroundStyle(
+        Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
           Color("colorPrimary"))
       }
       Slider(value: value, in: range).tint(Color("colorPrimary"))
@@ -1118,9 +1453,9 @@ private struct NotchTabContent: View {
   ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(label).font(.custom("IndieFlower", size: 22)).foregroundStyle(Color("colorText"))
+        Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
-        Text(valueText).font(.custom("IndieFlower", size: 20)).foregroundStyle(
+        Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
           Color("colorPrimary"))
       }
       Slider(value: value, in: range).tint(Color("colorPrimary"))
@@ -1135,7 +1470,7 @@ private struct NotchTabContent: View {
     VStack(spacing: 6) {
       swatch()
       Text(name)
-        .font(.custom("IndieFlower", size: 12))
+        .settingsFont(.display, size: 12)
         .foregroundStyle(Color("colorText"))
         .lineLimit(1)
     }
@@ -1206,7 +1541,7 @@ private struct NotchTabContent: View {
       appState.settings.defaultOverlayAppearance.textAlignment = alignment
     } label: {
       Text(label)
-        .font(.custom("CrimsonText-Regular", size: 17))
+        .settingsFont(.body, size: 17)
         .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
@@ -1237,7 +1572,7 @@ private struct NotchTabContent: View {
         FieldLabel(text: label)
         Spacer()
         Text(valueText)
-          .font(.custom("CrimsonText-Regular", size: 16))
+          .settingsFont(.body, size: 16)
           .foregroundStyle(Color("colorPrimary"))
       }
 
@@ -1253,7 +1588,7 @@ private struct NotchTabContent: View {
         Spacer()
         Text(maximumText)
       }
-      .font(.custom("CrimsonText-Regular", size: 14))
+      .settingsFont(.body, size: 14)
       .foregroundStyle(Color("colorText").opacity(0.55))
     }
   }
@@ -1425,7 +1760,7 @@ private struct SatelliteTabContent: View {
         Text(
           "Choose how many free-moving Pill Windows are available. Content is chosen when launching from the Script Editor."
         )
-        .font(.custom("CrimsonText-Regular", size: 14))
+        .settingsFont(.body, size: 14)
         .foregroundStyle(Color("colorText").opacity(0.6))
         .padding(.top, 2)
 
@@ -1440,7 +1775,7 @@ private struct SatelliteTabContent: View {
             Text(
               "Choose whether the explicit Pill Window launch flow offers one or two floating Pill Windows during a live session."
             )
-            .font(.custom("CrimsonText-Regular", size: 14))
+            .settingsFont(.body, size: 14)
             .foregroundStyle(Color("colorText").opacity(0.62))
           }
 
@@ -1458,7 +1793,7 @@ private struct SatelliteTabContent: View {
                 ? "Pill Window \(selectedSatelliteSlot) is currently inheriting The Notch defaults. Adjust any control below to create a slot-specific override."
                 : "Pill Window \(selectedSatelliteSlot) is using its own saved appearance and readability defaults."
             )
-            .font(.custom("CrimsonText-Regular", size: 14))
+            .settingsFont(.body, size: 14)
             .foregroundStyle(Color("colorText").opacity(0.62))
           }
         }
@@ -1552,6 +1887,10 @@ private struct SatelliteTabContent: View {
                 fontSizeBinding,
                 OverlayFontSizeConfiguration.minimum...OverlayFontSizeConfiguration.maximum
               )
+              FrostedGlassToggleRow(
+                title: "Frosted Glass",
+                isOn: $appState.settings.pillFrostedGlassEnabled
+              )
 
               HStack {
                 Spacer()
@@ -1559,7 +1898,7 @@ private struct SatelliteTabContent: View {
                   clearSelectedSlotOverride()
                 } label: {
                   Text(selectedSlotIsInherited ? "Using Notch Defaults" : "Use Notch Defaults")
-                    .font(.custom("CrimsonText-Regular", size: 16))
+                    .settingsFont(.body, size: 16)
                     .foregroundStyle(Color("colorBackground"))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -1582,7 +1921,7 @@ private struct SatelliteTabContent: View {
           SettingsPanel {
             SectionTitle(text: "Overlay Font")
             Text("Choose a typeface for this Pill Window slot without affecting The Notch.")
-              .font(.custom("CrimsonText-Regular", size: 14))
+              .settingsFont(.body, size: 14)
               .foregroundStyle(Color("colorText").opacity(0.6))
               .padding(.top, 2)
             SystemFontPicker(selectedFont: fontNameBinding)
@@ -1594,7 +1933,7 @@ private struct SatelliteTabContent: View {
             Text(
               "These readability controls apply only to the selected Pill Window slot once you customize it."
             )
-            .font(.custom("CrimsonText-Regular", size: 14))
+            .settingsFont(.body, size: 14)
             .foregroundStyle(Color("colorText").opacity(0.6))
             .padding(.top, 2)
 
@@ -1679,21 +2018,23 @@ private struct SatelliteTabContent: View {
       ZStack {
         Color(hex: "#434343")
 
-        RoundedRectangle(cornerRadius: 24)
-          .fill(
-            Color(hex: selectedSlotAppearance.backgroundColor).opacity(
-              selectedSlotAppearance.opacity)
+        ZStack {
+          if appState.settings.pillFrostedGlassEnabled {
+            OverlayFrostedGlassBackground(appearance: selectedSlotAppearance)
+          } else {
+            Color(hex: selectedSlotAppearance.backgroundColor)
+              .opacity(selectedSlotAppearance.opacity)
+          }
+          OverlayAppearancePreviewText(
+            text: previewSampleText,
+            appearance: selectedSlotAppearance,
+            width: 420,
+            topPadding: 20
           )
-          .frame(width: 420, height: 144)
-          .overlay(
-            OverlayAppearancePreviewText(
-              text: previewSampleText,
-              appearance: selectedSlotAppearance,
-              width: 420,
-              topPadding: 20
-            )
-          )
-          .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+        }
+        .frame(width: 420, height: 144)
+        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
       }
       .frame(maxWidth: .infinity)
       .frame(height: 196)
@@ -1710,7 +2051,7 @@ private struct SatelliteTabContent: View {
       appState.settings.maxPillCount = count
     } label: {
       Text("\(count)")
-        .font(.custom("CrimsonText-Regular", size: 16))
+        .settingsFont(.body, size: 16)
         .foregroundStyle(isActive ? Color("colorBackground") : Color("colorText").opacity(0.7))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
@@ -1734,10 +2075,10 @@ private struct SatelliteTabContent: View {
     } label: {
       HStack(spacing: 8) {
         Text("Pill Window \(slot)")
-          .font(.custom("CrimsonText-Regular", size: 16))
+          .settingsFont(.body, size: 16)
         Spacer()
         Text(usesOverride ? "Custom" : "Inherit")
-          .font(.custom("Inter-Regular", size: 11))
+          .settingsFont(.compact, size: 11)
           .padding(.horizontal, 8)
           .padding(.vertical, 4)
           .background(
@@ -1794,9 +2135,9 @@ private struct SatelliteTabContent: View {
   ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(label).font(.custom("IndieFlower", size: 22)).foregroundStyle(Color("colorText"))
+        Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
-        Text(valueText).font(.custom("IndieFlower", size: 20)).foregroundStyle(
+        Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
           Color("colorPrimary"))
       }
       Slider(value: value, in: range).tint(Color("colorPrimary"))
@@ -1809,9 +2150,9 @@ private struct SatelliteTabContent: View {
   ) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack {
-        Text(label).font(.custom("IndieFlower", size: 22)).foregroundStyle(Color("colorText"))
+        Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
-        Text(valueText).font(.custom("IndieFlower", size: 20)).foregroundStyle(
+        Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
           Color("colorPrimary"))
       }
       Slider(value: value, in: range).tint(Color("colorPrimary"))
@@ -1826,7 +2167,7 @@ private struct SatelliteTabContent: View {
     VStack(spacing: 6) {
       swatch()
       Text(name)
-        .font(.custom("IndieFlower", size: 12))
+        .settingsFont(.display, size: 12)
         .foregroundStyle(Color("colorText"))
         .lineLimit(1)
     }
@@ -1893,7 +2234,7 @@ private struct SatelliteTabContent: View {
       }
     } label: {
       Text(label)
-        .font(.custom("CrimsonText-Regular", size: 17))
+        .settingsFont(.body, size: 17)
         .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
@@ -1924,7 +2265,7 @@ private struct SatelliteTabContent: View {
         FieldLabel(text: label)
         Spacer()
         Text(valueText)
-          .font(.custom("CrimsonText-Regular", size: 16))
+          .settingsFont(.body, size: 16)
           .foregroundStyle(Color("colorPrimary"))
       }
 
@@ -1940,7 +2281,7 @@ private struct SatelliteTabContent: View {
         Spacer()
         Text(maximumText)
       }
-      .font(.custom("CrimsonText-Regular", size: 14))
+      .settingsFont(.body, size: 14)
       .foregroundStyle(Color("colorText").opacity(0.55))
     }
   }
@@ -2054,7 +2395,7 @@ private struct SystemTabContent: View {
 
   private func systemFieldLabel(_ text: String) -> some View {
     Text(text)
-      .font(.custom("CrimsonText-Regular", size: 14))
+      .settingsFont(.body, size: 14)
       .foregroundStyle(Color("colorText").opacity(0.66))
   }
 
@@ -2067,10 +2408,10 @@ private struct SystemTabContent: View {
     } label: {
       VStack(alignment: .leading, spacing: 5) {
         Text(mode.settingsTitle)
-          .font(.custom("CrimsonText-Regular", size: 17))
+          .settingsFont(.body, size: 17)
           .foregroundStyle(Color("colorText"))
         Text(mode.settingsDescription)
-          .font(.custom("CrimsonText-Regular", size: 13))
+          .settingsFont(.body, size: 13)
           .foregroundStyle(Color("colorText").opacity(0.62))
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -2106,15 +2447,15 @@ private struct SystemTabContent: View {
           HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
               Text("Lead-in before scrolling begins")
-                .font(.custom("CrimsonText-Regular", size: 18))
+                .settingsFont(.body, size: 18)
                 .foregroundStyle(Color("colorText"))
               Text("Set to zero to start immediately when you cast to the notch.")
-                .font(.custom("CrimsonText-Regular", size: 14))
+                .settingsFont(.body, size: 14)
                 .foregroundStyle(Color("colorText").opacity(0.6))
             }
             Spacer()
             Text(countdownSummary)
-              .font(.custom("CrimsonText-Regular", size: 18))
+              .settingsFont(.body, size: 18)
               .foregroundStyle(Color("colorPrimary"))
           }
 
@@ -2130,7 +2471,7 @@ private struct SystemTabContent: View {
               formatter: countdownFormatter
             )
             .textFieldStyle(.plain)
-            .font(.custom("CrimsonText-Regular", size: 20))
+            .settingsFont(.body, size: 20)
             .foregroundStyle(Color("colorText"))
             .multilineTextAlignment(.center)
             .frame(width: 88, height: 66)
@@ -2147,7 +2488,7 @@ private struct SystemTabContent: View {
             .disabled(countdownDurationBinding.wrappedValue == 10)
 
             Text("seconds")
-              .font(.custom("CrimsonText-Regular", size: 16))
+              .settingsFont(.body, size: 16)
               .foregroundStyle(Color("colorText").opacity(0.62))
           }
           Divider().opacity(0.2).padding(.vertical, 2)
@@ -2156,17 +2497,17 @@ private struct SystemTabContent: View {
             HStack(alignment: .firstTextBaseline) {
               VStack(alignment: .leading, spacing: 4) {
                 Text("Scroll speed (pt/s)")
-                  .font(.custom("CrimsonText-Regular", size: 18))
+                  .settingsFont(.body, size: 18)
                   .foregroundStyle(Color("colorText"))
                 Text(
                   "Sets the manual reading pace before you begin and still drives Manual mode when Voice-Sync is off."
                 )
-                .font(.custom("CrimsonText-Regular", size: 14))
+                .settingsFont(.body, size: 14)
                 .foregroundStyle(Color("colorText").opacity(0.6))
               }
               Spacer()
               Text("\(Int(autoScrollSpeedSliderBinding.wrappedValue.rounded())) pt/s")
-                .font(.custom("CrimsonText-Regular", size: 18))
+                .settingsFont(.body, size: 18)
                 .foregroundStyle(Color("colorPrimary"))
             }
 
@@ -2182,7 +2523,7 @@ private struct SystemTabContent: View {
               Spacer()
               Text("\(Int(ManualScrollConfiguration.maximumWPM)) pt/s")
             }
-            .font(.custom("CrimsonText-Regular", size: 14))
+            .settingsFont(.body, size: 14)
             .foregroundStyle(Color("colorText").opacity(0.55))
           }
         }
@@ -2196,12 +2537,12 @@ private struct SystemTabContent: View {
             HStack {
               VStack(alignment: .leading, spacing: 4) {
                 Text("Voice scroll mode")
-                  .font(.custom("CrimsonText-Regular", size: 18))
+                  .settingsFont(.body, size: 18)
                   .foregroundStyle(Color("colorText"))
                 Text(
                   "Choose manual-speed scrolling, sound-triggered movement, or word-by-word tracking."
                 )
-                .font(.custom("CrimsonText-Regular", size: 14))
+                .settingsFont(.body, size: 14)
                 .foregroundStyle(Color("colorText").opacity(0.6))
               }
               Spacer()
@@ -2225,7 +2566,7 @@ private struct SystemTabContent: View {
                   appState.settings.speechSensitivity = level
                 } label: {
                   Text(level.rawValue.capitalized)
-                    .font(.custom("CrimsonText-Regular", size: 17))
+                    .settingsFont(.body, size: 17)
                     .foregroundStyle(
                       Color("colorText")
                         .opacity(usesSpeechSensitivity ? 1 : 0.35)
@@ -2254,7 +2595,7 @@ private struct SystemTabContent: View {
             Text(
               "Applies to Sound-based and Word tracking modes. Classic uses the manual scroll speed."
             )
-            .font(.custom("CrimsonText-Regular", size: 14))
+            .settingsFont(.body, size: 14)
             .foregroundStyle(
               Color("colorText")
                 .opacity(usesSpeechSensitivity ? 0.64 : 0.3))
@@ -2267,12 +2608,12 @@ private struct SystemTabContent: View {
           HStack {
             VStack(alignment: .leading, spacing: 4) {
               Text("Spoken-word highlighting")
-                .font(.custom("CrimsonText-Regular", size: 18))
+                .settingsFont(.body, size: 18)
                 .foregroundStyle(Color("colorText"))
               Text(
                 "Visual only. Dims spoken words and marks current word without changing scroll behavior."
               )
-              .font(.custom("CrimsonText-Regular", size: 14))
+              .settingsFont(.body, size: 14)
               .foregroundStyle(Color("colorText").opacity(0.6))
             }
             Spacer()
@@ -2287,12 +2628,12 @@ private struct SystemTabContent: View {
           HStack {
             VStack(alignment: .leading, spacing: 4) {
               Text("Show script progress")
-                .font(.custom("CrimsonText-Regular", size: 18))
+                .settingsFont(.body, size: 18)
                 .foregroundStyle(Color("colorText"))
               Text(
                 "Adds a thin progress line at the bottom edge of active notch and pill overlays."
               )
-              .font(.custom("CrimsonText-Regular", size: 14))
+              .settingsFont(.body, size: 14)
               .foregroundStyle(Color("colorText").opacity(0.6))
             }
             Spacer()
@@ -2307,12 +2648,12 @@ private struct SystemTabContent: View {
           HStack {
             VStack(alignment: .leading, spacing: 4) {
               Text("Pause on mouse hover")
-                .font(.custom("CrimsonText-Regular", size: 18))
+                .settingsFont(.body, size: 18)
                 .foregroundStyle(Color("colorText"))
               Text(
                 "Pauses notch scrolling while pointer stays over overlay. Pill windows ignore this setting."
               )
-              .font(.custom("CrimsonText-Regular", size: 14))
+              .settingsFont(.body, size: 14)
               .foregroundStyle(Color("colorText").opacity(0.6))
             }
             Spacer()
@@ -2344,12 +2685,12 @@ private struct SystemTabContent: View {
           HStack {
             VStack(alignment: .leading, spacing: 4) {
               Text("Hide overlays from screen sharing")
-                .font(.custom("CrimsonText-Regular", size: 18))
+                .settingsFont(.body, size: 18)
                 .foregroundStyle(Color("colorText"))
               Text(
                 "Turn this off if you want notch or Pill Window overlay to appear in screenshots, recordings, or video calls."
               )
-              .font(.custom("CrimsonText-Regular", size: 14))
+              .settingsFont(.body, size: 14)
               .foregroundStyle(Color("colorText").opacity(0.6))
             }
             Spacer()
@@ -2364,7 +2705,7 @@ private struct SystemTabContent: View {
               ? "On by default. Aira asks macOS to exclude overlay windows from capture streams."
               : "Off. Overlay windows remain visible to screen capture apps by choice, so stealth warnings stay suppressed."
           )
-          .font(.custom("CrimsonText-Regular", size: 14))
+          .settingsFont(.body, size: 14)
           .foregroundStyle(Color("colorText").opacity(0.62))
         }
         .padding(.top, 14)
@@ -2375,7 +2716,7 @@ private struct SystemTabContent: View {
   private func shortcutRow(_ label: String, _ key: Binding<String>) -> some View {
     HStack(alignment: .center) {
       Text(label)
-        .font(.custom("CrimsonText-Regular", size: 18))
+        .settingsFont(.body, size: 18)
         .foregroundStyle(Color("colorText"))
       Spacer()
       ShortcutKeyCapsField(shortcut: key)

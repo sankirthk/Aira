@@ -79,6 +79,7 @@ struct PillContentView: View {
   let reportsPrimaryMetrics: Bool
   let mode: PillContentMode
   let isFullScreen: Bool
+  let frostedGlassEnabled: Bool
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
@@ -107,6 +108,7 @@ struct PillContentView: View {
     reportsPrimaryMetrics: Bool = false,
     mode: PillContentMode,
     isFullScreen: Bool = false,
+    frostedGlassEnabled: Bool = false,
     voiceSyncMode: VoiceSyncMode = .voice, voiceSync: VoiceSyncEngine,
     audioMonitor: AudioLevelMonitor,
     onClose: @escaping () -> Void,
@@ -130,6 +132,7 @@ struct PillContentView: View {
     self.reportsPrimaryMetrics = reportsPrimaryMetrics
     self.mode = mode
     self.isFullScreen = isFullScreen
+    self.frostedGlassEnabled = frostedGlassEnabled
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
@@ -161,6 +164,11 @@ struct PillContentView: View {
     )
 
     ZStack(alignment: .topLeading) {
+      if frostedGlassEnabled {
+        OverlayFrostedGlassBackground(appearance: currentAppearance)
+          .clipShape(RoundedRectangle(cornerRadius: 16))
+      }
+
       PrompterContentView(
         script: script,
         appearance: currentAppearance,
@@ -187,6 +195,7 @@ struct PillContentView: View {
         showScriptProgress: showScriptProgress,
         pauseOnHoverEnabled: effectivePauseOnHoverEnabled,
         autoScrollWPM: autoScrollWPM,
+        drawsBackground: !frostedGlassEnabled,
         playheadCoordinator: playheadCoordinator,
         scrollCoordinator: scrollCoordinator,
         reportsPrimaryMetrics: reportsPrimaryMetrics,

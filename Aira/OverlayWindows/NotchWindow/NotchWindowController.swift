@@ -16,6 +16,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
   private var showScriptProgress: Bool = false
   private var pauseOnHoverEnabled: Bool = true
   private var autoScrollWPM: Double = 0
+  private var frostedGlassEnabled: Bool = false
   private var playheadCoordinator: SessionPlayheadCoordinator?
   private var scrollCoordinator: SessionScrollCoordinator?
   private var voiceSyncMode: VoiceSyncMode = .voice
@@ -49,6 +50,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     voiceSyncEnabled: Bool = true, spokenWordHighlightingEnabled: Bool = false,
     showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true, autoScrollWPM: Double = 0,
+    frostedGlassEnabled: Bool = false,
     screenCaptureExclusionEnabled: Bool = true,
     playheadCoordinator: SessionPlayheadCoordinator,
     scrollCoordinator: SessionScrollCoordinator,
@@ -71,6 +73,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
     self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
+    self.frostedGlassEnabled = frostedGlassEnabled
     self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
     self.playheadCoordinator = playheadCoordinator
     self.scrollCoordinator = scrollCoordinator
@@ -175,6 +178,12 @@ class NotchWindowController: NSObject, NSWindowDelegate {
   @MainActor
   func updateSpokenWordHighlighting(enabled: Bool) {
     spokenWordHighlightingEnabled = enabled
+    refreshContentView()
+  }
+
+  @MainActor
+  func updateFrostedGlass(enabled: Bool) {
+    frostedGlassEnabled = enabled
     refreshContentView()
   }
 
@@ -361,6 +370,7 @@ class NotchWindowController: NSObject, NSWindowDelegate {
       canUndock: canUndock,
       isFullScreen: isUndockedFullScreen,
       notchSize: notchSize,
+      frostedGlassEnabled: frostedGlassEnabled,
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync ?? VoiceSyncEngine(),
       audioMonitor: audioMonitor ?? AudioLevelMonitor(),

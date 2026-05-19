@@ -1,5 +1,9 @@
 import Foundation
 
+enum ScriptEditorCueOptions {
+  static let defaults = ["Smile", "Pause 2s", "Eye Contact", "Gesture", "Breathe", "Emphasize"]
+}
+
 enum ScriptEditorTextInsertion {
   static func insertCue(
     _ cue: String,

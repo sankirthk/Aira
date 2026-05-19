@@ -74,6 +74,15 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-019o | Menu bar quick-access derives presenter voice-motion enablement from `voiceScrollMode`, matching Manager launch behavior instead of using the stale legacy voice-sync toggle — REQ-014, REQ-039 | `[x]` |
 | UT-019p | Menu bar quick-access is hosted in an owned status-bar-level `NSPanel` with active/fullscreen Space behavior instead of relying on `NSPopover` host-window promotion — REQ-021 | `[x]` |
 | UT-019q | Borderless menu bar panels are marked transient without title-bar mutation and quick access uses pop-up-menu level plus full-screen auxiliary all-Spaces behavior — REQ-021 | `[x]` |
+| UT-019s | `managerInterfaceStyle` defaults to Classic, round-trips through `AppSettings`, decodes missing legacy settings as Classic, and persists through `SettingsStore` save/load — REQ-021 | `[x]` |
+| UT-019t | Manager theme policy resolves Liquid Glass to native glass on macOS 26+ and an adaptive material fallback below macOS 26, while Classic remains classic on every supported version — REQ-021 | `[x]` |
+| UT-019u | Manager layout parity constants keep Classic and Liquid Glass main content, Document Library, Script Editor, and toolbar container geometry aligned so mode switching does not reflow the layout — REQ-021 | `[x]` |
+| UT-019u-a | Classic Script Editor `Cast to Notch` split button uses the same toolbar height, corner radius, and outlined treatment as Cue, Import, and Save while Liquid Glass keeps the prominent launch treatment — REQ-021 | `[x]` |
+| UT-019u-b | Script-card Edit and Cast action buttons use 8pt rounded-rectangle controls instead of capsule/pill shapes — REQ-021 | `[x]` |
+| UT-019v | Liquid Glass Preferences chrome uses a transparent window backing plus frosted translucent titlebar/parent/panel surfaces with low tint opacity instead of an opaque modal fill or fully see-through titlebar — REQ-021 | `[x]` |
+| UT-019w | Preferences Manager UI theme selector uses the same plain selected-card treatment as other option selectors, keeps selected text white for contrast, and does not apply native prominent glass blue accent or extra outer spacing — REQ-021 | `[x]` |
+| UT-019w-a | Preferences Appearance sections keep the same panel padding, text frames, section spacing, and option-card heights in Classic and Liquid Glass so switching Manager UI mode does not move the modal layout — REQ-021 | `[x]` |
+| UT-019x | Manager top-left traffic-light hover tracking works before the window is key, keeps native controls visible without custom glyph overlays, and Dock reopen restores a miniaturized Manager window even when AppKit reports visible windows — REQ-021 | `[x]` |
 
 ### App Updater (Tasks T-043a, T-043b, T-043c, T-043d, T-043e)
 
@@ -224,8 +233,9 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-034 | Inserting a cue into empty text produces a single cue token and moves the cursor to the end of it | `[x]` |
 | UT-035 | Inserting a cue at a mid-text cursor position inserts the token at that position and preserves surrounding words | `[x]` |
 | UT-036 | Inserting a cue adjacent to existing whitespace does not add duplicate spaces | `[x]` |
+| UT-036c | Cue popover uses the shared default cue option list so the UI and insertion tests stay aligned | `[x]` |
 | UT-036a | Cue annotation styling identifies inline cue tokens and applies distinct editor attributes so cues remain visually separate from prose | `[x]` |
-| MT-036c | Editable Script Editor cue sidebar tells users they can type custom cues inside square brackets, while active-session read-only copy remains focused on disabled editing | `[x]` |
+| MT-036c | Editable Script Editor cue popover tells users they can type custom cues inside square brackets, while active-session read-only copy remains focused on disabled editing | `[x]` |
 | UT-036b | Script editor word counts treat newlines and tabs as separators so live editor metadata matches the library index for multiline scripts | `[x]` |
 
 ### Keyboard Shortcuts (Task T-025)
@@ -392,7 +402,7 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049 | Release verification confirms WhisperKit and bundled `openai_whisper-base.en` are present, the speech model is loaded from bundle storage, and no model download occurs at runtime | `[x]` |
 | MT-012 | Manager UI audit sweep: button chrome, script editor, document library controls, and sidebar badges use the shared audited color tokens consistently in light and dark mode | `[ ]` |
 | MT-013 | Settings modal top chrome uses themed surface color in both light and dark mode, App Theme swatches are centered, and System-tab control labels/body copy use Crimson Text while section headings stay Indie Flower | `[ ]` |
-| MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, top chrome uses `#484C49`, Light Paper preview stays cream, notch preview uses `#434343`, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |
+| MT-014 | Dark-mode visual regression check: selected Preferences tab text stays white, Classic Preferences uses the same dark green surface across top/sidebar/root/main content, Light Paper preview stays cream, notch preview uses `#434343`, Document Library has no extra rounded Scripts container around the title/grid, dark script cards use `#3A3A3A`, and Cast to Notch keeps light text/icon color | `[ ]` |
 | MT-048 | The Notch readability controls update the live preview correctly: Overlay Font remains the only font picker, Accessibility alignment includes `Justified`, spacing controls visibly change line/letter/word density, text shadow improves contrast, and padding changes the inset inside the overlay | `[ ]` |
 | MT-049 | Preferences tabs read `Appearance`, `The Notch`, `Pill Windows`, and `System`; Pill Window setup lives only in `Pill Windows`, and `System` sections appear in Before / During / Controls / Privacy order | `[ ]` |
 | MT-049a | Preferences tabs read `Appearance`, `The Notch`, `Pill Windows`, and `System`; the `Pill Windows` tab contains `Pill Window count` plus appearance/readability controls only, with no separate enable toggle and no content-mode or script-assignment controls | `[ ]` |
@@ -402,12 +412,26 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-049d | Cold-launch beachball regression watch: currently not reproducible in the app, so further launch-latency work is deferred until a current build reproduces the stall with trace evidence | `[x]` |
 | MT-049e | Zero-countdown recursive-layout warning regression watch: currently not reproducible in the app, so the AppKit/SwiftUI layout-warning fix is deferred until current console evidence returns | `[x]` |
 | MT-049f | During an active call/meeting app and during screen recording with microphone enabled, Voice-Sync diagnostics clearly show whether failure occurs at engine start, first tap buffer, first non-trivial audio level, or first speech-recognition partial/final result | `[ ]` |
+| MT-049g | Manager window does not enter true fullscreen in either Classic or Liquid Glass mode, sidebar section headers use chevrons instead of show/hide text, and long collection names wrap without truncation | `[ ]` |
+| MT-049h | Manager window uses Settings-style chrome in Classic and Liquid Glass modes: borderless no-titlebar window, rounded full-size content, no separate toolbar/titlebar strip, and no vertical divider between sidebar and content | `[ ]` |
+| MT-049h-c | Opening Preferences, resizing/restoring the Manager window, and switching Classic/Liquid Glass no longer triggers recursive AppKit/SwiftUI Update Constraints passes; stale SwiftUI Manager frame defaults are removed before launch and oversized/offscreen restored Manager frames are clamped to the visible display | `[ ]` |
+| MT-049h-a | Liquid Glass Manager root keeps an opaque stable sage-green light substrate and dark-green dark substrate behind child containers so bright or saturated desktop wallpaper does not recolor the whole app | `[ ]` |
+| MT-049h-b | Light Liquid Glass sidebar matches Classic light sidebar sage opacity and visual weight instead of fading toward gray, wallpaper tint, or terracotta gradient | `[ ]` |
+| MT-049i | Manager top-left chrome matches the borderless app treatment: sidebar/back/forward controls are always visible in the sidebar header, no native titlebar or traffic-light strip appears above content, no content topbar is visible, and sidebar/content backgrounds transition without a hard seam | `[ ]` |
+| MT-049j | Sidebar-only chrome regression: New Script begins below the top-left chrome band, the apparent extra rectangle above it is gone, sidebar/back/forward controls sit beside native traffic lights, and hover-revealed traffic lights remain visible and clickable while moving onto the buttons | `[x]` |
+| MT-049k | Classic dark-mode sidebar uses a flat forest-sage treatment that separates from the parent content surface with no gradient or terracotta-tinted wash behind sidebar content | `[ ]` |
+| MT-049l | Classic dark-mode script-card and Script Editor buttons use muted dark-mode sage/terracotta accents instead of the light-mode action colors, while light Classic and Liquid Glass accents remain unchanged | `[ ]` |
+| MT-049m | Classic Script Editor light header uses pale sage `#F0F4F0`, dark editor container uses charcoal-green `#232B27` instead of pure black across the header/gutter/writing panel, and the full editor shell has a subtle rounded border around the header plus text area | `[ ]` |
+| MT-049n | Liquid Glass Script Editor matches Classic layout geometry for the outer shell radius/border, inner editor panel radius/padding, and connected split-launch button height/radius, with only surface material treatment differing | `[ ]` |
+| MT-049o | Switching Manager App mode between Classic and Liquid Glass does not visually jump the main content container, Document Library script area, or Script Editor containers; only materials/fills/strokes/text treatment change | `[ ]` |
+| MT-049p | Liquid Glass Preferences uses a glass titlebar/header plus visibly translucent frosted parent/panel surfaces, system-style typography, and concise `Frosted Glass` overlay toggles without extra explanatory subtext | `[ ]` |
 | MT-059 | Pill hover close button dismisses only clicked pill and leaves notch / other pills running after overlay context menus were removed | `[ ]` |
 | MT-015 | Sidebar New Script action stays pure white, script-card Cast button text/icon matches Edit button text color, and the script-card double-border gap matches the updated mockup spacing | `[ ]` |
 | MT-016 | Pill Window controls match the Voice Tracking switch size and sage tint, and the Sidebar Scripts nav icon is a document-with-scribble icon while New Script remains a plus icon | `[ ]` |
 | MT-017 | Voice Tracking enable row uses the same plain System panel styling as adjacent controls, without a separate highlighted background container | `[ ]` |
 | MT-018 | During Voice-Sync, the scroll progression no longer skips ahead by large blocks of unseen script, and the overlay does not visibly emphasize the currently spoken word | `[ ]` |
 | MT-019 | Entering selection mode from Select All does not visually shift existing script cards or the selection bar; card actions simply disappear and the trash button appears without layout jitter | `[ ]` |
+| MT-019a | Document Library Select All label remains readable at rest in light Classic and light Liquid Glass, without sage-on-sage tinting or excessive idle opacity fade | `[ ]` |
 | MT-019a | Entering `Scripts` or returning from editor shows current script-card grid immediately and never requires opening a Recent item first to repopulate the library view | `[x]` |
 | MT-020 | Keyboard shortcut rows in Settings > System no longer use a separate highlighted/cream background and match the surrounding panel styling | `[ ]` |
 | UT-075 | `MenuBarStatusItemController` does not permit status-item creation until launch has completed, and it creates at most one item after launch | `[x]` |
@@ -445,7 +469,8 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-037 | Manual `Sync` sessions no longer exhibit visible lag from the legacy line-index sync path, while voice-driven sync still behaves correctly until the voice refactor lands | `[ ]` |
 | MT-038 | Increasing total document length does not reduce the perceived manual scroll speed at the same configured point-based speed | `[ ]` |
 | MT-039 | Long scripts do not introduce visible overlay lag or jitter from per-frame text rebuild cost while manual scrolling is active | `[ ]` |
-| MT-040 | Script Editor cue panel uses shared theme tokens for its sage background and cream foreground so it stays visually consistent across theme audits | `[ ]` |
+| MT-040 | Script Editor replaces the always-visible cue sidebar with a compact toolbar `Cue` popover while preserving cursor-position cue insertion and custom square-bracket cue guidance | `[ ]` |
+| MT-040a | Script Editor cue popover buttons render as frosted glass controls in Liquid Glass mode with readable terracotta tint, cream labels, and non-opaque light/dark appearance | `[ ]` |
 | MT-041 | Collections sidebar warning uses the shared warm token instead of an inline hex color, and collections navigation still behaves correctly after the manager window accessor main-actor cleanup | `[ ]` |
 | MT-042 | Settings chunk-1 audit: tabs read `Appearance`, `The Notch`, `Pill Windows`, and `System`; Light Paper/Dark Studio swatches use shared theme tokens; and Pill Windows still behave correctly after `maxPillCount` normalization | `[ ]` |
 | MT-048 | `Check for Updates…` is enabled only when the built app bundle resolves a valid Sparkle feed URL and public key | `[ ]` |

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ScriptEditorLaunchMenuAction: Identifiable, Equatable {
   enum Kind: Equatable {
@@ -79,32 +80,38 @@ struct ScriptEditorSatelliteLaunchPanelState: Equatable {
   }
 
   func launchRequest(scripts: [ScriptMeta]) -> ScriptEditorSatelliteLaunchRequest {
-    let validManualScriptIDs = Set(
-      scripts
-        .filter { $0.wordCount > 0 }
-        .map(\.id)
-    )
+    let scriptsByID = Dictionary(uniqueKeysWithValues: scripts.map { ($0.id, $0) })
 
-    let satelliteSelections = sections.compactMap { section -> SatelliteLaunchSelection? in
+    var satelliteSelections: [SatelliteLaunchSelection] = []
+    var skippedDueToEmptyScript = 0
+
+    for section in sections {
       switch section.choice {
       case .mirrorCurrentScript:
-        return SatelliteLaunchSelection(slotIndex: section.slotIndex, mode: .voiceSync)
-      case .manual:
-        guard let scriptID = section.selectedManualScriptID,
-          validManualScriptIDs.contains(scriptID)
-        else {
-          return nil
-        }
-        return SatelliteLaunchSelection(
-          slotIndex: section.slotIndex,
-          mode: .manual(scriptId: scriptID)
+        satelliteSelections.append(
+          SatelliteLaunchSelection(slotIndex: section.slotIndex, mode: .voiceSync)
         )
+      case .manual:
+        guard let scriptID = section.selectedManualScriptID else {
+          // No script selected yet — not a skip, just not ready
+          continue
+        }
+        if let script = scriptsByID[scriptID], script.wordCount > 0 {
+          satelliteSelections.append(
+            SatelliteLaunchSelection(
+              slotIndex: section.slotIndex, mode: .manual(scriptId: scriptID))
+          )
+        } else {
+          // Script selected but empty
+          skippedDueToEmptyScript += 1
+        }
       }
     }
 
     return ScriptEditorSatelliteLaunchRequest(
       requestedSatelliteCount: sections.count,
-      satelliteSelections: satelliteSelections
+      satelliteSelections: satelliteSelections,
+      skippedDueToEmptyScript: skippedDueToEmptyScript
     )
   }
 
@@ -130,22 +137,19 @@ struct ScriptEditorSatelliteLaunchRowAffordance: Equatable {
 struct ScriptEditorSatelliteLaunchRequest: Equatable {
   let requestedSatelliteCount: Int
   let satelliteSelections: [SatelliteLaunchSelection]
+  let skippedDueToEmptyScript: Int
 
   var pillModes: [PillContentMode] {
     satelliteSelections.map(\.mode)
   }
 
-  var skippedSatelliteCount: Int {
-    max(0, requestedSatelliteCount - satelliteSelections.count)
-  }
-
   var skippedSatelliteFeedbackMessage: String? {
-    guard skippedSatelliteCount > 0 else { return nil }
-    if skippedSatelliteCount == 1 {
-      return "1 Pill Window will be skipped because it does not have a valid script."
+    guard skippedDueToEmptyScript > 0 else { return nil }
+    if skippedDueToEmptyScript == 1 {
+      return "1 Pill Window will be skipped because the selected script is empty."
     }
     return
-      "\(skippedSatelliteCount) Pill Windows will be skipped because they do not have valid scripts."
+      "\(skippedDueToEmptyScript) Pill Windows will be skipped because the selected scripts are empty."
   }
 }
 
@@ -160,10 +164,14 @@ enum ScriptEditorPresentationState {
 
 struct ScriptEditorView: View {
   @EnvironmentObject var appState: AppState
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   @Binding var script: Script
   @State private var saveErrorMessage: String?
+  @State private var importErrorMessage: String?
   @State private var selectedRange = NSRange(location: 0, length: 0)
   @State private var isLaunchMenuPresented = false
+  @State private var isCuePopoverPresented = false
   @State private var isSatelliteLaunchPanelPresented = false
   @State private var satelliteLaunchPanelState = ScriptEditorSatelliteLaunchPanelState(
     sections: []
@@ -173,6 +181,24 @@ struct ScriptEditorView: View {
   var onCast: () -> Void
   var onCastWithSatellite: ([SatelliteLaunchSelection]) -> Void = { _ in }
   var onBack: () -> Void
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+
+  private var saveButtonForegroundColor: Color {
+    if usesGlass {
+      return colorScheme == .dark ? .white : Color("colorPrimary")
+    }
+
+    return Color("colorText")
+  }
+
+  private var classicEditorHeaderBackground: Color {
+    colorScheme == .dark ? classicEditorSurfaceBackground : Color(hex: "#F0F4F0")
+  }
+
+  private var classicEditorSurfaceBackground: Color {
+    colorScheme == .dark ? Color(hex: "#232B27") : Color("colorBackground")
+  }
 
   var wordCount: Int {
     ScriptEditorMetrics.wordCount(for: script.body)
@@ -202,38 +228,107 @@ struct ScriptEditorView: View {
           Button {
             onBack()
           } label: {
-            AiraIcon(type: .back, size: 20, color: Color("colorBackground"), animated: false)
-              .padding(8)
-              .background(Color.white.opacity(0.12))
-              .clipShape(RoundedRectangle(cornerRadius: 8))
+            AiraIcon(
+              type: .back, size: 20,
+              color: usesGlass ? .primary : Color("colorText"),
+              animated: false
+            )
+            .padding(8)
+            .background {
+              if usesGlass {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .fill(Color.white.opacity(0.14))
+                  .background(
+                    .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+              } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .fill(Color.white.opacity(0.12))
+              }
+            }
+            .overlay {
+              if usesGlass {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.5)
+              }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
           }
           .buttonStyle(.plain)
 
           TextField("Script title", text: $script.title)
-            .font(.custom("Manrope-Bold", size: scaled(20)))
+            .font(
+              usesGlass
+                ? .system(size: scaled(20), weight: .semibold)
+                : .custom("Manrope-Bold", size: scaled(20))
+            )
             .textFieldStyle(.plain)
-            .foregroundStyle(Color("colorBackground"))
+            .foregroundStyle(usesGlass ? .primary : Color("colorText"))
             .tint(Color("colorSecondary"))
             .disabled(isReadOnly)
 
           Spacer()
 
           Text(estimatedDuration)
-            .font(.custom("Inter-Regular", size: scaled(13)))
-            .foregroundStyle(Color("colorBackground").opacity(0.72))
+            .font(
+              usesGlass
+                ? .system(size: scaled(13))
+                : .custom("Inter-Regular", size: scaled(13))
+            )
+            .foregroundStyle(usesGlass ? .secondary : Color("colorMuted"))
 
           if isReadOnly {
             Text("Live script · read only")
-              .font(.custom("CrimsonText-Regular", size: scaled(13)))
-              .foregroundStyle(Color("colorBackground"))
+              .font(
+                usesGlass
+                  ? .system(size: scaled(13))
+                  : .custom("CrimsonText-Regular", size: scaled(13))
+              )
+              .foregroundStyle(usesGlass ? .secondary : Color("colorMuted"))
           }
+
+          Button {
+            isCuePopoverPresented.toggle()
+          } label: {
+            HStack(spacing: 6) {
+              Image(systemName: "plus")
+              Text("Cue")
+            }
+          }
+          .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .tertiary))
+          .popover(isPresented: $isCuePopoverPresented, arrowEdge: .bottom) {
+            CuePopoverView(isReadOnly: isReadOnly, usesGlass: usesGlass) { cue in
+              insertCue(cue)
+              isCuePopoverPresented = false
+            }
+            .environment(\.managerFontScale, managerFontScale)
+            .environment(\.managerTheme, managerTheme)
+          }
+          .disabled(isReadOnly)
+          .opacity(isReadOnly ? 0.55 : 1)
+
+          Button {
+            importFromFile()
+          } label: {
+            HStack(spacing: 6) {
+              Image(systemName: "square.and.arrow.down")
+              Text("Import")
+            }
+          }
+          .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .tertiary))
+          .disabled(isReadOnly)
+          .opacity(isReadOnly ? 0.55 : 1)
 
           Button {
             saveScript()
           } label: {
             HStack(spacing: 8) {
-              AiraIcon(type: .save, size: 18, color: Color("colorText"), animated: false)
+              AiraIcon(
+                type: .save, size: 18,
+                color: saveButtonForegroundColor,
+                animated: false
+              )
               Text("Save")
+                .foregroundStyle(saveButtonForegroundColor)
             }
           }
           .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .tertiary))
@@ -250,60 +345,67 @@ struct ScriptEditorView: View {
           .disabled(isReadOnly)
           .opacity(isReadOnly ? 0.55 : 1)
         }
-        .padding(16)
-        .background(Color("colorPrimary"))
+        .frame(height: 44)
+        .padding(ManagerLayoutParity.scriptEditorHeaderPadding)
+        .background(usesGlass ? Color.clear : classicEditorHeaderBackground)
 
-        HStack(alignment: .top, spacing: 24) {
-          ScriptEditorPanel(backgroundColor: Color("colorBackground")) {
-            VStack(alignment: .leading, spacing: 0) {
-              ZStack(alignment: .topLeading) {
+        ScriptEditorPanel(backgroundColor: classicEditorSurfaceBackground) {
+          VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+              if !usesGlass {
                 RoundedRectangle(cornerRadius: 10)
-                  .fill(Color("colorBackground"))
-                  .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                      .stroke(Color("colorText").opacity(0.2), lineWidth: 2)
-                  )
-
-                ScriptTextEditor(
-                  text: $script.body,
-                  selectedRange: $selectedRange,
-                  isEditable: !isReadOnly,
-                  suppressInteractivity: blocksEditorInteraction
-                )
-                .padding(14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if script.body.isEmpty {
-                  Text("Start typing your script here...")
-                    .font(.custom("CrimsonText-Regular", size: scaled(18)))
-                    .foregroundStyle(Color("colorText").opacity(0.4))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 20)
-                    .allowsHitTesting(false)
-                }
+                  .fill(classicEditorSurfaceBackground)
               }
+
+              ScriptTextEditor(
+                text: $script.body,
+                selectedRange: $selectedRange,
+                isEditable: !isReadOnly,
+                suppressInteractivity: blocksEditorInteraction
+              )
+              .padding(14)
               .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-              HStack {
-                Text("\(wordCount) words")
-                Spacer()
-                Text("\(script.body.count) characters")
+              if script.body.isEmpty {
+                Text("Start typing your script here...")
+                  .font(
+                    usesGlass
+                      ? .system(size: scaled(18))
+                      : .custom("CrimsonText-Regular", size: scaled(18))
+                  )
+                  .foregroundColor(usesGlass ? .secondary : Color("colorText").opacity(0.4))
+                  .padding(.horizontal, 20)
+                  .padding(.vertical, 20)
+                  .allowsHitTesting(false)
               }
-              .font(.custom("CrimsonText-Regular", size: scaled(15)))
-              .foregroundStyle(Color("colorMuted"))
-              .padding(.top, 16)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            HStack {
+              Text("\(wordCount) words")
+              Spacer()
+              Text("\(script.body.count) characters")
+            }
+            .font(
+              usesGlass
+                ? .system(size: scaled(15))
+                : .custom("CrimsonText-Regular", size: scaled(15))
+            )
+            .foregroundStyle(usesGlass ? .secondary : Color("colorMuted"))
+            .padding(.top, 16)
           }
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-          CuePanelView(isReadOnly: isReadOnly, onInsertCue: insertCue)
-            .frame(width: 320)
         }
-        .background(Color("colorBackground"))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(24)
+        .background(usesGlass ? Color.clear : classicEditorSurfaceBackground)
       }
+      .managerSurface(
+        cornerRadius: ManagerLayoutParity.scriptEditorRootCornerRadius,
+        classicFill: classicEditorSurfaceBackground,
+        strokeOpacity: 0.12
+      )
 
       if isLaunchMenuPresented {
         Color.clear
@@ -356,16 +458,26 @@ struct ScriptEditorView: View {
     } message: {
       Text(saveErrorMessage ?? "Please try again.")
     }
+    .alert("Import Failed", isPresented: importErrorIsPresented) {
+      Button("OK", role: .cancel) {
+        importErrorMessage = nil
+      }
+    } message: {
+      Text(importErrorMessage ?? "Could not read the file.")
+    }
   }
 
   private var saveErrorIsPresented: Binding<Bool> {
     Binding(
       get: { saveErrorMessage != nil },
-      set: { isPresented in
-        if isPresented == false {
-          saveErrorMessage = nil
-        }
-      }
+      set: { if !$0 { saveErrorMessage = nil } }
+    )
+  }
+
+  private var importErrorIsPresented: Binding<Bool> {
+    Binding(
+      get: { importErrorMessage != nil },
+      set: { if !$0 { importErrorMessage = nil } }
     )
   }
 
@@ -381,6 +493,25 @@ struct ScriptEditorView: View {
       }
     } catch {
       saveErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func importFromFile() {
+    let panel = NSOpenPanel()
+    panel.allowedContentTypes = [.plainText, .pdf, UTType(filenameExtension: "docx")].compactMap {
+      $0
+    }
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.message = "Choose a text, PDF, or Word file to import"
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    do {
+      let text = try appState.extractText(from: url)
+      script.body = text
+    } catch {
+      importErrorMessage = error.localizedDescription
     }
   }
 
@@ -413,13 +544,43 @@ struct ScriptEditorView: View {
   }
 }
 
+private struct ScriptEditorRootBorder: ViewModifier {
+  @Environment(\.colorScheme) private var colorScheme
+
+  func body(content: Content) -> some View {
+    let shape = RoundedRectangle(
+      cornerRadius: ManagerLayoutParity.scriptEditorRootCornerRadius,
+      style: .continuous
+    )
+
+    content
+      .clipShape(shape)
+      .overlay {
+        shape
+          .strokeBorder(
+            (colorScheme == .dark ? Color.white : Color("colorText")).opacity(
+              colorScheme == .dark ? 0.20 : 0.16),
+            lineWidth: 1
+          )
+          .allowsHitTesting(false)
+      }
+  }
+}
+
 private struct ScriptEditorLaunchSplitButton: View {
   @Binding var isMenuPresented: Bool
   let onPrimaryPress: () -> Void
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
-  private var cornerRadius: CGFloat { 7 }
-  private var controlHeight: CGFloat { 44 }
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+  private var launchForegroundColor: Color {
+    .white
+  }
+  private var cornerRadius: CGFloat { ManagerLayoutParity.toolbarButtonCornerRadius }
+  private var controlHeight: CGFloat { ManagerLayoutParity.toolbarButtonHeight }
   private var dividerHeight: CGFloat { 24 }
 
   var body: some View {
@@ -429,7 +590,7 @@ private struct ScriptEditorLaunchSplitButton: View {
           onPrimaryPress()
         } label: {
           HStack(spacing: 8) {
-            AiraIcon(type: .notch, size: 18, color: .white, animated: false)
+            AiraIcon(type: .notch, size: 18, color: launchForegroundColor, animated: false)
             Text("Cast to Notch")
           }
           .padding(.leading, 16)
@@ -454,15 +615,25 @@ private struct ScriptEditorLaunchSplitButton: View {
         .buttonStyle(.plain)
       }
       .frame(height: controlHeight)
-      .font(.custom("IndieFlower", size: 15 * managerFontScale))
-      .foregroundStyle(.white)
-      .background(
-        RoundedRectangle(cornerRadius: cornerRadius)
-          .fill(Color("colorSecondary"))
+      .font(
+        usesGlass
+          ? .system(size: 15 * managerFontScale, weight: .medium)
+          : .custom("IndieFlower", size: 15 * managerFontScale)
       )
-      .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+      .foregroundStyle(launchForegroundColor)
+      .background {
+        launchButtonBackground
+      }
+      .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+      .overlay {
+        if usesGlass {
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(Color("colorSecondary").opacity(isDark ? 0.45 : 0.60), lineWidth: 1)
+        } else {
+          splitButtonBorder
+        }
+      }
       .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
-      .overlay(splitButtonBorder)
     }
     .frame(height: controlHeight)
   }
@@ -475,6 +646,28 @@ private struct ScriptEditorLaunchSplitButton: View {
         style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
       )
   }
+
+  @ViewBuilder
+  private var launchButtonBackground: some View {
+    let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+    if usesGlass {
+      let opacity: Double = isDark ? 0.48 : 0.76
+      shape
+        .fill(Color("colorSecondary").opacity(opacity))
+        .background(.ultraThinMaterial, in: shape)
+    } else {
+      shape.fill(ManagerClassicAccentPalette.secondary(for: colorScheme))
+    }
+  }
+}
+
+enum ScriptEditorLaunchButtonAffordances {
+  static let classicUsesSharedToolbarHeight = true
+  static let classicUsesSharedToolbarCornerRadius = true
+  static let classicUsesOutlinedToolbarTreatment = true
+  static let classicPreservesTerracottaFillAndWhiteText = true
+  static let liquidGlassKeepsProminentLaunchTreatment = true
 }
 
 private struct ScriptEditorLaunchMenuPanel: View {
@@ -531,6 +724,17 @@ struct ScriptEditorSatelliteLaunchPanel: View {
   let onCancel: () -> Void
   @State private var expandedManualSectionID: Int?
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+  private var classicSecondary: Color {
+    ManagerClassicAccentPalette.secondary(for: colorScheme)
+  }
+  private var classicPrimary: Color {
+    ManagerClassicAccentPalette.primary(for: colorScheme)
+  }
 
   private var launchRequest: ScriptEditorSatelliteLaunchRequest {
     state.launchRequest(scripts: scripts)
@@ -547,26 +751,27 @@ struct ScriptEditorSatelliteLaunchPanel: View {
     }
     .padding(18)
     .frame(width: 420)
-    .background(
-      RoundedRectangle(cornerRadius: 18)
-        .fill(Color("colorSurface"))
-        .overlay(
-          RoundedRectangle(cornerRadius: 18)
-            .stroke(Color("colorText"), lineWidth: 2)
-        )
-        .shadow(color: .black.opacity(0.18), radius: 12, y: 8)
-    )
+    .managerSurface(cornerRadius: 18, classicFill: Color("colorSurface"), strokeOpacity: 0.12)
+    .shadow(color: .black.opacity(0.18), radius: 12, y: 8)
   }
 
   private var header: some View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Cast with Pill Windows")
-        .font(.custom("Manrope-Bold", size: 20 * managerFontScale))
-        .foregroundStyle(Color("colorText"))
+        .font(
+          usesGlass
+            ? .system(size: 20 * managerFontScale, weight: .bold)
+            : .custom("Manrope-Bold", size: 20 * managerFontScale)
+        )
+        .foregroundStyle(usesGlass ? .primary : Color("colorText"))
 
       Text("Choose what each enabled Pill Window should show before launch.")
-        .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
-        .foregroundStyle(Color("colorMuted"))
+        .font(
+          usesGlass
+            ? .system(size: 14 * managerFontScale)
+            : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+        )
+        .foregroundStyle(usesGlass ? .secondary : Color("colorMuted"))
     }
   }
 
@@ -587,7 +792,7 @@ struct ScriptEditorSatelliteLaunchPanel: View {
         .pointingHandCursor()
 
       Button("Launch", action: onLaunch)
-        .buttonStyle(AiraWobblyToolbarButtonStyle(variant: .secondary))
+        .buttonStyle(SatelliteLaunchPrimaryButtonStyle())
         .pointingHandCursor()
     }
   }
@@ -599,20 +804,35 @@ struct ScriptEditorSatelliteLaunchPanel: View {
         .foregroundStyle(Color("colorSecondary"))
 
       Text(message)
-        .font(.custom("CrimsonText-Regular", size: 13 * managerFontScale))
-        .foregroundStyle(Color("colorText"))
+        .font(
+          usesGlass
+            ? .system(size: 13 * managerFontScale)
+            : .custom("CrimsonText-Regular", size: 13 * managerFontScale)
+        )
+        .foregroundStyle(usesGlass ? .primary : Color("colorText"))
         .fixedSize(horizontal: false, vertical: true)
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(
-      RoundedRectangle(cornerRadius: 12)
-        .fill(Color("colorBackground"))
-    )
+    .background {
+      if usesGlass {
+        ZStack {
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(.ultraThinMaterial)
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color("colorSecondary").opacity(isDark ? 0.10 : 0.12))
+        }
+      } else {
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color("colorBackground"))
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     .overlay(
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(Color("colorSecondary").opacity(0.24), lineWidth: 1)
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .strokeBorder(
+          Color("colorSecondary").opacity(usesGlass ? 0.30 : 0.24), lineWidth: usesGlass ? 0.5 : 1)
     )
   }
 
@@ -622,45 +842,16 @@ struct ScriptEditorSatelliteLaunchPanel: View {
 
     VStack(alignment: .leading, spacing: 10) {
       Text(section.wrappedValue.title)
-        .font(.custom("Manrope-Bold", size: 15 * managerFontScale))
-        .foregroundStyle(Color("colorText"))
+        .font(
+          usesGlass
+            ? .system(size: 15 * managerFontScale, weight: .semibold)
+            : .custom("Manrope-Bold", size: 15 * managerFontScale)
+        )
+        .foregroundStyle(usesGlass ? .primary : Color("colorText"))
 
       HStack(spacing: 8) {
         ForEach(ScriptEditorSatelliteLaunchChoice.allCases, id: \.self) { choice in
-          Button {
-            var updatedSection = section.wrappedValue
-            updatedSection.choice = choice
-            section.wrappedValue = updatedSection
-            if choice != .manual && expandedManualSectionID == updatedSection.slotIndex {
-              expandedManualSectionID = nil
-            }
-          } label: {
-            Text(choice.title)
-              .frame(maxWidth: .infinity)
-              .padding(.vertical, 9)
-              .padding(.horizontal, 12)
-              .contentShape(RoundedRectangle(cornerRadius: 10))
-          }
-          .buttonStyle(.plain)
-          .frame(maxWidth: .infinity)
-          .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
-          .foregroundStyle(
-            section.wrappedValue.choice == choice ? Color("colorBackground") : Color("colorText")
-          )
-          .background(
-            RoundedRectangle(cornerRadius: 10)
-              .fill(
-                section.wrappedValue.choice == choice
-                  ? Color("colorSecondary")
-                  : Color("colorBackground")
-              )
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: 10)
-              .stroke(Color("colorText").opacity(0.12), lineWidth: 1)
-          )
-          .contentShape(RoundedRectangle(cornerRadius: 10))
-          .pointingHandCursor()
+          satelliteChoiceButton(choice: choice, section: section)
         }
       }
 
@@ -669,14 +860,101 @@ struct ScriptEditorSatelliteLaunchPanel: View {
       }
     }
     .padding(12)
-    .background(
-      RoundedRectangle(cornerRadius: 14)
-        .fill(Color("colorBackground"))
-    )
+    .background {
+      if usesGlass {
+        ZStack {
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(.ultraThinMaterial)
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isDark ? Color.white.opacity(0.04) : Color("colorBackground").opacity(0.44))
+        }
+      } else {
+        RoundedRectangle(cornerRadius: 14)
+          .fill(Color("colorBackground"))
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     .overlay(
-      RoundedRectangle(cornerRadius: 14)
-        .stroke(Color("colorText").opacity(0.14), lineWidth: 1)
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .strokeBorder(
+          usesGlass
+            ? (isDark ? Color.white.opacity(0.12) : Color("colorPrimary").opacity(0.18))
+            : Color("colorText").opacity(0.14),
+          lineWidth: usesGlass ? 0.5 : 1
+        )
     )
+  }
+
+  @ViewBuilder
+  private func satelliteChoiceButton(
+    choice: ScriptEditorSatelliteLaunchChoice,
+    section: Binding<ScriptEditorSatelliteLaunchSection>
+  ) -> some View {
+    let isActive = section.wrappedValue.choice == choice
+    let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+    Button {
+      var updatedSection = section.wrappedValue
+      updatedSection.choice = choice
+      section.wrappedValue = updatedSection
+      if choice != .manual && expandedManualSectionID == updatedSection.slotIndex {
+        expandedManualSectionID = nil
+      }
+    } label: {
+      Text(choice.title)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 12)
+        .contentShape(shape)
+    }
+    .buttonStyle(.plain)
+    .frame(maxWidth: .infinity)
+    .font(
+      usesGlass
+        ? .system(size: 14 * managerFontScale, weight: .medium)
+        : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+    )
+    .foregroundStyle(choiceButtonForeground(isActive: isActive))
+    .background { choiceButtonBackground(isActive: isActive) }
+    .clipShape(shape)
+    .overlay(shape.strokeBorder(choiceButtonStroke(isActive: isActive), lineWidth: 1))
+    .contentShape(shape)
+    .pointingHandCursor()
+  }
+
+  private func choiceButtonForeground(isActive: Bool) -> Color {
+    if usesGlass {
+      return isActive ? .white : .primary
+    }
+    return isActive ? Color("colorBackground") : Color("colorText")
+  }
+
+  @ViewBuilder
+  private func choiceButtonBackground(isActive: Bool) -> some View {
+    let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+    if usesGlass {
+      if isActive {
+        shape
+          .fill(Color("colorSecondary").opacity(isDark ? 0.48 : 0.76))
+          .background(.ultraThinMaterial, in: shape)
+      } else {
+        ZStack {
+          shape.fill(.ultraThinMaterial)
+          shape.fill(isDark ? Color.white.opacity(0.06) : Color("colorBackground").opacity(0.46))
+        }
+      }
+    } else {
+      shape.fill(isActive ? classicSecondary : Color("colorBackground"))
+    }
+  }
+
+  private func choiceButtonStroke(isActive: Bool) -> Color {
+    if usesGlass {
+      return isActive
+        ? Color("colorSecondary").opacity(isDark ? 0.45 : 0.60)
+        : (isDark ? Color.white.opacity(0.15) : Color("colorPrimary").opacity(0.18))
+    }
+    return Color("colorText").opacity(0.12)
   }
 
   @ViewBuilder
@@ -787,7 +1065,7 @@ struct ScriptEditorSatelliteLaunchPanel: View {
     .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
     .background(
       RoundedRectangle(cornerRadius: 10)
-        .fill(isSelected ? Color("colorPrimary") : Color("colorSurface"))
+        .fill(isSelected ? classicPrimary : Color("colorSurface"))
     )
     .contentShape(RoundedRectangle(cornerRadius: 10))
     .pointingHandCursor()
@@ -804,6 +1082,58 @@ struct ScriptEditorSatelliteLaunchPanel: View {
         _state.wrappedValue = panelState
       }
     )
+  }
+}
+
+private struct SatelliteLaunchPrimaryButtonStyle: ButtonStyle {
+  @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+  private var classicSecondary: Color {
+    ManagerClassicAccentPalette.secondary(for: colorScheme)
+  }
+
+  func makeBody(configuration: Configuration) -> some View {
+    let pressed = configuration.isPressed
+    let shape = RoundedRectangle(cornerRadius: usesGlass ? 10 : 8, style: .continuous)
+
+    let opacity: Double =
+      isDark
+      ? (pressed ? 0.62 : 0.48)
+      : (pressed ? 0.82 : 0.76)
+
+    configuration.label
+      .font(
+        usesGlass
+          ? .system(size: 15 * managerFontScale, weight: .medium)
+          : .custom("IndieFlower", size: 15 * managerFontScale)
+      )
+      .foregroundStyle(.white)
+      .padding(.horizontal, 16)
+      .padding(.vertical, usesGlass ? 8 : 10)
+      .background {
+        if usesGlass {
+          shape
+            .fill(Color("colorSecondary").opacity(opacity))
+            .background(.ultraThinMaterial, in: shape)
+        } else {
+          shape.fill(classicSecondary.opacity(pressed ? 0.82 : 1))
+        }
+      }
+      .clipShape(shape)
+      .overlay {
+        shape.strokeBorder(
+          usesGlass
+            ? Color("colorSecondary").opacity(isDark ? 0.45 : 0.60)
+            : Color.white.opacity(0.8),
+          lineWidth: usesGlass ? 1 : 1.5
+        )
+      }
+      .scaleEffect(pressed ? 0.96 : 1)
+      .animation(.easeOut(duration: 0.15), value: pressed)
   }
 }
 
@@ -847,23 +1177,16 @@ struct ScriptEditorPanel<Content: View>: View {
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 12)
-        .fill(backgroundColor)
-        .overlay(
-          RoundedRectangle(cornerRadius: 12)
-            .stroke(Color("colorText"), lineWidth: 3)
+      Color.clear
+        .managerSurface(
+          cornerRadius: ManagerLayoutParity.scriptEditorPanelCornerRadius,
+          classicFill: backgroundColor,
+          strokeOpacity: 0.12
         )
         .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
 
-      RoundedRectangle(cornerRadius: 10)
-        .inset(by: 3)
-        .stroke(
-          Color("colorText").opacity(0.3),
-          style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round, dash: [4, 2])
-        )
-
       content
-        .padding(32)
+        .padding(ManagerLayoutParity.scriptEditorPanelPadding)
     }
   }
 }

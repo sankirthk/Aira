@@ -3,7 +3,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ManagerWindowView: View {
+  private enum SidebarLayoutMetrics {
+    static let expandedWidth: CGFloat = 230
+  }
+
   @EnvironmentObject var appState: AppState
+  @Environment(\.managerTheme) private var managerTheme
   let overlayController: OverlayWindowController
   @State private var managerShortcutCoordinator = ManagerShortcutCoordinator()
   @State private var selectedNav: SidebarNav = .allScripts
@@ -22,12 +27,22 @@ struct ManagerWindowView: View {
   var body: some View {
     contentView
       .frame(minWidth: 900, minHeight: 600)
+      .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+      .modifier(GlassToolbarModifier(enabled: true))
+      .environment(
+        \.managerTheme,
+        ManagerTheme(interfaceStyle: appState.settings.managerInterfaceStyle)
+      )
       .background(
         ManagerWindowAccessor { window in
           managerWindow = window
           AppWindowCoordinator.markManagerWindow(window)
+          configureWindowChrome(window)
         }
       )
+      .onChange(of: appState.settings.managerInterfaceStyle) { _, _ in
+        configureWindowChrome(managerWindow)
+      }
       .modifier(
         ManagerWindowAlerts(
           creationErrorBinding: creationErrorBinding,
@@ -95,91 +110,146 @@ struct ManagerWindowView: View {
   }
 
   private var contentView: some View {
-    VStack(spacing: 0) {
-      topBar
-      mainLayout
-    }
+    mainLayout
   }
 
-  private var topBar: some View {
-    HStack(spacing: 4) {
-      Button {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          sidebarVisible.toggle()
-        }
-      } label: {
-        AiraIcon(type: .sidebar, size: 20, color: Color("colorText"), animated: false)
-          .padding(8)
-      }
-      .buttonStyle(.plain)
-      .help(sidebarVisible ? "Collapse Sidebar" : "Expand Sidebar")
-
-      Button {
-        dismissEditor()
-      } label: {
-        AiraIcon(
-          type: .back,
-          size: 20,
-          color: Color("colorText").opacity(canGoBack ? 1 : 0.3)
-        )
-        .padding(8)
-      }
-      .buttonStyle(.plain)
-      .disabled(!canGoBack)
-      .help("Go Back")
-
-      Button {
-      } label: {
-        AiraIcon(type: .forward, size: 20, color: Color("colorText").opacity(0.3))
-          .padding(8)
-      }
-      .buttonStyle(.plain)
-      .disabled(true)
-      .help("Go Forward")
-
-      Spacer()
-    }
-    .padding(.horizontal, 4)
-    .frame(height: 44)
-    .background(Color("colorBackground"))
-    .overlay(alignment: .bottom) {
-      Rectangle()
-        .fill(Color("colorText").opacity(0.12))
-        .frame(height: 1)
-    }
+  private var usesLiquidGlassMode: Bool {
+    appState.settings.managerInterfaceStyle == .liquidGlass
   }
 
+  private enum LayoutMetrics {
+    static let outerHorizontal: CGFloat = 8
+    static let outerBottom: CGFloat = 8
+    static let topInset: CGFloat = 8
+    /// Vertical space the chrome band occupies — content area top aligns here.
+    static let chromeBandHeight: CGFloat = SidebarView.SidebarChromeMetrics.height
+    static let gap: CGFloat = 10
+  }
+
+  /// Unified layout for both modes:
+  /// - Sidebar spans full height with chrome band at top.
+  /// - Content area starts below the chrome band height.
+  /// - When collapsed, the sidebar disappears entirely. A compact toggle
+  ///   pill sits top-left (overlaid), and the content area fills the width.
+  ///   Traffic lights remain in the window's standard position.
+  /// Visual treatment (glass effects vs solid colors) varies by mode.
   private var mainLayout: some View {
-    HStack(alignment: .top, spacing: 0) {
-      if sidebarVisible {
-        SidebarView(
-          selectedNav: sidebarSelectionBinding,
-          pendingDeleteCollection: $pendingDeleteCollection,
-          collectionErrorMessage: $collectionErrorMessage,
-          onOpenSettings: {
-            presentSettings()
-          },
-          onNewScript: {
-            createAndOpenScript()
-          },
-          onOpenScript: { id in
-            openScriptFromSidebar(id: id)
-          },
-          onMoveScriptToCollection: { scriptID, collectionID in
-            moveScript(scriptID, toCollection: collectionID)
+    ZStack(alignment: .topLeading) {
+      HStack(alignment: .top, spacing: sidebarVisible ? LayoutMetrics.gap : 0) {
+        if sidebarVisible {
+          SidebarView(
+            sidebarVisible: $sidebarVisible,
+            selectedNav: sidebarSelectionBinding,
+            pendingDeleteCollection: $pendingDeleteCollection,
+            collectionErrorMessage: $collectionErrorMessage,
+            canGoBack: canGoBack,
+            onOpenSettings: {
+              presentSettings()
+            },
+            onNewScript: {
+              createAndOpenScript()
+            },
+            onOpenScript: { id in
+              openScriptFromSidebar(id: id)
+            },
+            onMoveScriptToCollection: { scriptID, collectionID in
+              moveScript(scriptID, toCollection: collectionID)
+            },
+            onGoBack: {
+              dismissEditor()
+            }
+          )
+          .frame(width: SidebarLayoutMetrics.expandedWidth)
+          .frame(maxHeight: .infinity, alignment: .top)
+          .padding(.bottom, LayoutMetrics.outerBottom)
+          .transition(.move(edge: .leading).combined(with: .opacity))
+        }
+
+        contentArea
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .modifier(GlassContentAreaModifier())
+          .padding(.top, LayoutMetrics.chromeBandHeight + LayoutMetrics.topInset)
+          .padding(.bottom, LayoutMetrics.outerBottom)
+      }
+
+      // Collapsed: compact chrome strip at top-left with traffic lights + buttons
+      if !sidebarVisible {
+        collapsedSidebarPill
+          .transition(.opacity)
+      }
+    }
+    .padding(.top, LayoutMetrics.topInset)
+    .padding(.horizontal, LayoutMetrics.outerHorizontal)
+    .modifier(GlassWindowBackgroundModifier())
+    .animation(.easeInOut(duration: 0.25), value: sidebarVisible)
+  }
+
+  /// Compact chrome strip shown when the sidebar is collapsed.
+  /// Contains a traffic-light host (buttons appear on hover) followed by
+  /// sidebar toggle, back, and forward buttons in a small pill.
+  private var collapsedSidebarPill: some View {
+    ZStack(alignment: .leading) {
+      // Traffic light host — reparents the window buttons into this area.
+      // They appear/hide via the host view's tracking area hover logic.
+      SidebarView.SidebarTrafficLightBridge(sidebarVisible: $sidebarVisible)
+        .frame(
+          width: SidebarView.SidebarChromeMetrics.appControlLeading,
+          height: SidebarView.SidebarChromeMetrics.height)
+
+      // App control buttons — positioned after the traffic lights.
+      HStack(spacing: 6) {
+        collapsedChromeButton(
+          help: "Show Sidebar",
+          icon: .sidebar,
+          iconOpacity: 0.80,
+          action: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+              sidebarVisible = true
+            }
           }
         )
-        .frame(width: 230)
-        .frame(maxHeight: .infinity, alignment: .top)
 
-        Divider()
-          .background(Color.black.opacity(0.4))
+        collapsedChromeButton(
+          help: "Go Back",
+          icon: .back,
+          iconOpacity: canGoBack ? 0.80 : 0.28,
+          isEnabled: canGoBack,
+          action: { dismissEditor() }
+        )
+
+        collapsedChromeButton(
+          help: "Go Forward",
+          icon: .forward,
+          iconOpacity: 0.28,
+          isEnabled: false,
+          action: {}
+        )
       }
-
-      contentArea
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color("colorBackground"))
+      .padding(.leading, SidebarView.SidebarChromeMetrics.appControlLeading)
     }
+    .frame(height: SidebarView.SidebarChromeMetrics.height)
+  }
+
+  private func collapsedChromeButton(
+    help: String,
+    icon: AiraIconType,
+    iconOpacity: Double,
+    isEnabled: Bool = true,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      AiraIcon(
+        type: icon,
+        size: 17,
+        color: Color("colorText").opacity(iconOpacity),
+        animated: false
+      )
+      .frame(width: 26, height: 26)
+      .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .disabled(!isEnabled)
+    .help(help)
   }
 
   @ViewBuilder
@@ -211,9 +281,6 @@ struct ManagerWindowView: View {
         },
         onCastWithSatellite: { id, selections in
           castScriptWithSatellite(id: id, satelliteSelections: selections)
-        },
-        onImportScript: {
-          importScriptFromPicker()
         }
       )
     }
@@ -279,12 +346,22 @@ struct ManagerWindowView: View {
 
       VStack(alignment: .leading, spacing: 12) {
         Text("Delete Collection?")
-          .font(.custom("IndieFlower", size: 24))
-          .foregroundStyle(Color("colorText"))
+          .font(
+            managerTheme.usesLiquidGlassMode
+              ? .system(size: 22, weight: .bold)
+              : .custom("IndieFlower", size: 24)
+          )
+          .foregroundStyle(managerTheme.usesLiquidGlassMode ? .primary : Color("colorText"))
 
         Text("Deleting \"\(collection.name)\" will not delete any scripts.")
-          .font(.custom("CrimsonText-Regular", size: 15))
-          .foregroundStyle(Color("colorText").opacity(0.72))
+          .font(
+            managerTheme.usesLiquidGlassMode
+              ? .system(size: 14)
+              : .custom("CrimsonText-Regular", size: 15)
+          )
+          .foregroundStyle(
+            managerTheme.usesLiquidGlassMode ? .secondary : Color("colorText").opacity(0.72)
+          )
           .fixedSize(horizontal: false, vertical: true)
 
         HStack(spacing: 10) {
@@ -296,18 +373,13 @@ struct ManagerWindowView: View {
           Button("Delete") {
             confirmDeleteCollection()
           }
-          .buttonStyle(AiraPrimaryButtonStyle())
+          .buttonStyle(AiraCardCastButtonStyle())
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .padding(20)
       .frame(width: 320)
-      .background(Color("colorBackground"))
-      .clipShape(RoundedRectangle(cornerRadius: 20))
-      .overlay(
-        RoundedRectangle(cornerRadius: 20)
-          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-      )
+      .managerSurface(cornerRadius: 20, classicFill: Color("colorBackground"), strokeOpacity: 0.12)
       .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
       .padding(16)
     }
@@ -406,6 +478,39 @@ struct ManagerWindowView: View {
         }
       }
     )
+  }
+
+  private func configureWindowChrome(_ window: NSWindow?) {
+    guard let window else { return }
+    configureManagerFullscreenBehavior(window)
+    configureManagerTitlebar(window)
+  }
+
+  private func configureManagerTitlebar(_ window: NSWindow) {
+    if window.titleVisibility != .hidden {
+      window.titleVisibility = .hidden
+    }
+    if window.titlebarAppearsTransparent == false {
+      window.titlebarAppearsTransparent = true
+    }
+    if window.toolbar != nil {
+      window.toolbar = nil
+    }
+    // Use the sidebar sage green as the window background so the
+    // titlebar zone blends seamlessly with the sidebar.
+    let sageGreen = NSColor(red: 0x84 / 255.0, green: 0x96 / 255.0, blue: 0x88 / 255.0, alpha: 1)
+    if window.backgroundColor != sageGreen {
+      window.backgroundColor = sageGreen
+    }
+    if !window.styleMask.contains(.fullSizeContentView) {
+      window.styleMask.insert(.fullSizeContentView)
+    }
+  }
+
+  private func configureManagerFullscreenBehavior(_ window: NSWindow) {
+    window.collectionBehavior.remove(.fullScreenPrimary)
+    window.collectionBehavior.remove(.fullScreenAuxiliary)
+    window.collectionBehavior.insert(.fullScreenNone)
   }
 
   private func navigateToSidebarDestination(_ destination: SidebarNav) {
@@ -791,19 +896,33 @@ private struct ManagerWindowAlerts: ViewModifier {
 private struct ManagerWindowAccessor: NSViewRepresentable {
   let onResolve: (NSWindow?) -> Void
 
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
   func makeNSView(context: Context) -> NSView {
     let view = NSView()
     Task { @MainActor in
-      AppWindowCoordinator.markManagerWindow(view.window)
-      onResolve(view.window)
+      context.coordinator.resolveIfNeeded(view.window, onResolve: onResolve)
     }
     return view
   }
 
   func updateNSView(_ nsView: NSView, context: Context) {
     Task { @MainActor in
-      AppWindowCoordinator.markManagerWindow(nsView.window)
-      onResolve(nsView.window)
+      context.coordinator.resolveIfNeeded(nsView.window, onResolve: onResolve)
+    }
+  }
+
+  @MainActor
+  final class Coordinator {
+    private weak var resolvedWindow: NSWindow?
+
+    func resolveIfNeeded(_ window: NSWindow?, onResolve: (NSWindow?) -> Void) {
+      guard window !== resolvedWindow else { return }
+      resolvedWindow = window
+      AppWindowCoordinator.markManagerWindow(window)
+      onResolve(window)
     }
   }
 }
@@ -845,6 +964,111 @@ final class ManagerShortcutCoordinator {
       .init(shortcut: settings.shortcutToggleNotch, action: onToggleNotch),
       .init(shortcut: settings.shortcutTogglePill, action: onTogglePill),
     ]
+  }
+}
+
+/// Removes SwiftUI toolbar/title chrome so the borderless Manager content owns
+/// the whole window surface.
+private struct GlassToolbarModifier: ViewModifier {
+  let enabled: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if enabled {
+      if #available(macOS 15.0, *) {
+        content
+          .toolbar(removing: .title)
+          .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+          .toolbarVisibility(.hidden, for: .windowToolbar)
+      } else {
+        content
+      }
+    } else {
+      content
+    }
+  }
+}
+
+/// Styled frame for the main content area.
+/// Glass mode: frosted sage glass backing. Classic mode: solid cream.
+private struct GlassContentAreaModifier: ViewModifier {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+  private var cornerRadius: CGFloat { ManagerLayoutParity.contentAreaCornerRadius }
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if usesGlass {
+      content
+        .background {
+          ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+              .fill(.ultraThinMaterial)
+
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+              .fill(
+                isDark ? Color(hex: "#3E4A40").opacity(0.25) : Color(hex: "#D5DCCF").opacity(0.18))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(
+              isDark ? Color.white.opacity(0.18) : Color.white.opacity(0.50),
+              lineWidth: 0.5
+            )
+        }
+    } else {
+      content
+        .background(Color("colorBackground"))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+  }
+}
+
+/// Background for the entire window container.
+/// Glass mode: app-owned sage/dark-green substrate. Classic mode: solid sage.
+private struct GlassWindowBackgroundModifier: ViewModifier {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+
+  private var baseColor: Color {
+    isDark ? Color(hex: "#253D2E") : Color(hex: "#849688")
+  }
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if usesGlass {
+      content
+        .background {
+          ZStack {
+            // Opaque root substrate normalizes wallpaper bleed before child glass samples it.
+            baseColor
+
+            if isDark {
+              Color.black.opacity(0.10)
+            }
+
+            // Subtle depth gradient
+            RadialGradient(
+              colors: [
+                Color.white.opacity(isDark ? 0.04 : 0.18),
+                Color.black.opacity(isDark ? 0.12 : 0.04),
+              ],
+              center: .center, startRadius: 80, endRadius: 520
+            )
+          }
+        }
+    } else {
+      content
+        .background(isDark ? Color(hex: "#465649") : Color("colorPrimary"))
+    }
   }
 }
 

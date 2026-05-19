@@ -131,6 +131,7 @@ struct NotchContentView: View {
   let canUndock: Bool
   let isFullScreen: Bool
   let notchSize: CGSize  // physical notch dimensions in screen points
+  let frostedGlassEnabled: Bool
   let voiceSyncMode: VoiceSyncMode
   @ObservedObject var voiceSync: VoiceSyncEngine
   @ObservedObject var audioMonitor: AudioLevelMonitor
@@ -160,7 +161,8 @@ struct NotchContentView: View {
     isDocked: Bool = true,
     canUndock: Bool = true,
     isFullScreen: Bool = false,
-    notchSize: CGSize, voiceSyncMode: VoiceSyncMode = .voice, voiceSync: VoiceSyncEngine,
+    notchSize: CGSize, frostedGlassEnabled: Bool = false, voiceSyncMode: VoiceSyncMode = .voice,
+    voiceSync: VoiceSyncEngine,
     audioMonitor: AudioLevelMonitor,
     launchTrace: SessionLaunchTrace? = nil,
     defaultAppearance: OverlayAppearance? = nil,
@@ -191,6 +193,7 @@ struct NotchContentView: View {
     self.canUndock = canUndock
     self.isFullScreen = isFullScreen
     self.notchSize = notchSize
+    self.frostedGlassEnabled = frostedGlassEnabled
     self.voiceSyncMode = voiceSyncMode
     self.voiceSync = voiceSync
     self.audioMonitor = audioMonitor
@@ -210,7 +213,16 @@ struct NotchContentView: View {
 
   var body: some View {
     GeometryReader { geometry in
+      let usesFrostedGlass = isDocked && frostedGlassEnabled
+      let contentShape: AnyNotchShape =
+        isDocked ? .notch(notchSize: notchSize) : .roundedRectangle
+
       ZStack(alignment: .topLeading) {
+        if usesFrostedGlass {
+          OverlayFrostedGlassBackground(appearance: currentAppearance)
+            .clipShape(contentShape)
+        }
+
         PrompterContentView(
           script: script,
           appearance: currentAppearance,
@@ -238,6 +250,7 @@ struct NotchContentView: View {
           showScriptProgress: showScriptProgress,
           pauseOnHoverEnabled: pauseOnHoverEnabled,
           autoScrollWPM: autoScrollWPM,
+          drawsBackground: !usesFrostedGlass,
           playheadCoordinator: playheadCoordinator,
           scrollCoordinator: scrollCoordinator,
           reportsPrimaryMetrics: reportsPrimaryMetrics,
@@ -258,11 +271,7 @@ struct NotchContentView: View {
           audioMonitor: audioMonitor,
           launchTrace: launchTrace
         )
-        .clipShape(
-          isDocked
-            ? AnyNotchShape.notch(notchSize: notchSize)
-            : AnyNotchShape.roundedRectangle
-        )
+        .clipShape(contentShape)
 
         if isDocked, notchSize.width > 0, notchSize.height > 0,
           voiceSyncEnabled || spokenWordHighlightingEnabled
