@@ -8,6 +8,7 @@ enum SidebarTrafficLightAffordances {
   static let keepsNativeButtonsVisible = true
   static let drawsHoverGlyphOverlay = false
   static let usesSystemHoverGlyphs = true
+  static let removesNativeTitlebarAfterCapturingButtons = true
 }
 
 struct SidebarView: View {
@@ -253,8 +254,6 @@ struct SidebarView: View {
     private var capturedMinimize: NSButton?
     private var capturedZoom: NSButton?
     private var didCaptureButtons = false
-    /// The original superview of the traffic lights so we can return them in fullscreen.
-    private weak var originalButtonContainer: NSView?
 
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
@@ -367,9 +366,6 @@ struct SidebarView: View {
 
     // MARK: — Traffic light management
 
-    /// Standard Apple approach: .titled + .fullSizeContentView +
-    /// titlebarAppearsTransparent + titleVisibility = .hidden.
-    /// Traffic lights stay colored.  No titlebar container hacking.
     private func captureAndSyncTrafficLights() {
       guard let window else { return }
 
@@ -378,8 +374,6 @@ struct SidebarView: View {
           let minimize = window.standardWindowButton(.miniaturizeButton),
           let zoom = window.standardWindowButton(.zoomButton)
         {
-          // Save the original container so we can return buttons there in fullscreen.
-          originalButtonContainer = close.superview
           capturedClose = close
           capturedMinimize = minimize
           capturedZoom = zoom
@@ -392,6 +386,8 @@ struct SidebarView: View {
             button.autoresizingMask = [.minYMargin]
             button.isEnabled = true
           }
+
+          removeNativeTitlebar(from: window)
         }
       }
 
@@ -409,21 +405,6 @@ struct SidebarView: View {
         return
       }
 
-      // In fullscreen, return buttons to the titlebar container so macOS
-      // manages them with its native auto-hide behavior (appear on hover
-      // near top of screen, hidden otherwise).
-      if let window, window.styleMask.contains(.fullScreen) {
-        if let container = originalButtonContainer {
-          [close, minimize, zoom].forEach { button in
-            if button.superview !== container {
-              button.removeFromSuperview()
-              container.addSubview(button)
-            }
-          }
-        }
-        return
-      }
-
       // Normal mode: ensure buttons are parented to this view (sidebar).
       [close, minimize, zoom].forEach { button in
         if button.superview !== self {
@@ -435,6 +416,14 @@ struct SidebarView: View {
       }
       positionTrafficLights(closeButton: close, minimizeButton: minimize, zoomButton: zoom)
       setButtonsVisible()
+    }
+
+    private func removeNativeTitlebar(from window: NSWindow) {
+      guard window.styleMask.contains(.titled) else {
+        return
+      }
+
+      window.styleMask.remove(.titled)
     }
 
     private func setHovered(_ hovering: Bool) {

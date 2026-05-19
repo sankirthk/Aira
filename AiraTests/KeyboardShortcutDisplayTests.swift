@@ -2676,6 +2676,7 @@ struct AppWindowCoordinatorTests {
     #expect(SidebarTrafficLightAffordances.keepsNativeButtonsVisible)
     #expect(!SidebarTrafficLightAffordances.drawsHoverGlyphOverlay)
     #expect(SidebarTrafficLightAffordances.usesSystemHoverGlyphs)
+    #expect(SidebarTrafficLightAffordances.removesNativeTitlebarAfterCapturingButtons)
   }
 
   @Test func managerRestoreFallbackRejectsUntaggedTitledRegularWindows() {
