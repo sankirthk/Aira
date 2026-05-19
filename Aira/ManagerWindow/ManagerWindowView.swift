@@ -493,6 +493,9 @@ struct ManagerWindowView: View {
     if window.titlebarAppearsTransparent == false {
       window.titlebarAppearsTransparent = true
     }
+    if window.titlebarSeparatorStyle != .none {
+      window.titlebarSeparatorStyle = .none
+    }
     if window.toolbar != nil {
       window.toolbar = nil
     }

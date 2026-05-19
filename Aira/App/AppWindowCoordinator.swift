@@ -286,12 +286,14 @@ enum AppWindowCoordinator {
     styleMask: NSWindow.StyleMask,
     titleVisibility: NSWindow.TitleVisibility,
     titlebarAppearsTransparent: Bool,
+    hasTitlebarSeparator: Bool,
     hasToolbar: Bool,
     isMovableByWindowBackground: Bool
   ) -> Bool {
     !styleMask.contains(.fullSizeContentView)
       || titleVisibility != .hidden
       || titlebarAppearsTransparent == false
+      || hasTitlebarSeparator
       || hasToolbar
       || isMovableByWindowBackground == false
   }
@@ -334,6 +336,7 @@ enum AppWindowCoordinator {
         styleMask: window.styleMask,
         titleVisibility: window.titleVisibility,
         titlebarAppearsTransparent: window.titlebarAppearsTransparent,
+        hasTitlebarSeparator: window.titlebarSeparatorStyle != .none,
         hasToolbar: window.toolbar != nil,
         isMovableByWindowBackground: window.isMovableByWindowBackground
       )
@@ -349,6 +352,9 @@ enum AppWindowCoordinator {
     }
     if window.titlebarAppearsTransparent == false {
       window.titlebarAppearsTransparent = true
+    }
+    if window.titlebarSeparatorStyle != .none {
+      window.titlebarSeparatorStyle = .none
     }
     if window.toolbar != nil {
       window.toolbar = nil

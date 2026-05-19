@@ -2597,6 +2597,7 @@ struct AppWindowCoordinatorTests {
         styleMask: [.fullSizeContentView],
         titleVisibility: .hidden,
         titlebarAppearsTransparent: true,
+        hasTitlebarSeparator: false,
         hasToolbar: false,
         isMovableByWindowBackground: true
       ))
@@ -2605,6 +2606,7 @@ struct AppWindowCoordinatorTests {
         styleMask: [.titled, .fullSizeContentView],
         titleVisibility: .visible,
         titlebarAppearsTransparent: false,
+        hasTitlebarSeparator: true,
         hasToolbar: true,
         isMovableByWindowBackground: false
       ))
