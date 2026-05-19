@@ -120,15 +120,13 @@ struct ManagerWindowView: View {
   private enum LayoutMetrics {
     static let outerHorizontal: CGFloat = 8
     static let outerBottom: CGFloat = 8
-    static let topInset: CGFloat = 8
-    /// Vertical space the chrome band occupies — content area top aligns here.
-    static let chromeBandHeight: CGFloat = SidebarView.SidebarChromeMetrics.height
+    static let topInset: CGFloat = 0
     static let gap: CGFloat = 10
   }
 
   /// Unified layout for both modes:
   /// - Sidebar spans full height with chrome band at top.
-  /// - Content area starts below the chrome band height.
+  /// - Content area fills to the top edge; there is no visible titlebar band.
   /// - When collapsed, the sidebar disappears entirely. A compact toggle
   ///   pill sits top-left (overlaid), and the content area fills the width.
   ///   Traffic lights remain in the window's standard position.
@@ -168,7 +166,6 @@ struct ManagerWindowView: View {
         contentArea
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .modifier(GlassContentAreaModifier())
-          .padding(.top, LayoutMetrics.chromeBandHeight + LayoutMetrics.topInset)
           .padding(.bottom, LayoutMetrics.outerBottom)
       }
 

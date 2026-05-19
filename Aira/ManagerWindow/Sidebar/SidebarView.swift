@@ -204,11 +204,6 @@ struct SidebarView: View {
         .padding(.leading, SidebarChromeMetrics.appControlLeading)
         .padding(.top, 9)
       }
-      .overlay(alignment: .bottom) {
-        Rectangle()
-          .fill(Color.white.opacity(0.10))
-          .frame(height: 1)
-      }
     }
 
     private func chromeButton(
