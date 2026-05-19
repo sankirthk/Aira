@@ -288,14 +288,19 @@ enum AppWindowCoordinator {
     titlebarAppearsTransparent: Bool,
     hasTitlebarSeparator: Bool,
     hasToolbar: Bool,
-    isMovableByWindowBackground: Bool
+    isMovableByWindowBackground: Bool,
+    isOpaque: Bool,
+    hasClearBackground: Bool
   ) -> Bool {
-    !styleMask.contains(.fullSizeContentView)
+    !styleMask.contains(.titled)
+      || !styleMask.contains(.fullSizeContentView)
       || titleVisibility != .hidden
       || titlebarAppearsTransparent == false
       || hasTitlebarSeparator
       || hasToolbar
       || isMovableByWindowBackground == false
+      || isOpaque
+      || hasClearBackground == false
   }
 
   @MainActor
@@ -338,12 +343,17 @@ enum AppWindowCoordinator {
         titlebarAppearsTransparent: window.titlebarAppearsTransparent,
         hasTitlebarSeparator: window.titlebarSeparatorStyle != .none,
         hasToolbar: window.toolbar != nil,
-        isMovableByWindowBackground: window.isMovableByWindowBackground
+        isMovableByWindowBackground: window.isMovableByWindowBackground,
+        isOpaque: window.isOpaque,
+        hasClearBackground: window.backgroundColor == .clear
       )
     else {
       return
     }
 
+    if !window.styleMask.contains(.titled) {
+      window.styleMask.insert(.titled)
+    }
     if !window.styleMask.contains(.fullSizeContentView) {
       window.styleMask.insert(.fullSizeContentView)
     }
@@ -361,6 +371,12 @@ enum AppWindowCoordinator {
     }
     if window.isMovableByWindowBackground == false {
       window.isMovableByWindowBackground = true
+    }
+    if window.isOpaque {
+      window.isOpaque = false
+    }
+    if window.backgroundColor != .clear {
+      window.backgroundColor = .clear
     }
   }
 

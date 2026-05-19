@@ -27,6 +27,7 @@ struct ManagerWindowView: View {
   var body: some View {
     contentView
       .frame(minWidth: 900, minHeight: 600)
+      .ignoresSafeArea(.container, edges: .top)
       .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
       .modifier(GlassToolbarModifier(enabled: true))
       .environment(
@@ -487,6 +488,12 @@ struct ManagerWindowView: View {
   }
 
   private func configureManagerTitlebar(_ window: NSWindow) {
+    if !window.styleMask.contains(.titled) {
+      window.styleMask.insert(.titled)
+    }
+    if !window.styleMask.contains(.fullSizeContentView) {
+      window.styleMask.insert(.fullSizeContentView)
+    }
     if window.titleVisibility != .hidden {
       window.titleVisibility = .hidden
     }
@@ -499,14 +506,11 @@ struct ManagerWindowView: View {
     if window.toolbar != nil {
       window.toolbar = nil
     }
-    // Use the sidebar sage green as the window background so the
-    // titlebar zone blends seamlessly with the sidebar.
-    let sageGreen = NSColor(red: 0x84 / 255.0, green: 0x96 / 255.0, blue: 0x88 / 255.0, alpha: 1)
-    if window.backgroundColor != sageGreen {
-      window.backgroundColor = sageGreen
+    if window.isOpaque {
+      window.isOpaque = false
     }
-    if !window.styleMask.contains(.fullSizeContentView) {
-      window.styleMask.insert(.fullSizeContentView)
+    if window.backgroundColor != .clear {
+      window.backgroundColor = .clear
     }
   }
 

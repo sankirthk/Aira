@@ -2594,21 +2594,25 @@ struct AppWindowCoordinatorTests {
   @Test func managerChromeConfigurationIsIdempotentOnceApplied() {
     #expect(
       !AppWindowCoordinator.managerChromeNeedsConfiguration(
-        styleMask: [.fullSizeContentView],
+        styleMask: [.titled, .fullSizeContentView],
         titleVisibility: .hidden,
         titlebarAppearsTransparent: true,
         hasTitlebarSeparator: false,
         hasToolbar: false,
-        isMovableByWindowBackground: true
+        isMovableByWindowBackground: true,
+        isOpaque: false,
+        hasClearBackground: true
       ))
     #expect(
       AppWindowCoordinator.managerChromeNeedsConfiguration(
-        styleMask: [.titled, .fullSizeContentView],
+        styleMask: [.fullSizeContentView],
         titleVisibility: .visible,
         titlebarAppearsTransparent: false,
         hasTitlebarSeparator: true,
         hasToolbar: true,
-        isMovableByWindowBackground: false
+        isMovableByWindowBackground: false,
+        isOpaque: true,
+        hasClearBackground: false
       ))
   }
 
@@ -2668,15 +2672,12 @@ struct AppWindowCoordinatorTests {
       ))
   }
 
-  @Test func managerTrafficLightHoverTrackingIsActiveBeforeWindowBecomesKey() {
-    #expect(SidebarTrafficLightAffordances.trackingOptions.contains(.activeAlways))
-    #expect(!SidebarTrafficLightAffordances.trackingOptions.contains(.activeInKeyWindow))
-    #expect(SidebarTrafficLightAffordances.trackingOptions.contains(.mouseEnteredAndExited))
-    #expect(SidebarTrafficLightAffordances.trackingOptions.contains(.inVisibleRect))
+  @Test func managerTrafficLightAffordancesUseNativeTitledWindowControls() {
     #expect(SidebarTrafficLightAffordances.keepsNativeButtonsVisible)
     #expect(!SidebarTrafficLightAffordances.drawsHoverGlyphOverlay)
     #expect(SidebarTrafficLightAffordances.usesSystemHoverGlyphs)
-    #expect(SidebarTrafficLightAffordances.removesNativeTitlebarAfterCapturingButtons)
+    #expect(SidebarTrafficLightAffordances.keepsTitledWindowStyleForNativeControls)
+    #expect(SidebarTrafficLightAffordances.makesWindowCanvasTransparent)
   }
 
   @Test func managerRestoreFallbackRejectsUntaggedTitledRegularWindows() {

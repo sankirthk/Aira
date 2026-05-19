@@ -2,13 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum SidebarTrafficLightAffordances {
-  static let trackingOptions: NSTrackingArea.Options = [
-    .activeAlways, .mouseEnteredAndExited, .inVisibleRect,
-  ]
   static let keepsNativeButtonsVisible = true
   static let drawsHoverGlyphOverlay = false
   static let usesSystemHoverGlyphs = true
-  static let removesNativeTitlebarAfterCapturingButtons = true
+  static let keepsTitledWindowStyleForNativeControls = true
+  static let makesWindowCanvasTransparent = true
 }
 
 struct SidebarView: View {
@@ -250,15 +248,7 @@ struct SidebarView: View {
 
   final class SidebarTrafficLightHostView: NSView {
     var sidebarVisible: Bool = true
-    private var trackingAreaReference: NSTrackingArea?
-    private var isHovered: Bool = false
     private var windowObservers: [NSObjectProtocol] = []
-
-    // Strong references to traffic light buttons captured before .titled is removed.
-    private var capturedClose: NSButton?
-    private var capturedMinimize: NSButton?
-    private var capturedZoom: NSButton?
-    private var didCaptureButtons = false
 
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
@@ -281,55 +271,8 @@ struct SidebarView: View {
       removeWindowObservers()
     }
 
-    override func updateTrackingAreas() {
-      if let trackingAreaReference {
-        removeTrackingArea(trackingAreaReference)
-      }
-
-      // Narrow the tracking area to just the traffic light button region
-      // so the ×/−/+ symbols only appear when hovering directly over the buttons.
-      let buttonRect = trafficLightButtonRect()
-      let trackingArea = NSTrackingArea(
-        rect: buttonRect,
-        options: SidebarTrafficLightAffordances.trackingOptions,
-        owner: self,
-        userInfo: nil
-      )
-      addTrackingArea(trackingArea)
-      trackingAreaReference = trackingArea
-      super.updateTrackingAreas()
-    }
-
-    /// Returns the rect that encloses the three traffic light buttons with some padding.
-    private func trafficLightButtonRect() -> NSRect {
-      let topInset: CGFloat = 18
-      let leadingInset: CGFloat = 18
-      let buttonSize: CGFloat = 14  // standard traffic light button size
-      let buttonGap: CGFloat = 8
-      let padding: CGFloat = 6
-
-      let totalWidth = buttonSize * 3 + buttonGap * 2
-      let y = max(0, bounds.height - buttonSize - topInset)
-      return NSRect(
-        x: leadingInset - padding,
-        y: y - padding,
-        width: totalWidth + padding * 2,
-        height: buttonSize + padding * 2
-      )
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-      setHovered(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-      setHovered(false)
-    }
-
     override func layout() {
       super.layout()
-      // Defer traffic light sync to avoid mutating the view hierarchy
-      // during a layout pass, which can cause an infinite constraint cycle.
       DispatchQueue.main.async { [weak self] in
         self?.syncTrafficLights()
       }
@@ -373,104 +316,52 @@ struct SidebarView: View {
 
     private func captureAndSyncTrafficLights() {
       guard let window else { return }
-
-      if !didCaptureButtons {
-        if let close = window.standardWindowButton(.closeButton),
-          let minimize = window.standardWindowButton(.miniaturizeButton),
-          let zoom = window.standardWindowButton(.zoomButton)
-        {
-          capturedClose = close
-          capturedMinimize = minimize
-          capturedZoom = zoom
-          didCaptureButtons = true
-
-          // Reparent buttons into this view.
-          [close, minimize, zoom].forEach { button in
-            button.removeFromSuperview()
-            addSubview(button)
-            button.autoresizingMask = [.minYMargin]
-            button.isEnabled = true
-          }
-
-          removeNativeTitlebar(from: window)
-        }
-      }
-
+      preserveNativeTitlebarForSystemControls(in: window)
       syncTrafficLights()
     }
 
     func syncTrafficLights() {
-      guard
-        let close = capturedClose,
-        let minimize = capturedMinimize,
-        let zoom = capturedZoom
-      else {
-        // Buttons not captured yet — try capturing.
-        captureAndSyncTrafficLights()
-        return
-      }
-
-      // Normal mode: ensure buttons are parented to this view (sidebar).
-      [close, minimize, zoom].forEach { button in
-        if button.superview !== self {
-          button.removeFromSuperview()
-          addSubview(button)
-        }
-        button.autoresizingMask = [.minYMargin]
-        button.isEnabled = true
-      }
-      positionTrafficLights(closeButton: close, minimizeButton: minimize, zoomButton: zoom)
-      setButtonsVisible()
-    }
-
-    private func removeNativeTitlebar(from window: NSWindow) {
-      guard window.styleMask.contains(.titled) else {
-        return
-      }
-
-      window.styleMask.remove(.titled)
-    }
-
-    private func setHovered(_ hovering: Bool) {
-      guard isHovered != hovering else { return }
-      isHovered = hovering
-      syncTrafficLights()
-    }
-
-    private func setButtonsVisible() {
-      guard let close = capturedClose,
-        let minimize = capturedMinimize,
-        let zoom = capturedZoom
-      else { return }
-
-      [close, minimize, zoom].forEach { button in
+      guard let window else { return }
+      preserveNativeTitlebarForSystemControls(in: window)
+      [
+        window.standardWindowButton(.closeButton),
+        window.standardWindowButton(.miniaturizeButton),
+        window.standardWindowButton(.zoomButton),
+      ].compactMap { $0 }.forEach { button in
         button.isHidden = false
         button.alphaValue = 1
+        button.isEnabled = true
         button.needsDisplay = true
       }
     }
 
-    private func positionTrafficLights(
-      closeButton: NSButton,
-      minimizeButton: NSButton,
-      zoomButton: NSButton
-    ) {
-      let topInset: CGFloat = 18
-      let leadingInset: CGFloat = 18
-      let buttonGap: CGFloat = 8
-      let y = max(0, bounds.height - closeButton.frame.height - topInset)
-      closeButton.setFrameOrigin(NSPoint(x: leadingInset, y: y))
-      minimizeButton.setFrameOrigin(
-        NSPoint(x: leadingInset + closeButton.frame.width + buttonGap, y: y)
-      )
-      zoomButton.setFrameOrigin(
-        NSPoint(
-          x: leadingInset + closeButton.frame.width + buttonGap + minimizeButton.frame.width
-            + buttonGap,
-          y: y
-        )
-      )
+    private func preserveNativeTitlebarForSystemControls(in window: NSWindow) {
+      if !window.styleMask.contains(.titled) {
+        window.styleMask.insert(.titled)
+      }
+      if !window.styleMask.contains(.fullSizeContentView) {
+        window.styleMask.insert(.fullSizeContentView)
+      }
+      if window.titleVisibility != .hidden {
+        window.titleVisibility = .hidden
+      }
+      if window.titlebarAppearsTransparent == false {
+        window.titlebarAppearsTransparent = true
+      }
+      if window.titlebarSeparatorStyle != .none {
+        window.titlebarSeparatorStyle = .none
+      }
+      if window.toolbar != nil {
+        window.toolbar = nil
+      }
+      if window.isOpaque {
+        window.isOpaque = false
+      }
+      if window.backgroundColor != .clear {
+        window.backgroundColor = .clear
+      }
     }
+
   }
 
   @ViewBuilder
