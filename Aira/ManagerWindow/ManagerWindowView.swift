@@ -28,7 +28,6 @@ struct ManagerWindowView: View {
     contentView
       .frame(minWidth: 900, minHeight: 600)
       .ignoresSafeArea(.container, edges: .top)
-      .modifier(GlassToolbarModifier(enabled: true))
       .environment(
         \.managerTheme,
         ManagerTheme(interfaceStyle: appState.settings.managerInterfaceStyle)
@@ -971,28 +970,6 @@ final class ManagerShortcutCoordinator {
       .init(shortcut: settings.shortcutToggleNotch, action: onToggleNotch),
       .init(shortcut: settings.shortcutTogglePill, action: onTogglePill),
     ]
-  }
-}
-
-/// Removes visible SwiftUI title chrome while keeping the native window
-/// controls alive. Hiding the entire window toolbar also hides the traffic
-/// lights on current macOS.
-private struct GlassToolbarModifier: ViewModifier {
-  let enabled: Bool
-
-  @ViewBuilder
-  func body(content: Content) -> some View {
-    if enabled {
-      if #available(macOS 15.0, *) {
-        content
-          .toolbar(removing: .title)
-          .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-      } else {
-        content
-      }
-    } else {
-      content
-    }
   }
 }
 
