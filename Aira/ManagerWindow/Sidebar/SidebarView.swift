@@ -1,16 +1,31 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+enum SidebarTrafficLightAffordances {
+  static let keepsNativeButtonsVisible = true
+  static let drawsHoverGlyphOverlay = false
+  static let usesSystemHoverGlyphs = true
+  static let keepsTitledWindowStyleForNativeControls = true
+  static let makesWindowCanvasTransparent = true
+}
+
 struct SidebarView: View {
   @EnvironmentObject var appState: AppState
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+  @Binding var sidebarVisible: Bool
   @Binding var selectedNav: SidebarNav
   @Binding var pendingDeleteCollection: AiraCollection?
   @Binding var collectionErrorMessage: String?
+  let canGoBack: Bool
+  let canGoForward: Bool
   var onOpenSettings: () -> Void
   var onNewScript: () -> Void
   var onOpenScript: (UUID) -> Void
   var onMoveScriptToCollection: (UUID, UUID) -> Void
+  var onGoBack: () -> Void
+  var onGoForward: () -> Void
 
   @State private var collectionsExpanded: Bool = false
   @State private var starredExpanded: Bool = false
@@ -25,92 +40,489 @@ struct SidebarView: View {
     size * managerFontScale
   }
 
+  private var usesLiquidSidebar: Bool {
+    managerTheme.usesLiquidGlassMode
+  }
+
   var body: some View {
     VStack(spacing: 0) {
+      SidebarChromeBand(
+        sidebarVisible: $sidebarVisible,
+        canGoBack: canGoBack,
+        canGoForward: canGoForward,
+        onGoBack: onGoBack,
+        onGoForward: onGoForward
+      )
+      .frame(height: SidebarChromeMetrics.height)
 
-      // MARK: — Section 1: Action buttons
-      VStack(spacing: 8) {
+      if sidebarVisible {
+        // MARK: — Section 1: Action buttons
+        VStack(spacing: 8) {
+          Button {
+            onNewScript()
+          } label: {
+            HStack(spacing: 8) {
+              AiraIcon(type: .new, size: 20, color: .white)
+              Text("New Script")
+                .font(.custom("CrimsonText-Regular", size: scaled(16)))
+            }
+          }
+          .buttonStyle(AiraSidebarActionButtonStyle())
+
+          if appState.stealthWarning {
+            HStack(alignment: .top, spacing: 8) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Color("colorText"))
+                .padding(.top, 2)
+              Text(
+                "Stealth can’t be guaranteed on this Mac. Overlay windows may appear in screen capture."
+              )
+              .font(.custom("CrimsonText-Regular", size: scaled(13)))
+              .foregroundStyle(Color("colorText"))
+              .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .background(Color("colorWarm"))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+          }
+        }
+        .padding(usesLiquidSidebar ? 8 : 18)
+        .padding(.horizontal, usesLiquidSidebar ? 2 : 0)
+        .padding(.top, 0)
+        .padding(.bottom, usesLiquidSidebar ? 4 : 0)
+
+        // MARK: — Section 2: Library
+        Text("LIBRARY")
+          .font(.custom("Manrope-Bold", size: scaled(12)))
+          .tracking(1.5)
+          .foregroundStyle(usesLiquidSidebar ? .white.opacity(0.68) : .white.opacity(0.5))
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, usesLiquidSidebar ? 14 : 16)
+          .padding(.top, usesLiquidSidebar ? 10 : 18)
+          .padding(.bottom, 6)
+
+        ScrollView {
+          VStack(spacing: usesLiquidSidebar ? 6 : 2) {
+            navRow(label: "Scripts", iconType: .script, nav: .allScripts)
+            collectionsSection
+            starredSection
+            recentSection
+          }
+          .padding(.horizontal, usesLiquidSidebar ? 6 : 0)
+        }
+        .scrollIndicators(.never)
+
+        Spacer()
+
+        sidebarSeparator()
+
+        // MARK: — Section 3: Preferences
         Button {
-          onNewScript()
+          onOpenSettings()
         } label: {
           HStack(spacing: 8) {
-            AiraIcon(type: .new, size: 20, color: .white)
-            Text("New Script")
+            AiraIcon(type: .settings, size: 20, color: .white.opacity(0.85))
+            Text("Preferences")
               .font(.custom("CrimsonText-Regular", size: scaled(16)))
+              .foregroundStyle(.white.opacity(0.85))
           }
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
+          .padding(.vertical, usesLiquidSidebar ? 8 : 12)
+          .modifier(
+            SidebarGlassPanelModifier(
+              usesLiquidSidebar: usesLiquidSidebar,
+              cornerRadius: 14,
+              tintColor: nil,
+              tintOpacity: 0,
+              interactive: true
+            ))
         }
-        .buttonStyle(AiraSidebarActionButtonStyle())
-
-        if appState.stealthWarning {
-          HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .font(.system(size: 12))
-              .foregroundStyle(Color("colorText"))
-              .padding(.top, 2)
-            Text(
-              "Stealth can’t be guaranteed on this Mac. Overlay windows may appear in screen capture."
-            )
-            .font(.custom("CrimsonText-Regular", size: scaled(13)))
-            .foregroundStyle(Color("colorText"))
-            .fixedSize(horizontal: false, vertical: true)
-          }
-          .padding(10)
-          .background(Color("colorWarm"))
-          .clipShape(RoundedRectangle(cornerRadius: 10))
-        }
-
+        .buttonStyle(.plain)
+        .padding(.horizontal, 6)
+        .padding(.bottom, 8)
       }
-      .padding(18)
+    }
+    .modifier(ManagerSidebarBackgroundModifier())
+    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    .overlay {
+      RoundedRectangle(cornerRadius: 20, style: .continuous)
+        .strokeBorder(
+          usesLiquidSidebar
+            ? (colorScheme == .dark
+              ? Color.white.opacity(0.10) : Color(hex: "#627363").opacity(0.35))
+            : Color.black.opacity(0.08),
+          lineWidth: 1
+        )
+    }
+  }
 
+  enum SidebarChromeMetrics {
+    static let height: CGFloat = 46
+    static let appControlWidth: CGFloat = 96
+    static let appControlLeading: CGFloat = 120
+  }
+
+  private struct SidebarChromeBand: View {
+    @Binding var sidebarVisible: Bool
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let onGoBack: () -> Void
+    let onGoForward: () -> Void
+
+    var body: some View {
+      ZStack(alignment: .topLeading) {
+        SidebarTrafficLightBridge(sidebarVisible: $sidebarVisible)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        HStack(spacing: 6) {
+          chromeButton(
+            help: sidebarVisible ? "Collapse Sidebar" : "Expand Sidebar",
+            isEnabled: true,
+            icon: .sidebar,
+            iconOpacity: 0.80,
+            action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                sidebarVisible.toggle()
+              }
+            }
+          )
+
+          chromeButton(
+            help: "Go Back",
+            isEnabled: canGoBack,
+            icon: .back,
+            iconOpacity: canGoBack ? 0.80 : 0.28,
+            action: onGoBack
+          )
+
+          chromeButton(
+            help: "Go Forward",
+            isEnabled: canGoForward,
+            icon: .forward,
+            iconOpacity: canGoForward ? 0.80 : 0.28,
+            action: onGoForward
+          )
+        }
+        .frame(width: SidebarChromeMetrics.appControlWidth, height: 28, alignment: .leading)
+        .padding(.leading, SidebarChromeMetrics.appControlLeading + 16)
+        .padding(.top, 16)
+      }
+      .overlay(alignment: .bottom) {
+        Rectangle()
+          .fill(Color.white.opacity(0.10))
+          .frame(height: 1)
+      }
+    }
+
+    private func chromeButton(
+      help: String,
+      isEnabled: Bool,
+      icon: AiraIconType,
+      iconOpacity: Double,
+      action: @escaping () -> Void
+    ) -> some View {
+      Button(action: action) {
+        AiraIcon(
+          type: icon,
+          size: 17,
+          color: Color("colorText").opacity(iconOpacity),
+          animated: false
+        )
+        .frame(width: 26, height: 26)
+        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+      }
+      .buttonStyle(.plain)
+      .disabled(!isEnabled)
+      .help(help)
+    }
+  }
+
+  struct SidebarTrafficLightBridge: NSViewRepresentable {
+    @Binding var sidebarVisible: Bool
+
+    func makeNSView(context: Context) -> SidebarTrafficLightHostView {
+      SidebarTrafficLightHostView()
+    }
+
+    func updateNSView(_ nsView: SidebarTrafficLightHostView, context: Context) {
+      nsView.sidebarVisible = sidebarVisible
+      nsView.syncTrafficLights()
+    }
+  }
+
+  final class SidebarTrafficLightHostView: NSView {
+    var sidebarVisible: Bool = true
+    private var windowObservers: [NSObjectProtocol] = []
+    /// Natural (macOS-set) origin of the traffic light row, shared across all instances
+    /// so that toggling the sidebar (which destroys one host and creates another) never
+    /// re-captures an already-shifted value.
+    private static var trafficLightBaseY: CGFloat?
+    /// Per-button natural X origins, keyed by button identity (pointer).
+    private static var trafficLightBaseXByButton: [ObjectIdentifier: CGFloat] = [:]
+    /// The window whose base position we captured — reset the cached values if the window changes.
+    private static weak var baseYWindow: NSWindow?
+    /// How far to shift the traffic lights downward (AppKit: decrease y = visually lower).
+    private let trafficLightDownShift: CGFloat = 22
+    /// How far to shift the traffic lights to the right.
+    private let trafficLightRightShift: CGFloat = 8
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      removeWindowObservers()
+      if let window {
+        installWindowObservers(window)
+      }
+      // Defer initial sync to ensure the view has a valid frame from layout.
+      DispatchQueue.main.async { [weak self] in
+        self?.captureAndSyncTrafficLights()
+      }
+    }
+
+    override func removeFromSuperview() {
+      removeWindowObservers()
+      super.removeFromSuperview()
+    }
+
+    deinit {
+      removeWindowObservers()
+    }
+
+    override func layout() {
+      super.layout()
+      DispatchQueue.main.async { [weak self] in
+        self?.syncTrafficLights()
+      }
+    }
+
+    // MARK: — Click forwarding for repositioned traffic lights
+
+    /// The traffic light buttons are shifted outside their titlebar container's bounds,
+    /// so normal hit testing never reaches them. We intercept clicks on this host view
+    /// and forward to the appropriate button based on position.
+    override func mouseDown(with event: NSEvent) {
+      guard let window else {
+        super.mouseDown(with: event)
+        return
+      }
+      let buttons: [(NSWindow.ButtonType, NSButton)] = [
+        (.closeButton, window.standardWindowButton(.closeButton)),
+        (.miniaturizeButton, window.standardWindowButton(.miniaturizeButton)),
+        (.zoomButton, window.standardWindowButton(.zoomButton)),
+      ].compactMap { type, btn in btn.map { (type, $0) } }
+
+      let locationInSelf = convert(event.locationInWindow, from: nil)
+
+      for (buttonType, button) in buttons {
+        let buttonFrameInSelf = button.convert(button.bounds, to: self)
+        // Use a slightly expanded rect for easier targeting
+        let hitRect = buttonFrameInSelf.insetBy(dx: -3, dy: -3)
+        if hitRect.contains(locationInSelf) {
+          switch buttonType {
+          case .closeButton:
+            window.performClose(nil)
+          case .miniaturizeButton:
+            window.miniaturize(nil)
+          case .zoomButton:
+            window.zoom(nil)
+          default:
+            break
+          }
+          return
+        }
+      }
+
+      super.mouseDown(with: event)
+    }
+
+    // MARK: — Window event observers
+
+    private func installWindowObservers(_ window: NSWindow) {
+      let nc = NotificationCenter.default
+
+      // Normal window state changes — just re-sync traffic light position/visibility.
+      let syncNames: [Notification.Name] = [
+        NSWindow.didDeminiaturizeNotification,
+        NSWindow.didBecomeKeyNotification,
+        NSWindow.didBecomeMainNotification,
+        NSWindow.didResizeNotification,
+        NSWindow.didEndLiveResizeNotification,
+        NSWindow.didExitFullScreenNotification,
+      ]
+      for name in syncNames {
+        windowObservers.append(
+          nc.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+            self?.syncTrafficLights()
+          }
+        )
+      }
+
+      // Fullscreen prevention: re-enforce collection behavior the moment macOS
+      // tries to push the window into fullscreen.
+      windowObservers.append(
+        nc.addObserver(
+          forName: NSWindow.willEnterFullScreenNotification,
+          object: window, queue: .main
+        ) { [weak self, weak window] _ in
+          guard let window else { return }
+          // Re-apply no-fullscreen policy (macOS may have reset it).
+          window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
+          self?.syncTrafficLights()
+        }
+      )
+
+      // Emergency exit: if the window enters fullscreen despite prevention,
+      // immediately toggle back out.
+      windowObservers.append(
+        nc.addObserver(
+          forName: NSWindow.didEnterFullScreenNotification,
+          object: window, queue: .main
+        ) { [weak window] _ in
+          window?.toggleFullScreen(nil)
+        }
+      )
+    }
+
+    private func removeWindowObservers() {
+      let nc = NotificationCenter.default
+      for observer in windowObservers {
+        nc.removeObserver(observer)
+      }
+      windowObservers.removeAll()
+    }
+
+    // MARK: — Traffic light management
+
+    private func captureAndSyncTrafficLights() {
+      guard let window else { return }
+      preserveNativeTitlebarForSystemControls(in: window)
+      syncTrafficLights()
+    }
+
+    func syncTrafficLights() {
+      guard let window else { return }
+      preserveNativeTitlebarForSystemControls(in: window)
+      let buttons = [
+        window.standardWindowButton(.closeButton),
+        window.standardWindowButton(.miniaturizeButton),
+        window.standardWindowButton(.zoomButton),
+      ].compactMap { $0 }
+
+      buttons.forEach { button in
+        button.isHidden = false
+        button.alphaValue = 1
+        button.isEnabled = true
+      }
+
+      shiftTrafficLightsDown(buttons: buttons)
+    }
+
+    private func shiftTrafficLightsDown(buttons: [NSButton]) {
+      guard let reference = buttons.first else { return }
+      let currentY = reference.frame.origin.y
+
+      // Reset the cached base when the window changes (e.g. window replacement).
+      if let win = window, Self.baseYWindow !== win {
+        Self.trafficLightBaseY = nil
+        Self.trafficLightBaseXByButton.removeAll()
+        Self.baseYWindow = win
+      }
+
+      // Capture natural position once across ALL instances so toggling the sidebar
+      // (which creates a fresh host view) cannot re-capture an already-shifted value.
+      if Self.trafficLightBaseY == nil {
+        Self.trafficLightBaseY = currentY
+      }
+      for button in buttons {
+        let key = ObjectIdentifier(button)
+        if Self.trafficLightBaseXByButton[key] == nil {
+          Self.trafficLightBaseXByButton[key] = button.frame.origin.x
+        }
+      }
+
+      let targetY = Self.trafficLightBaseY! - trafficLightDownShift
+
+      buttons.forEach { button in
+        var frame = button.frame
+        let key = ObjectIdentifier(button)
+        let baseX = Self.trafficLightBaseXByButton[key] ?? frame.origin.x
+        let targetX = baseX + trafficLightRightShift
+        var needsUpdate = false
+
+        if abs(frame.origin.y - targetY) > 0.5 {
+          frame.origin.y = targetY
+          needsUpdate = true
+        }
+        if abs(frame.origin.x - targetX) > 0.5 {
+          frame.origin.x = targetX
+          needsUpdate = true
+        }
+        if needsUpdate {
+          button.frame = frame
+        }
+        button.needsDisplay = true
+      }
+    }
+
+    private func preserveNativeTitlebarForSystemControls(in window: NSWindow) {
+      if !window.styleMask.contains(.titled) {
+        window.styleMask.insert(.titled)
+      }
+      if !window.styleMask.contains(.fullSizeContentView) {
+        window.styleMask.insert(.fullSizeContentView)
+      }
+      if window.titleVisibility != .hidden {
+        window.titleVisibility = .hidden
+      }
+      if window.titlebarAppearsTransparent == false {
+        window.titlebarAppearsTransparent = true
+      }
+      if window.titlebarSeparatorStyle != .none {
+        window.titlebarSeparatorStyle = .none
+      }
+      if window.toolbar != nil {
+        window.toolbar = nil
+      }
+      if window.isOpaque {
+        window.isOpaque = false
+      }
+      if window.backgroundColor != .clear {
+        window.backgroundColor = .clear
+      }
+      // Re-enforce no-fullscreen policy on every sync — macOS 26 may reset it.
+      if window.collectionBehavior.contains(.fullScreenPrimary)
+        || !window.collectionBehavior.contains(.fullScreenNone)
+      {
+        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
+      }
+    }
+
+  }
+
+  @ViewBuilder
+  private func sidebarSeparator(verticalPadding: CGFloat = 6) -> some View {
+    if usesLiquidSidebar {
+      Rectangle()
+        .fill(
+          LinearGradient(
+            colors: [.clear, .white.opacity(0.34), .clear],
+            startPoint: .leading,
+            endPoint: .trailing
+          )
+        )
+        .frame(height: 1)
+        .padding(.horizontal, 14)
+        .padding(.vertical, verticalPadding)
+    } else {
       WavySeparator(
         color: .white,
         opacity: 0.3,
         lineHeight: 3,
         amplitudeScale: 0.16,
-        verticalPadding: 0
+        verticalPadding: verticalPadding
       )
-
-      // MARK: — Section 2: Library
-      Text("LIBRARY")
-        .font(.custom("Manrope-Bold", size: scaled(12)))
-        .tracking(1.5)
-        .foregroundStyle(.white.opacity(0.5))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 18)
-        .padding(.bottom, 6)
-
-      ScrollView {
-        VStack(spacing: 2) {
-          navRow(label: "Scripts", iconType: .script, nav: .allScripts)
-          collectionsSection
-          starredSection
-          recentSection
-        }
-      }
-      .scrollIndicators(.never)
-
-      Spacer()
-
-      WavySeparator(color: .white, opacity: 0.3, lineHeight: 3, amplitudeScale: 0.16)
-
-      // MARK: — Section 3: Preferences
-      Button {
-        onOpenSettings()
-      } label: {
-        HStack(spacing: 8) {
-          AiraIcon(type: .settings, size: 20, color: .white.opacity(0.85))
-          Text("Preferences")
-            .font(.custom("CrimsonText-Regular", size: scaled(16)))
-            .foregroundStyle(.white.opacity(0.85))
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-      }
-      .buttonStyle(.plain)
     }
-    .background(Color("colorPrimary"))
   }
 
   // MARK: - Collections Section
@@ -121,7 +533,7 @@ struct SidebarView: View {
       sectionHeader(
         title: "Collections",
         iconType: .collection,
-        disclosureText: collectionsExpanded ? "hide" : "show"
+        isExpanded: collectionsExpanded
       ) {
         Button {
           isCreatingCollection = true
@@ -165,14 +577,16 @@ struct SidebarView: View {
               onCancel: cancelRenamingCollection
             )
           } else {
-            HStack(spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
               Button {
                 selectedNav = .collection(collection.id)
               } label: {
                 Text(collection.name)
                   .font(.custom("CrimsonText-Regular", size: scaled(15)))
                   .foregroundStyle(isActive ? .white : .white.opacity(0.75))
-                  .lineLimit(1)
+                  .lineLimit(nil)
+                  .multilineTextAlignment(.leading)
+                  .fixedSize(horizontal: false, vertical: true)
                   .frame(maxWidth: .infinity, alignment: .leading)
               }
               .buttonStyle(.plain)
@@ -204,12 +618,13 @@ struct SidebarView: View {
             .padding(.trailing, 16)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              collectionDropTargetID == collection.id
-                ? Color.white.opacity(0.22)
-                : (isActive ? Color.white.opacity(0.15) : Color.clear)
+            .modifier(
+              SidebarCollectionRowGlassModifier(
+                usesLiquidSidebar: usesLiquidSidebar,
+                isActive: isActive,
+                isDropTarget: collectionDropTargetID == collection.id
+              )
             )
-            .clipShape(RoundedRectangle(cornerRadius: 6))
             .contextMenu {
               Button("Rename") {
                 editingCollectionID = collection.id
@@ -240,7 +655,7 @@ struct SidebarView: View {
         title: "Starred",
         iconType: .star,
         filledIcon: true,
-        disclosureText: starredExpanded ? "hide" : "show"
+        isExpanded: starredExpanded
       ) {
         Color.clear
       } toggleAction: {
@@ -302,7 +717,7 @@ struct SidebarView: View {
       sectionHeader(
         title: "Recent",
         iconType: .recent,
-        disclosureText: recentExpanded ? "hide" : "show"
+        isExpanded: recentExpanded
       ) {
         Color.clear
       } toggleAction: {
@@ -348,7 +763,7 @@ struct SidebarView: View {
     title: String,
     iconType: AiraIconType,
     filledIcon: Bool = false,
-    disclosureText: String,
+    isExpanded: Bool,
     @ViewBuilder trailingAccessory: () -> TrailingAccessory,
     toggleAction: @escaping () -> Void
   ) -> some View {
@@ -359,11 +774,12 @@ struct SidebarView: View {
           Text(title)
             .font(.custom("CrimsonText-Regular", size: scaled(16)))
             .foregroundStyle(.white.opacity(0.9))
-          Spacer()
-          Text(disclosureText)
-            .font(.custom("CrimsonText-Regular", size: scaled(13)))
-            .italic()
-            .foregroundStyle(.white.opacity(0.4))
+            .lineLimit(1)
+          Spacer(minLength: 2)
+          Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.5))
+            .frame(width: 12, height: 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
       }
@@ -372,8 +788,8 @@ struct SidebarView: View {
       trailingAccessory()
         .frame(width: 16)
     }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 8)
+    .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
+    .padding(.vertical, usesLiquidSidebar ? 6 : 8)
   }
 
   private func collectionDropBinding(for collectionID: UUID) -> Binding<Bool> {
@@ -467,8 +883,8 @@ struct SidebarView: View {
     .padding(.leading, 52)
     .padding(.trailing, 16)
     .padding(.vertical, 6)
-    .background(Color.white.opacity(0.08))
-    .clipShape(RoundedRectangle(cornerRadius: 6))
+    .background(usesLiquidSidebar ? Color.white.opacity(0.12) : Color.white.opacity(0.08))
+    .clipShape(RoundedRectangle(cornerRadius: usesLiquidSidebar ? 12 : 6, style: .continuous))
   }
 
   private func createCollection() {
@@ -536,12 +952,154 @@ struct SidebarView: View {
           .foregroundStyle(isActive ? .white : .white.opacity(0.75))
         Spacer()
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
+      .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
+      .padding(.vertical, usesLiquidSidebar ? 8 : 8)
       .frame(maxWidth: .infinity)
-      .background(isActive ? Color.white.opacity(0.15) : Color.clear)
-      .clipShape(RoundedRectangle(cornerRadius: 6))
+      .modifier(
+        SidebarNavRowGlassModifier(
+          usesLiquidSidebar: usesLiquidSidebar,
+          isActive: isActive
+        )
+      )
+      .overlay(alignment: .leading) {
+        if usesLiquidSidebar && isActive {
+          Capsule()
+            .fill(Color("colorSecondary"))
+            .frame(width: 4, height: 22)
+            .padding(.leading, 6)
+            .allowsHitTesting(false)
+        }
+      }
     }
     .buttonStyle(.plain)
+  }
+}
+
+// MARK: - Sidebar Glass Modifiers
+
+/// Applies a translucent panel background in liquid mode (no glassEffect — the outer sidebar
+/// container already provides the single glass layer). Classic mode passes through unchanged.
+private struct SidebarGlassPanelModifier: ViewModifier {
+  let usesLiquidSidebar: Bool
+  let cornerRadius: CGFloat
+  let tintColor: Color?
+  let tintOpacity: Double
+  var interactive: Bool = false
+  var showsBorder: Bool = true
+
+  @State private var isHovered = false
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if usesLiquidSidebar {
+      let fill = tintColor?.opacity(tintOpacity) ?? Color.white.opacity(0.06)
+      let hoverFill = interactive ? Color.white.opacity(isHovered ? 0.06 : 0) : Color.clear
+      content
+        .background(
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(fill.opacity(1).blendMode(.normal))
+        )
+        .background(
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(hoverFill)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(showsBorder ? Color.white.opacity(0.12) : Color.clear, lineWidth: 0.5)
+        )
+        .onHover { hovering in
+          if interactive { isHovered = hovering }
+        }
+    } else {
+      content
+    }
+  }
+}
+
+/// Nav row styling: active rows get terracotta tint fill, inactive rows are transparent.
+/// No glassEffect — relies on the outer sidebar glass layer.
+private struct SidebarNavRowGlassModifier: ViewModifier {
+  let usesLiquidSidebar: Bool
+  let isActive: Bool
+
+  @State private var isHovered = false
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if usesLiquidSidebar {
+      let bgColor: Color = {
+        if isActive {
+          return Color("colorSecondary").opacity(0.25)
+        } else if isHovered {
+          return Color.white.opacity(0.10)
+        } else {
+          return Color.clear
+        }
+      }()
+      let strokeColor: Color =
+        isActive
+        ? Color("colorSecondary").opacity(0.45)
+        : (isHovered ? Color.white.opacity(0.12) : Color.clear)
+      content
+        .background(
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(bgColor)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(strokeColor, lineWidth: 0.5)
+        )
+        .onHover { hovering in isHovered = hovering }
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+    } else {
+      content
+        .background(isActive ? Color.white.opacity(0.15) : Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+  }
+}
+
+/// Collection row styling with drop-target highlight. No glassEffect — uses translucent fills.
+private struct SidebarCollectionRowGlassModifier: ViewModifier {
+  let usesLiquidSidebar: Bool
+  let isActive: Bool
+  let isDropTarget: Bool
+
+  @State private var isHovered = false
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if usesLiquidSidebar {
+      let bgColor: Color = {
+        if isDropTarget { return Color("colorSecondary").opacity(0.30) }
+        if isActive { return Color("colorSecondary").opacity(0.20) }
+        if isHovered { return Color.white.opacity(0.08) }
+        return Color.clear
+      }()
+      let strokeColor: Color = {
+        if isDropTarget || isActive { return Color("colorSecondary").opacity(0.35) }
+        if isHovered { return Color.white.opacity(0.10) }
+        return Color.clear
+      }()
+      content
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(bgColor)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(strokeColor, lineWidth: 0.5)
+        )
+        .onHover { hovering in isHovered = hovering }
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+    } else {
+      let fill: Color = {
+        if isDropTarget { return Color.white.opacity(0.22) }
+        return isActive ? Color.white.opacity(0.15) : Color.clear
+      }()
+      content
+        .background(fill)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
   }
 }

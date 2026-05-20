@@ -6,6 +6,25 @@ enum AiraIconType {
   case new, script, live, collection, star, recent, settings
   case sidebar, back, forward
   case trash, edit, save, notch
+
+  func sfSymbolName(filled: Bool = false) -> String {
+    switch self {
+    case .new: return "plus"
+    case .script: return "doc.text"
+    case .live: return "dot.radiowaves.left.and.right"
+    case .collection: return "folder"
+    case .star: return filled ? "star.fill" : "star"
+    case .recent: return "clock"
+    case .settings: return "gearshape"
+    case .sidebar: return "sidebar.left"
+    case .back: return "chevron.left"
+    case .forward: return "chevron.right"
+    case .trash: return "trash"
+    case .edit: return "pencil"
+    case .save: return "square.and.arrow.down"
+    case .notch: return "rectangle.topthird.inset.filled"
+    }
+  }
 }
 
 // MARK: - Animated Icon View
@@ -19,9 +38,25 @@ struct AiraIcon: View {
   var animated: Bool = true  // set false for toolbar/utility icons
   var filled: Bool = false  // fill the shape instead of stroking (star only for now)
 
+  @Environment(\.managerTheme) private var managerTheme
   @State private var isHovered = false
 
   var body: some View {
+    if managerTheme.usesLiquidGlassMode && type != .save {
+      sfSymbolBody
+    } else {
+      canvasBody
+    }
+  }
+
+  private var sfSymbolBody: some View {
+    Image(systemName: type.sfSymbolName(filled: filled))
+      .font(.system(size: size * 0.75, weight: .medium))
+      .foregroundStyle(color)
+      .frame(width: size, height: size)
+  }
+
+  private var canvasBody: some View {
     Canvas { context, canvasSize in
       let s = canvasSize.width / 24.0
       let stroke = StrokeStyle(lineWidth: 2.5 * s, lineCap: .round, lineJoin: .round)

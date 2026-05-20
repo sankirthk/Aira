@@ -37,6 +37,13 @@ struct ScriptEditorTextInsertionTests {
     #expect(result.text == "Hello [Breathe] world")
   }
 
+  @Test func cuePopoverUsesSharedDefaultCueOptions() {
+    #expect(
+      ScriptEditorCueOptions.defaults == [
+        "Smile", "Pause 2s", "Eye Contact", "Gesture", "Breathe", "Emphasize",
+      ])
+  }
+
   @Test func cueStylingFindsAllInlineCueTokens() {
     let text = "Hello [Pause 2s] world [Smile]"
     let ranges = ScriptEditorCueStyling.cueRanges(in: text)

@@ -136,6 +136,7 @@ class OverlayWindowController {
         )
         self?.notchController?.updateSpokenWordHighlighting(
           enabled: settings.spokenWordHighlightingEnabled)
+        self?.notchController?.updateFrostedGlass(enabled: settings.notchFrostedGlassEnabled)
         for pillController in self?.pillControllers ?? [] {
           pillController.updateSessionBehavior(
             voiceSyncEnabled: settings.voiceDrivenScrollEnabled,
@@ -145,6 +146,7 @@ class OverlayWindowController {
           )
           pillController.updateSpokenWordHighlighting(
             enabled: settings.spokenWordHighlightingEnabled)
+          pillController.updateFrostedGlass(enabled: settings.pillFrostedGlassEnabled)
         }
       }
   }
@@ -237,6 +239,7 @@ class OverlayWindowController {
       showScriptProgress: appState?.settings.showScriptProgress ?? false,
       pauseOnHoverEnabled: appState?.settings.pauseOnHoverEnabled ?? true,
       autoScrollWPM: autoScrollWPM,
+      frostedGlassEnabled: appState?.settings.notchFrostedGlassEnabled ?? false,
       screenCaptureExclusionEnabled: appState?.settings.screenCaptureExclusionEnabled ?? true,
       playheadCoordinator: playheadCoordinator,
       scrollCoordinator: scrollCoordinator,
@@ -308,6 +311,7 @@ class OverlayWindowController {
       showScriptProgress: showScriptProgress,
       pauseOnHoverEnabled: pauseOnHoverEnabled,
       autoScrollWPM: autoScrollWPM,
+      frostedGlassEnabled: appState?.settings.pillFrostedGlassEnabled ?? false,
       screenCaptureExclusionEnabled: appState?.settings.screenCaptureExclusionEnabled ?? true,
       playheadCoordinator: playheadCoordinator,
       scrollCoordinator: scrollCoordinator,

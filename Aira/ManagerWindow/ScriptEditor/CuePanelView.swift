@@ -1,47 +1,66 @@
 import SwiftUI
 
-struct CuePanelView: View {
+struct CuePopoverView: View {
   let isReadOnly: Bool
+  var usesGlass: Bool = false
   let onInsertCue: (String) -> Void
 
-  let cueTypes = ["Smile", "Pause 2s", "Eye Contact", "Gesture", "Breathe", "Emphasize"]
-
   var body: some View {
-    ScriptEditorPanel(backgroundColor: Color("colorPrimary")) {
-      VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: usesGlass ? 12 : 14) {
+      VStack(alignment: .leading, spacing: 4) {
         Text("Insert Cues")
-          .font(.custom("IndieFlower", size: 28))
-          .foregroundStyle(Color("colorBackground"))
-          .padding(.bottom, 16)
+          .font(
+            usesGlass
+              ? .system(size: 15, weight: .semibold)
+              : .custom("IndieFlower", size: 20)
+          )
+          .foregroundStyle(usesGlass ? .primary : Color("colorText"))
 
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12)], spacing: 12) {
-          ForEach(cueTypes, id: \.self) { cue in
-            Button("[\(cue)]") {
-              onInsertCue(cue)
-            }
-            .buttonStyle(AiraCueTileButtonStyle())
-            .disabled(isReadOnly)
-          }
-        }
-
-        Rectangle()
-          .fill(Color("colorBackground").opacity(0.3))
-          .frame(height: 2)
-          .padding(.top, 24)
-          .padding(.bottom, 16)
-
-        Text(
-          isReadOnly
-            ? "This script is live in an active session. End the session before inserting cues or editing text."
-            : "You can also make your own cues by typing them inside square brackets, like [Look up]."
-        )
-        .font(.custom("CrimsonText-Regular", size: 15))
-        .foregroundStyle(Color("colorBackground").opacity(0.8))
-        .frame(maxWidth: .infinity, alignment: .center)
-        .multilineTextAlignment(.center)
+        helperText
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .frame(maxWidth: .infinity, alignment: .leading)
+
+      LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 8)], spacing: 8) {
+        ForEach(ScriptEditorCueOptions.defaults, id: \.self) { cue in
+          Button("[\(cue)]") {
+            onInsertCue(cue)
+          }
+          .buttonStyle(AiraCueTileButtonStyle())
+          .disabled(isReadOnly)
+        }
+      }
     }
-    .frame(maxHeight: .infinity, alignment: .top)
+    .padding(14)
+    .frame(width: usesGlass ? 300 : 320)
+    .background {
+      if usesGlass {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(.ultraThinMaterial)
+      } else {
+        RoundedRectangle(cornerRadius: 12)
+          .fill(Color("colorBackground"))
+      }
+    }
+    .overlay {
+      RoundedRectangle(cornerRadius: usesGlass ? 14 : 12, style: .continuous)
+        .strokeBorder(
+          usesGlass ? Color.primary.opacity(0.14) : Color("colorText").opacity(0.18),
+          lineWidth: 1
+        )
+    }
+  }
+
+  private var helperText: some View {
+    Text(
+      isReadOnly
+        ? "End the live session before inserting cues."
+        : "Custom cues still work by typing square brackets, like [Look up]."
+    )
+    .font(
+      usesGlass
+        ? .system(size: 12)
+        : .custom("CrimsonText-Regular", size: 13)
+    )
+    .foregroundStyle(usesGlass ? .secondary : Color("colorMuted"))
   }
 }

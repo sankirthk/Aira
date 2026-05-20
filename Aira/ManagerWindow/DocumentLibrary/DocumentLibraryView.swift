@@ -19,12 +19,13 @@ struct DocumentLibraryView: View {
 
   @EnvironmentObject var appState: AppState
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   let filter: SidebarNav
   var onEdit: (Script) -> Void
   var onNewScript: () -> Void
   var onCast: (UUID) -> Void
   var onCastWithSatellite: (UUID, [SatelliteLaunchSelection]) -> Void = { _, _ in }
-  var onImportScript: () -> Void
 
   @State private var isDragTargeted: Bool = false
   @State private var deleteConfirmation: DeleteConfirmation? = nil
@@ -85,6 +86,46 @@ struct DocumentLibraryView: View {
     DocumentLibrarySessionRules.allowsDeletion(sessionActive: appState.sessionActive)
   }
 
+  private var usesGlass: Bool {
+    managerTheme.surfaceTreatment == .nativeGlass
+  }
+
+  private var isDarkMode: Bool {
+    colorScheme == .dark
+  }
+
+  private var headerTitleColor: Color {
+    isDarkMode ? Color(hex: "#E8E2D6") : Color(hex: "#263126")
+  }
+
+  private var headerSubtitleColor: Color {
+    isDarkMode ? Color(hex: "#D8D0C2").opacity(0.72) : Color(hex: "#566454")
+  }
+
+  private var scriptsAreaControlFill: Color {
+    isDarkMode ? Color.black.opacity(0.12) : Color.white.opacity(0.25)
+  }
+
+  private var selectAllLabelColor: Color {
+    isDarkMode ? Color(hex: "#E8E2D6") : Color(hex: "#263126")
+  }
+
+  private var selectAllIdleOpacity: Double {
+    isDarkMode ? 0.78 : 0.92
+  }
+
+  private var headerTitleFont: Font {
+    usesGlass
+      ? .system(size: scaled(30), weight: .regular, design: .default)
+      : .custom("IndieFlower", size: scaled(36))
+  }
+
+  private var headerSubtitleFont: Font {
+    usesGlass
+      ? .system(size: scaled(14), weight: .regular, design: .default)
+      : .custom("CrimsonText-Regular", size: scaled(14))
+  }
+
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
   }
@@ -94,32 +135,15 @@ struct DocumentLibraryView: View {
 
       // MARK: Header
       HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(pageTitle)
-            .font(.custom("IndieFlower", size: scaled(36)))
-            .foregroundStyle(Color("colorText"))
-          Text(pageSubtitle)
-            .font(.custom("CrimsonText-Regular", size: scaled(14)))
-            .foregroundStyle(Color("colorMuted"))
-        }
+        Text(pageTitle)
+          .font(headerTitleFont)
+          .foregroundStyle(headerTitleColor)
         Spacer()
-        Button {
-          onNewScript()
-        } label: {
-          Label("New Script", systemImage: "plus")
-        }
-        .buttonStyle(AiraPrimaryButtonStyle())
-
-        Button {
-          onImportScript()
-        } label: {
-          Label("Import Script", systemImage: "square.and.arrow.down")
-        }
-        .buttonStyle(AiraSecondaryButtonStyle())
       }
-      .padding(.horizontal, 32)
-      .padding(.top, 32)
-      .padding(.bottom, 18)
+      .frame(height: ManagerLayoutParity.documentLibraryHeaderHeight, alignment: .topLeading)
+      .padding(.horizontal, ManagerLayoutParity.documentLibraryOuterPadding)
+      .padding(.top, ManagerLayoutParity.documentLibraryOuterPadding)
+      .padding(.bottom, 12)
 
       selectionBar
 
@@ -135,12 +159,13 @@ struct DocumentLibraryView: View {
       } else {
         ScrollView {
           scriptGrid
-            .padding(.horizontal, 32)
-            .padding(.bottom, 32)
+            .padding(ManagerLayoutParity.documentLibraryGridPadding)
         }
+        .padding(.bottom, ManagerLayoutParity.documentLibraryGridPadding)
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .padding(ManagerLayoutParity.documentLibraryOuterPadding)
     .onDrop(of: [UTType.fileURL], isTargeted: $isDragTargeted) { providers in
       handleDrop(providers: providers)
     }
@@ -191,9 +216,9 @@ struct DocumentLibraryView: View {
     let scripts = filteredScripts
     let rowCount = (scripts.count + 1) / 2
 
-    return VStack(spacing: 16) {
+    return VStack(spacing: 12) {
       ForEach(0..<rowCount, id: \.self) { rowIndex in
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
           scriptCard(for: scripts[rowIndex * 2])
           if rowIndex * 2 + 1 < scripts.count {
             scriptCard(for: scripts[rowIndex * 2 + 1])
@@ -237,9 +262,6 @@ struct DocumentLibraryView: View {
           libraryErrorMessage = "End the active session before deleting scripts."
         }
       },
-      onDuplicate: {
-        duplicateScript(meta.id)
-      },
       onManageCollections: {
         presentCollectionManager(for: meta.id)
       },
@@ -265,14 +287,14 @@ struct DocumentLibraryView: View {
           selectAllIndicator
           Text("Select All")
             .font(.custom("CrimsonText-Regular", size: scaled(15)))
-            .foregroundStyle(Color("colorText"))
+            .foregroundStyle(selectAllLabelColor)
         }
       }
       .buttonStyle(.plain)
       .opacity(
         showsBulkSelectionControls
-          ? ((isSelectAllHovered || bulkSelection.isSelectionMode) ? 1 : 0.45)
-          : 0.3
+          ? ((isSelectAllHovered || bulkSelection.isSelectionMode) ? 1 : selectAllIdleOpacity)
+          : 0.50
       )
       .disabled(!showsBulkSelectionControls)
       .onHover { isHovering in
@@ -286,44 +308,62 @@ struct DocumentLibraryView: View {
       } label: {
         Image(systemName: "trash")
           .font(.system(size: 15, weight: .semibold))
-          .foregroundStyle(Color("colorSecondary"))
+          .foregroundStyle(usesGlass ? Color("colorSecondary") : Color("colorSecondary"))
           .padding(10)
-          .background(Color("colorSurface").opacity(0.9))
+          .background(
+            usesGlass
+              ? AnyView(
+                RoundedRectangle(cornerRadius: 10)
+                  .fill(Color.white.opacity(0.10))
+                  .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10)))
+              : AnyView(scriptsAreaControlFill)
+          )
           .clipShape(RoundedRectangle(cornerRadius: 10))
       }
       .buttonStyle(.plain)
       .opacity(
         showsBulkSelectionControls
-          ? (bulkSelection.isSelectionMode ? 1 : 0)
-          : 0.18
+          ? (bulkSelection.isSelectionMode ? 1 : 0.50)
+          : 0.30
       )
       .disabled(!showsBulkSelectionControls || !bulkSelection.isSelectionMode)
     }
-    .padding(.horizontal, 32)
-    .padding(.bottom, 18)
+    .padding(.horizontal, ManagerLayoutParity.documentLibraryOuterPadding)
+    .padding(.bottom, 12)
   }
 
   private var selectAllIndicator: some View {
-    ZStack {
+    let state = bulkSelection.selectAllState(visibleScriptIDs: visibleScriptIDs)
+    let isFilled = state != .none
+    return ZStack {
       RoundedRectangle(cornerRadius: 4)
-        .fill(Color("colorSurface").opacity(0.95))
+        .fill(
+          usesGlass
+            ? (isFilled ? Color("colorPrimary") : Color.primary.opacity(0.08))
+            : (isFilled ? Color("colorPrimary") : scriptsAreaControlFill)
+        )
         .frame(width: 18, height: 18)
         .overlay(
           RoundedRectangle(cornerRadius: 4)
-            .stroke(Color("colorText").opacity(0.28), lineWidth: 1.5)
+            .stroke(
+              usesGlass
+                ? (isFilled ? Color.clear : Color.primary.opacity(0.45))
+                : Color("colorText").opacity(0.28),
+              lineWidth: 1.5
+            )
         )
 
-      switch bulkSelection.selectAllState(visibleScriptIDs: visibleScriptIDs) {
+      switch state {
       case .none:
         EmptyView()
       case .mixed:
         RoundedRectangle(cornerRadius: 1)
-          .fill(Color("colorPrimary"))
+          .fill(usesGlass ? Color.white : Color("colorPrimary"))
           .frame(width: 10, height: 2.5)
       case .all:
         Image(systemName: "checkmark")
           .font(.system(size: 11, weight: .bold))
-          .foregroundStyle(Color("colorPrimary"))
+          .foregroundStyle(usesGlass ? Color.white : Color("colorPrimary"))
       }
     }
   }
@@ -378,12 +418,20 @@ struct DocumentLibraryView: View {
 
       VStack(alignment: .leading, spacing: 14) {
         Text(deleteConfirmationTitle(for: confirmation))
-          .font(.custom("IndieFlower", size: scaled(28)))
-          .foregroundStyle(Color("colorText"))
+          .font(
+            usesGlass
+              ? .system(size: scaled(24), weight: .bold)
+              : .custom("IndieFlower", size: scaled(28))
+          )
+          .foregroundStyle(usesGlass ? .primary : Color("colorText"))
 
         Text(deleteConfirmationMessage(for: confirmation))
-          .font(.custom("CrimsonText-Regular", size: scaled(16)))
-          .foregroundStyle(Color("colorText").opacity(0.72))
+          .font(
+            usesGlass
+              ? .system(size: scaled(15))
+              : .custom("CrimsonText-Regular", size: scaled(16))
+          )
+          .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.72))
           .fixedSize(horizontal: false, vertical: true)
 
         HStack(spacing: 10) {
@@ -395,18 +443,13 @@ struct DocumentLibraryView: View {
           Button("Delete") {
             performDeleteConfirmation(confirmation)
           }
-          .buttonStyle(AiraPrimaryButtonStyle())
+          .buttonStyle(AiraCardCastButtonStyle())
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
       }
       .padding(24)
       .frame(width: 360)
-      .background(Color("colorSurface"))
-      .clipShape(RoundedRectangle(cornerRadius: 22))
-      .overlay(
-        RoundedRectangle(cornerRadius: 22)
-          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-      )
+      .managerSurface(cornerRadius: 22, classicFill: Color("colorSurface"), strokeOpacity: 0.12)
       .shadow(color: Color.black.opacity(0.12), radius: 24, y: 12)
       .padding(24)
     }
@@ -630,12 +673,20 @@ struct DocumentLibraryView: View {
         HStack(alignment: .top) {
           VStack(alignment: .leading, spacing: 4) {
             Text("Add to Collection")
-              .font(.custom("IndieFlower", size: scaled(28)))
-              .foregroundStyle(Color("colorText"))
+              .font(
+                usesGlass
+                  ? .system(size: scaled(24), weight: .bold)
+                  : .custom("IndieFlower", size: scaled(28))
+              )
+              .foregroundStyle(usesGlass ? .primary : Color("colorText"))
 
             Text("Choose collections for \"\(scriptTitle)\".")
-              .font(.custom("CrimsonText-Regular", size: scaled(16)))
-              .foregroundStyle(Color("colorText").opacity(0.72))
+              .font(
+                usesGlass
+                  ? .system(size: scaled(15))
+                  : .custom("CrimsonText-Regular", size: scaled(16))
+              )
+              .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.72))
               .fixedSize(horizontal: false, vertical: true)
           }
 
@@ -646,9 +697,19 @@ struct DocumentLibraryView: View {
           } label: {
             Image(systemName: "xmark")
               .font(.system(size: 11, weight: .semibold))
-              .foregroundStyle(Color("colorText").opacity(0.7))
+              .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.7))
               .frame(width: 26, height: 26)
-              .background(Color("colorSurface"))
+              .background {
+                if usesGlass {
+                  ZStack {
+                    Circle().fill(.ultraThinMaterial)
+                    Circle().fill(
+                      isDarkMode ? Color.white.opacity(0.08) : Color.white.opacity(0.40))
+                  }
+                } else {
+                  Circle().fill(Color("colorSurface"))
+                }
+              }
               .clipShape(Circle())
           }
           .buttonStyle(.plain)
@@ -658,8 +719,12 @@ struct DocumentLibraryView: View {
           VStack(spacing: 8) {
             if appState.collections.isEmpty {
               Text("No collections yet. Create one below.")
-                .font(.custom("CrimsonText-Regular", size: scaled(15)))
-                .foregroundStyle(Color("colorText").opacity(0.62))
+                .font(
+                  usesGlass
+                    ? .system(size: scaled(15))
+                    : .custom("CrimsonText-Regular", size: scaled(15))
+                )
+                .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.62))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 10)
             } else {
@@ -673,22 +738,44 @@ struct DocumentLibraryView: View {
                     Image(systemName: isMember ? "checkmark.square.fill" : "square")
                       .font(.system(size: 15, weight: .semibold))
                       .foregroundStyle(
-                        isMember ? Color("colorPrimary") : Color("colorText").opacity(0.45)
+                        isMember
+                          ? Color("colorPrimary")
+                          : (usesGlass ? .secondary : Color("colorText").opacity(0.45))
                       )
 
                     Text(collection.name)
-                      .font(.custom("CrimsonText-Regular", size: scaled(16)))
-                      .foregroundStyle(Color("colorText"))
+                      .font(
+                        usesGlass
+                          ? .system(size: scaled(15))
+                          : .custom("CrimsonText-Regular", size: scaled(16))
+                      )
+                      .foregroundStyle(usesGlass ? .primary : Color("colorText"))
 
                     Spacer()
                   }
                   .padding(.horizontal, 14)
                   .padding(.vertical, 12)
-                  .background(Color("colorSurface").opacity(0.92))
-                  .clipShape(RoundedRectangle(cornerRadius: 14))
+                  .background {
+                    if usesGlass {
+                      ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                          .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                          .fill(isDarkMode ? Color.white.opacity(0.05) : Color.white.opacity(0.30))
+                      }
+                    } else {
+                      Color("colorSurface").opacity(0.92)
+                    }
+                  }
+                  .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                   .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                      .stroke(Color("colorText").opacity(0.1), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                      .strokeBorder(
+                        usesGlass
+                          ? (isDarkMode ? Color.white.opacity(0.12) : Color.white.opacity(0.35))
+                          : Color("colorText").opacity(0.1),
+                        lineWidth: usesGlass ? 0.5 : 1
+                      )
                   )
                 }
                 .buttonStyle(.plain)
@@ -702,15 +789,35 @@ struct DocumentLibraryView: View {
           HStack(spacing: 10) {
             TextField("Collection name", text: $newCollectionName)
               .textFieldStyle(.plain)
-              .font(.custom("CrimsonText-Regular", size: scaled(16)))
-              .foregroundStyle(Color("colorText"))
+              .font(
+                usesGlass
+                  ? .system(size: scaled(15))
+                  : .custom("CrimsonText-Regular", size: scaled(16))
+              )
+              .foregroundStyle(usesGlass ? .primary : Color("colorText"))
               .padding(.horizontal, 14)
               .padding(.vertical, 12)
-              .background(Color("colorBackground"))
-              .clipShape(RoundedRectangle(cornerRadius: 14))
+              .background {
+                if usesGlass {
+                  ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                      .fill(.ultraThinMaterial)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                      .fill(isDarkMode ? Color.black.opacity(0.10) : Color.white.opacity(0.50))
+                  }
+                } else {
+                  Color("colorBackground")
+                }
+              }
+              .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
               .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                  .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                  .strokeBorder(
+                    usesGlass
+                      ? (isDarkMode ? Color.white.opacity(0.15) : Color.white.opacity(0.40))
+                      : Color("colorText").opacity(0.12),
+                    lineWidth: usesGlass ? 0.5 : 1.5
+                  )
               )
               .onSubmit {
                 createCollectionFromManager(for: scriptID)
@@ -739,12 +846,7 @@ struct DocumentLibraryView: View {
       }
       .padding(24)
       .frame(width: 420)
-      .background(Color("colorBackground"))
-      .clipShape(RoundedRectangle(cornerRadius: 24))
-      .overlay(
-        RoundedRectangle(cornerRadius: 24)
-          .stroke(Color("colorText").opacity(0.12), lineWidth: 1.5)
-      )
+      .managerSurface(cornerRadius: 24, classicFill: Color("colorBackground"), strokeOpacity: 0.12)
       .shadow(color: Color.black.opacity(0.12), radius: 24, y: 12)
       .padding(24)
     }

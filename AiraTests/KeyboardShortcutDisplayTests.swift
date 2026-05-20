@@ -2153,6 +2153,15 @@ struct VoiceSyncMatchingTests {
     #expect(mirror.descendant("pauseOnHoverEnabled") as? Bool == false)
   }
 
+  @Test @MainActor func pillControllerAcceptsFrostedGlassSetting() {
+    let controller = PillWindowController(mode: .voiceSync)
+
+    controller.updateFrostedGlass(enabled: true)
+
+    let mirror = Mirror(reflecting: controller)
+    #expect(mirror.descendant("frostedGlassEnabled") as? Bool == true)
+  }
+
   @Test func classicHighlightOnlyVisualRangeUsesSpokenPrefix() {
     let currentWordIndex = 5
     let classicVisualRange = 0..<currentWordIndex
@@ -2580,6 +2589,95 @@ struct AppWindowCoordinatorTests {
       !AppWindowCoordinator.shouldPreserveManagerWindowForSession(styleMask: [
         .titled, .closable,
       ]))
+  }
+
+  @Test func managerChromeConfigurationIsIdempotentOnceApplied() {
+    #expect(
+      !AppWindowCoordinator.managerChromeNeedsConfiguration(
+        styleMask: [.titled, .fullSizeContentView],
+        titleVisibility: .hidden,
+        titlebarAppearsTransparent: true,
+        hasTitlebarSeparator: false,
+        hasToolbar: false,
+        isMovableByWindowBackground: true,
+        isOpaque: false,
+        hasClearBackground: true
+      ))
+    #expect(
+      AppWindowCoordinator.managerChromeNeedsConfiguration(
+        styleMask: [.fullSizeContentView],
+        titleVisibility: .visible,
+        titlebarAppearsTransparent: false,
+        hasTitlebarSeparator: true,
+        hasToolbar: true,
+        isMovableByWindowBackground: false,
+        isOpaque: true,
+        hasClearBackground: false
+      ))
+  }
+
+  @Test func managerWindowRestoredFrameIsClampedWhenTooTallForDisplay() {
+    let visibleFrame = CGRect(x: 0, y: 0, width: 1470, height: 900)
+    let restoredFrame = CGRect(x: 1, y: -3552, width: 1470, height: 4476)
+
+    #expect(
+      AppWindowCoordinator.managerWindowFrameNeedsClamp(
+        restoredFrame,
+        visibleFrame: visibleFrame
+      ))
+
+    let clampedFrame = AppWindowCoordinator.clampedManagerWindowFrame(
+      restoredFrame,
+      visibleFrame: visibleFrame
+    )
+    #expect(clampedFrame.width <= visibleFrame.width)
+    #expect(clampedFrame.height <= visibleFrame.height)
+    #expect(visibleFrame.contains(clampedFrame))
+  }
+
+  @Test func launchCleanupRemovesStaleSwiftUIManagerWindowDefaults() {
+    #expect(
+      AppLifecycleDelegate.shouldRemoveStaleManagerWindowDefaultKey(
+        "NSWindow Frame SwiftUI.ModifiedContent<Aira.ManagerWindowView>-1-AppWindow-1"
+      ))
+    #expect(
+      AppLifecycleDelegate.shouldRemoveStaleManagerWindowDefaultKey(
+        "NSSplitView Subview Frames SwiftUI.ModifiedContent<Aira.ManagerWindowView>-1-AppWindow-1, SidebarNavigationSplitView"
+      ))
+    #expect(
+      !AppLifecycleDelegate.shouldRemoveStaleManagerWindowDefaultKey(
+        "NSWindow Frame AiraSettingsWindow"
+      ))
+    #expect(
+      !AppLifecycleDelegate.shouldRemoveStaleManagerWindowDefaultKey(
+        "aira.appSettings"
+      ))
+  }
+
+  @Test func dockReopenRestoresMiniaturizedManagerWindowEvenWhenVisibleWindowsExist() {
+    #expect(
+      AppLifecycleDelegate.shouldRestoreManagerWindowOnReopen(
+        hasVisibleWindows: true,
+        isManagerWindowMiniaturized: true
+      ))
+    #expect(
+      AppLifecycleDelegate.shouldRestoreManagerWindowOnReopen(
+        hasVisibleWindows: false,
+        isManagerWindowMiniaturized: false
+      ))
+    #expect(
+      !AppLifecycleDelegate.shouldRestoreManagerWindowOnReopen(
+        hasVisibleWindows: true,
+        isManagerWindowMiniaturized: false
+      ))
+  }
+
+  @Test func managerTrafficLightAffordancesUseNativeTitledWindowControls() {
+    #expect(SidebarTrafficLightAffordances.keepsNativeButtonsVisible)
+    #expect(!SidebarTrafficLightAffordances.drawsHoverGlyphOverlay)
+    #expect(SidebarTrafficLightAffordances.usesSystemHoverGlyphs)
+    #expect(SidebarTrafficLightAffordances.keepsTitledWindowStyleForNativeControls)
+    #expect(SidebarTrafficLightAffordances.makesWindowCanvasTransparent)
   }
 
   @Test func managerRestoreFallbackRejectsUntaggedTitledRegularWindows() {

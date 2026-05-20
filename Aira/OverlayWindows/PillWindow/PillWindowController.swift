@@ -18,6 +18,7 @@ class PillWindowController {
   private var showScriptProgress: Bool = false
   private var pauseOnHoverEnabled: Bool = true
   private var autoScrollWPM: Double = 0
+  private var frostedGlassEnabled: Bool = false
   private var playheadCoordinator: SessionPlayheadCoordinator?
   private var scrollCoordinator: SessionScrollCoordinator?
   private var reportsPrimaryMetrics: Bool = false
@@ -50,6 +51,7 @@ class PillWindowController {
     showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0,
+    frostedGlassEnabled: Bool = false,
     screenCaptureExclusionEnabled: Bool = true,
     playheadCoordinator: SessionPlayheadCoordinator,
     scrollCoordinator: SessionScrollCoordinator,
@@ -69,6 +71,7 @@ class PillWindowController {
     self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
+    self.frostedGlassEnabled = frostedGlassEnabled
     self.screenCaptureExclusionEnabled = screenCaptureExclusionEnabled
     self.playheadCoordinator = playheadCoordinator
     self.scrollCoordinator = scrollCoordinator
@@ -178,6 +181,11 @@ class PillWindowController {
     refreshContentView()
   }
 
+  func updateFrostedGlass(enabled: Bool) {
+    frostedGlassEnabled = enabled
+    refreshContentView()
+  }
+
   func updateSessionBehavior(
     voiceSyncEnabled: Bool,
     spokenWordHighlightingEnabled: Bool,
@@ -250,6 +258,7 @@ class PillWindowController {
       reportsPrimaryMetrics: reportsPrimaryMetrics,
       mode: mode,
       isFullScreen: isPseudoFullScreen,
+      frostedGlassEnabled: frostedGlassEnabled,
       voiceSyncMode: voiceSyncMode,
       voiceSync: voiceSync ?? VoiceSyncEngine(),
       audioMonitor: audioMonitor ?? AudioLevelMonitor(),

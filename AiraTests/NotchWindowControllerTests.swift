@@ -57,6 +57,15 @@ struct NotchWindowControllerTests {
     #expect(mirror.descendant("pauseOnHoverEnabled") as? Bool == false)
   }
 
+  @MainActor @Test func notchControllerAcceptsFrostedGlassSetting() {
+    let controller = NotchWindowController()
+
+    controller.updateFrostedGlass(enabled: true)
+
+    let mirror = Mirror(reflecting: controller)
+    #expect(mirror.descendant("frostedGlassEnabled") as? Bool == true)
+  }
+
   @Test func notchDefaultWidthUsesNarrowerLaunchValue() {
     #expect(NotchWidthConfiguration.defaultWidth == 380)
     #expect(AppSettings().notchWindowWidth == NotchWidthConfiguration.defaultWidth)

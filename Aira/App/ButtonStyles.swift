@@ -4,38 +4,206 @@ import SwiftUI
 
 struct AiraPrimaryButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
+  @ViewBuilder
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
+    let usesGlass = managerTheme.usesLiquidGlassMode
+    let isDark = colorScheme == .dark
+    let pressed = configuration.isPressed
+    let classicPrimary = ManagerClassicAccentPalette.primary(for: colorScheme)
+    let label = configuration.label
+      .font(
+        usesGlass
+          ? .system(size: 14 * managerFontScale, weight: .medium)
+          : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+      )
       .foregroundStyle(.white)
       .padding(.horizontal, 16)
-      .padding(.vertical, 8)
-      .background(Color("colorPrimary").opacity(configuration.isPressed ? 0.8 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 8))
+      .padding(.vertical, 10)
+
+    if usesGlass {
+      let tintOpacity =
+        isDark
+        ? (pressed ? 0.58 : 0.45)
+        : (pressed ? 0.60 : 0.48)
+      label
+        .background {
+          ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(
+              Color("colorPrimary").opacity(tintOpacity))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(Color("colorPrimary").opacity(isDark ? 0.40 : 0.50), lineWidth: 0.5)
+        )
+    } else {
+      label
+        .background(classicPrimary.opacity(pressed ? 0.8 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
   }
 }
 
 struct AiraSecondaryButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
+  @ViewBuilder
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
-      .foregroundStyle(Color("colorSecondary"))
+    let usesGlass = managerTheme.usesLiquidGlassMode
+    let isDark = colorScheme == .dark
+    let pressed = configuration.isPressed
+    let classicSecondaryText = ManagerClassicAccentPalette.secondaryText(for: colorScheme)
+    let label = configuration.label
+      .font(
+        usesGlass
+          ? .system(size: 14 * managerFontScale, weight: .medium)
+          : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+      )
+      .foregroundStyle(usesGlass ? .primary : classicSecondaryText)
       .padding(.horizontal, 16)
       .padding(.vertical, 8)
-      .background(Color("colorBackground").opacity(configuration.isPressed ? 0.8 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 8))
-      .overlay(
-        RoundedRectangle(cornerRadius: 8)
-          .stroke(Color("colorSecondary"), lineWidth: 1)
+
+    if usesGlass {
+      let tintOpacity =
+        isDark
+        ? (pressed ? 0.18 : 0.10)
+        : (pressed ? 0.45 : 0.30)
+      label
+        .background {
+          ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(
+              Color.white.opacity(tintOpacity))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(
+              isDark ? Color.white.opacity(0.18) : Color.primary.opacity(0.12),
+              lineWidth: 0.5
+            )
+        )
+    } else {
+      label
+        .background(Color("colorBackground").opacity(pressed ? 0.8 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8)
+            .stroke(classicSecondaryText, lineWidth: 1)
+        )
+    }
+  }
+}
+
+struct AiraLibraryHeaderPrimaryButtonStyle: ButtonStyle {
+  @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  @ViewBuilder
+  func makeBody(configuration: Configuration) -> some View {
+    let usesGlass = managerTheme.usesLiquidGlassMode
+    let isDark = colorScheme == .dark
+    let pressed = configuration.isPressed
+    let classicPrimary = ManagerClassicAccentPalette.primary(for: colorScheme)
+    let label = configuration.label
+      .font(
+        usesGlass
+          ? .system(size: 14 * managerFontScale, weight: .medium)
+          : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
       )
+      .foregroundStyle(.white)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 8)
+
+    if usesGlass {
+      label
+        .background {
+          TerracottaGlassBackground(
+            isPressed: pressed,
+            isDark: isDark,
+            shape: RoundedRectangle(cornerRadius: 8, style: .continuous)
+          )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(Color("colorSecondary").opacity(isDark ? 0.45 : 0.55), lineWidth: 0.5)
+        )
+    } else {
+      label
+        .background(classicPrimary.opacity(pressed ? 0.8 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+  }
+}
+
+struct AiraLibraryHeaderSecondaryButtonStyle: ButtonStyle {
+  @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  @ViewBuilder
+  func makeBody(configuration: Configuration) -> some View {
+    let usesGlass = managerTheme.usesLiquidGlassMode
+    let isDark = colorScheme == .dark
+    let pressed = configuration.isPressed
+    let classicSecondaryText = ManagerClassicAccentPalette.secondaryText(for: colorScheme)
+    let label = configuration.label
+      .font(
+        usesGlass
+          ? .system(size: 14 * managerFontScale, weight: .medium)
+          : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+      )
+      .foregroundStyle(usesGlass ? .primary : classicSecondaryText)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 8)
+
+    if usesGlass {
+      let tintOpacity =
+        isDark
+        ? (pressed ? 0.18 : 0.10)
+        : (pressed ? 0.45 : 0.30)
+      label
+        .background {
+          ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(
+              Color.white.opacity(tintOpacity))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(
+              isDark ? Color.white.opacity(0.18) : Color.primary.opacity(0.12),
+              lineWidth: 0.5
+            )
+        )
+    } else {
+      label
+        .background(Color("colorBackground").opacity(pressed ? 0.8 : 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+          RoundedRectangle(cornerRadius: 8)
+            .stroke(classicSecondaryText, lineWidth: 1)
+        )
+    }
   }
 }
 
 struct AiraWobblyToolbarButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
   enum Variant {
     case secondary
@@ -44,81 +212,176 @@ struct AiraWobblyToolbarButtonStyle: ButtonStyle {
 
   let variant: Variant
 
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+
   func makeBody(configuration: Configuration) -> some View {
-    let fillColor: Color
-    let foregroundColor: Color
-    let borderColor: Color
+    let pressed = configuration.isPressed
+    let toolbarShape = RoundedRectangle(
+      cornerRadius: ManagerLayoutParity.toolbarButtonCornerRadius,
+      style: .continuous
+    )
 
-    switch variant {
-    case .secondary:
-      fillColor = Color("colorSecondary")
-      foregroundColor = .white
-      borderColor = Color.white.opacity(0.8)
-    case .tertiary:
-      fillColor = Color("colorBackground")
-      foregroundColor = Color("colorText")
-      borderColor = Color("colorText")
-    }
+    if usesGlass {
+      let isTertiaryLight = variant == .tertiary && !isDark
 
-    return configuration.label
-      .font(.custom("IndieFlower", size: 15 * managerFontScale))
-      .foregroundStyle(foregroundColor)
-      .padding(.horizontal, 16)
-      .padding(.vertical, 10)
-      .background(fillColor.opacity(configuration.isPressed ? 0.82 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 8))
-      .overlay(
-        RoundedRectangle(cornerRadius: 8)
-          .inset(by: 2)
-          .stroke(
-            borderColor,
-            style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
-          )
+      let textColor: Color = isTertiaryLight ? Color("colorPrimary") : .white
+      let strokeColor: Color
+      let strokeOpacity: Double
+
+      switch variant {
+      case .secondary:
+        strokeColor = Color("colorSecondary")
+        strokeOpacity = isDark ? 0.45 : 0.55
+      case .tertiary:
+        strokeColor = isTertiaryLight ? Color("colorPrimary") : Color.white
+        strokeOpacity = isTertiaryLight ? 0.25 : (isDark ? 0.25 : 0.0)
+      }
+
+      return AnyView(
+        configuration.label
+          .font(.system(size: 15 * managerFontScale, weight: .medium))
+          .foregroundStyle(textColor)
+          .padding(.horizontal, 16)
+          .frame(height: ManagerLayoutParity.toolbarButtonHeight)
+          .background {
+            if variant == .secondary {
+              TerracottaGlassBackground(
+                isPressed: pressed,
+                isDark: isDark,
+                shape: toolbarShape
+              )
+            } else {
+              let tertiaryTintOpacity = isDark ? (pressed ? 0.55 : 0.38) : (pressed ? 0.45 : 0.30)
+              let tertiaryTint = isDark ? Color("colorPrimary") : Color.white
+              ZStack {
+                toolbarShape.fill(.ultraThinMaterial)
+                toolbarShape
+                  .fill(tertiaryTint.opacity(tertiaryTintOpacity))
+              }
+            }
+          }
+          .clipShape(toolbarShape)
+          .overlay {
+            toolbarShape.strokeBorder(strokeColor.opacity(strokeOpacity), lineWidth: 0.5)
+          }
+          .scaleEffect(pressed ? 0.96 : 1)
+          .animation(.easeOut(duration: 0.15), value: pressed)
       )
-      .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
-      .scaleEffect(configuration.isPressed ? 0.96 : 1)
-      .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    } else {
+      let fillColor: Color =
+        variant == .secondary
+        ? ManagerClassicAccentPalette.secondary(for: colorScheme)
+        : Color("colorBackground")
+      let foregroundColor: Color = variant == .secondary ? .white : Color("colorText")
+      let borderColor: Color = variant == .secondary ? Color.white.opacity(0.8) : Color("colorText")
+
+      return AnyView(
+        configuration.label
+          .font(.custom("IndieFlower", size: 15 * managerFontScale))
+          .foregroundStyle(foregroundColor)
+          .padding(.horizontal, 16)
+          .frame(height: ManagerLayoutParity.toolbarButtonHeight)
+          .background(fillColor.opacity(pressed ? 0.82 : 1))
+          .clipShape(toolbarShape)
+          .overlay(
+            toolbarShape
+              .inset(by: 2)
+              .stroke(
+                borderColor,
+                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1]))
+          )
+          .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+          .scaleEffect(pressed ? 0.96 : 1)
+          .animation(.easeOut(duration: 0.15), value: pressed)
+      )
+    }
   }
 }
 
 struct AiraCueButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.colorScheme) private var colorScheme
 
   func makeBody(configuration: Configuration) -> some View {
+    let secondary = ManagerClassicAccentPalette.secondaryText(for: colorScheme)
     configuration.label
       .font(.custom("CrimsonText-Regular", size: 13 * managerFontScale))
-      .foregroundStyle(Color("colorSecondary"))
+      .foregroundStyle(secondary)
       .padding(.horizontal, 12)
       .padding(.vertical, 6)
       .background(Color("colorBackground").opacity(configuration.isPressed ? 0.8 : 1))
       .clipShape(RoundedRectangle(cornerRadius: 24))
       .overlay(
         RoundedRectangle(cornerRadius: 24)
-          .stroke(Color("colorSecondary"), lineWidth: 1)
+          .stroke(secondary, lineWidth: 1)
       )
   }
 }
 
 struct AiraCueTileButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.isEnabled) private var isEnabled
 
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+
+  @ViewBuilder
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.custom("IndieFlower", size: 14 * managerFontScale))
+    let cornerRadius: CGFloat = usesGlass ? 8 : 10
+    let label = configuration.label
+      .font(
+        usesGlass
+          ? .system(size: 12 * managerFontScale, weight: .medium)
+          : .custom("IndieFlower", size: 14 * managerFontScale)
+      )
       .foregroundStyle(Color(hex: "#F5F2EC"))
       .frame(maxWidth: .infinity)
-      .padding(.horizontal, 12)
-      .padding(.vertical, 14)
-      .background(Color("colorSecondary").opacity(configuration.isPressed ? 0.82 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 10))
-      .overlay(
-        RoundedRectangle(cornerRadius: 10)
-          .stroke(Color("colorText"), lineWidth: 2)
-      )
-      .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-      .scaleEffect(configuration.isPressed ? 0.97 : 1)
-      .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+      .padding(.horizontal, usesGlass ? 6 : 12)
+      .padding(.vertical, usesGlass ? 7 : 14)
+
+    if usesGlass {
+      let isDark = colorScheme == .dark
+      let pressed = configuration.isPressed
+      let opacity: Double =
+        isDark
+        ? (pressed ? 0.62 : 0.48)
+        : (pressed ? 0.82 : 0.76)
+      label
+        .background {
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color("colorSecondary").opacity(opacity))
+            .background(
+              .ultraThinMaterial,
+              in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(Color("colorSecondary").opacity(isDark ? 0.45 : 0.60), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(isEnabled ? 0.06 : 0.02), radius: 2, y: 1)
+        .scaleEffect(pressed ? 0.97 : 1)
+        .animation(.easeOut(duration: 0.15), value: pressed)
+        .opacity(isEnabled ? 1 : 0.58)
+    } else {
+      label
+        .background(
+          ManagerClassicAccentPalette.secondary(for: colorScheme)
+            .opacity(configuration.isPressed ? 0.82 : 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .overlay(
+          RoundedRectangle(cornerRadius: cornerRadius)
+            .stroke(Color("colorText"), lineWidth: 2)
+        )
+        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+        .scaleEffect(configuration.isPressed ? 0.97 : 1)
+        .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
   }
+
 }
 
 // MARK: - Sidebar Buttons
@@ -126,21 +389,57 @@ struct AiraCueTileButtonStyle: ButtonStyle {
 /// Organic wobbly-border button matching SidebarButton.tsx.
 /// SVG path source space: 200 × 46. Stroke: cream/white at 25 % opacity.
 struct AiraSidebarActionButtonStyle: ButtonStyle {
+  @Environment(\.managerTheme) private var managerTheme
+
+  @ViewBuilder
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label
+    let label = configuration.label
       .foregroundStyle(.white)
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
-      .background(Color.white.opacity(configuration.isPressed ? 0.12 : 0))
-      .overlay(
-        OrganicButtonBorder()
-          .stroke(
-            Color.white.opacity(configuration.isPressed ? 0.6 : 0.25),
-            style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
-          )
-      )
-      .contentShape(Rectangle())
+
+    if managerTheme.usesLiquidGlassMode {
+      label
+        .padding(.vertical, 2)
+        .background(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.white.opacity(configuration.isPressed ? 0.24 : 0.16))
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(
+              Color("colorSecondary").opacity(configuration.isPressed ? 0.72 : 0.56), lineWidth: 1.4
+            )
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .inset(by: 1.5)
+            .strokeBorder(
+              Color("colorBackground").opacity(configuration.isPressed ? 0.42 : 0.32),
+              lineWidth: 0.8)
+        )
+        .overlay(alignment: .trailing) {
+          Circle()
+            .fill(Color("colorSecondary"))
+            .frame(width: 10, height: 10)
+            .shadow(color: Color("colorSecondary").opacity(0.45), radius: 8)
+            .padding(.trailing, 12)
+        }
+        .shadow(color: Color.black.opacity(configuration.isPressed ? 0.08 : 0.16), radius: 8, y: 3)
+        .contentShape(Rectangle())
+    } else {
+      label
+        .background(Color.white.opacity(configuration.isPressed ? 0.12 : 0))
+        .overlay(
+          OrganicButtonBorder()
+            .stroke(
+              Color.white.opacity(configuration.isPressed ? 0.6 : 0.25),
+              style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
+            )
+        )
+        .contentShape(Rectangle())
+    }
   }
 }
 
@@ -168,33 +467,150 @@ private struct OrganicButtonBorder: Shape {
 
 // MARK: - Script Card Buttons
 
-/// Sage-green fill, expands to fill available width — Edit button
+/// Sage-green frosted glass — Edit button
 struct AiraCardEditButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
+  @ViewBuilder
   func makeBody(configuration: Configuration) -> some View {
+    let usesGlass = managerTheme.usesLiquidGlassMode
+    let isDark = colorScheme == .dark
+    let shape = RoundedRectangle(
+      cornerRadius: ScriptCardActionButtonAffordances.cornerRadius, style: .continuous)
+
     configuration.label
-      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
+      .font(
+        usesGlass
+          ? .system(size: 14 * managerFontScale, weight: .medium)
+          : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+      )
       .foregroundStyle(.white)
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 10)
-      .background(Color("colorPrimary").opacity(configuration.isPressed ? 0.75 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 8))
+      .padding(.vertical, 8)
+      .background {
+        if usesGlass {
+          let tintOpacity: Double =
+            isDark
+            ? (configuration.isPressed ? 0.55 : 0.40)
+            : (configuration.isPressed ? 0.65 : 0.52)
+          ZStack {
+            shape.fill(.ultraThinMaterial)
+            shape.fill(Color("colorPrimary").opacity(tintOpacity))
+          }
+        } else {
+          shape
+            .fill(
+              ManagerClassicAccentPalette.primary(for: colorScheme)
+                .opacity(configuration.isPressed ? 0.75 : 1)
+            )
+        }
+      }
+      .clipShape(shape)
+      .overlay {
+        if usesGlass {
+          shape
+            .strokeBorder(
+              isDark ? Color.white.opacity(0.22) : Color("colorPrimary").opacity(0.35),
+              lineWidth: 0.5
+            )
+        } else {
+          shape
+            .inset(by: 2)
+            .stroke(
+              Color.white.opacity(0.8),
+              style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+            )
+        }
+      }
   }
 }
 
-/// Terracotta fill — Cast button
+/// Terracotta frosted glass — Cast button
 struct AiraCardCastButtonStyle: ButtonStyle {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
   func makeBody(configuration: Configuration) -> some View {
+    let usesGlass = managerTheme.usesLiquidGlassMode
+    let isDark = colorScheme == .dark
+    let shape = RoundedRectangle(
+      cornerRadius: ScriptCardActionButtonAffordances.cornerRadius, style: .continuous)
+
     configuration.label
-      .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
+      .font(
+        usesGlass
+          ? .system(size: 14 * managerFontScale, weight: .regular)
+          : .custom("CrimsonText-Regular", size: 14 * managerFontScale)
+      )
       .foregroundStyle(.white)
       .padding(.horizontal, 16)
       .padding(.vertical, 10)
-      .background(Color("colorSecondary").opacity(configuration.isPressed ? 0.75 : 1))
-      .clipShape(RoundedRectangle(cornerRadius: 8))
+      .background {
+        if usesGlass {
+          TerracottaGlassBackground(
+            isPressed: configuration.isPressed,
+            isDark: isDark,
+            shape: shape
+          )
+        } else {
+          shape
+            .fill(
+              ManagerClassicAccentPalette.secondary(for: colorScheme)
+                .opacity(configuration.isPressed ? 0.75 : 1)
+            )
+        }
+      }
+      .clipShape(shape)
+      .overlay {
+        if usesGlass {
+          shape
+            .strokeBorder(Color("colorSecondary").opacity(isDark ? 0.45 : 0.55), lineWidth: 0.5)
+        } else {
+          shape
+            .inset(by: 2)
+            .stroke(
+              Color.white.opacity(0.8),
+              style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+            )
+        }
+      }
+  }
+}
+
+enum ScriptCardActionButtonAffordances {
+  static let cornerRadius: CGFloat = 8
+  static let editUsesRoundedRectangle = true
+  static let castUsesRoundedRectangle = true
+}
+
+// MARK: - Shared Terracotta Glass Background
+
+/// Fixed-base terracotta frosted glass background used by all terracotta buttons.
+/// Uses a consistent warm base color instead of `.ultraThinMaterial` so buttons
+/// look identical regardless of what container they sit on.
+struct TerracottaGlassBackground<S: Shape>: View {
+  let isPressed: Bool
+  let isDark: Bool
+  let shape: S
+
+  private var baseColor: Color {
+    isDark ? Color(hex: "#2A2A2A") : Color(hex: "#F0EDE7")
+  }
+
+  private var tintOpacity: Double {
+    isDark
+      ? (isPressed ? 0.62 : 0.48)
+      : (isPressed ? 0.72 : 0.58)
+  }
+
+  var body: some View {
+    ZStack {
+      shape.fill(baseColor)
+      shape.fill(Color("colorSecondary").opacity(tintOpacity))
+    }
   }
 }
 
