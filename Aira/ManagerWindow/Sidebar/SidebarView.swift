@@ -790,13 +790,6 @@ struct SidebarView: View {
     }
     .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
     .padding(.vertical, usesLiquidSidebar ? 6 : 8)
-    .modifier(
-      SidebarGlassPanelModifier(
-        usesLiquidSidebar: usesLiquidSidebar,
-        cornerRadius: 14,
-        tintColor: Color("colorPrimary"),
-        tintOpacity: 0.06
-      ))
   }
 
   private func collectionDropBinding(for collectionID: UUID) -> Binding<Bool> {
@@ -992,6 +985,7 @@ private struct SidebarGlassPanelModifier: ViewModifier {
   let tintColor: Color?
   let tintOpacity: Double
   var interactive: Bool = false
+  var showsBorder: Bool = true
 
   @State private var isHovered = false
 
@@ -1011,7 +1005,7 @@ private struct SidebarGlassPanelModifier: ViewModifier {
         )
         .overlay(
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            .strokeBorder(showsBorder ? Color.white.opacity(0.12) : Color.clear, lineWidth: 0.5)
         )
         .onHover { hovering in
           if interactive { isHovered = hovering }

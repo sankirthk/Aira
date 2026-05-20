@@ -48,67 +48,121 @@ struct AiraMessagePopup: View {
 
   var body: some View {
     ZStack {
-      Color.black.opacity(0.18)
+      Color.black.opacity(usesGlass ? 0.25 : 0.18)
         .ignoresSafeArea()
 
-      VStack(alignment: .leading, spacing: 22) {
-        Text(content.eyebrow)
-          .font(
-            usesGlass
-              ? .system(size: 13, weight: .medium)
-              : .custom("CrimsonText-Regular", size: 14)
-          )
-          .foregroundStyle(Color("colorPrimary"))
-          .padding(.horizontal, 10)
-          .padding(.vertical, 5)
-          .background {
-            if usesGlass {
-              ZStack {
-                Capsule(style: .continuous).fill(.ultraThinMaterial)
-                Capsule(style: .continuous).fill(
-                  Color("colorPrimary").opacity(isDark ? 0.15 : 0.10))
-              }
-            } else {
-              Capsule(style: .continuous)
-                .fill(Color("colorPrimary").opacity(0.12))
-            }
+      popupCard
+        .shadow(color: .black.opacity(0.16), radius: 22, y: 12)
+    }
+  }
+
+  private var popupCard: some View {
+    VStack(alignment: .leading, spacing: 22) {
+      eyebrowBadge
+
+      VStack(alignment: .leading, spacing: 10) {
+        Text(content.title)
+          .font(.system(size: usesGlass ? 26 : 24, weight: .bold))
+          .foregroundStyle(usesGlass ? .primary : Color("colorText"))
+
+        Text(content.message)
+          .font(.system(size: usesGlass ? 16 : 15))
+          .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.82))
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      HStack {
+        Spacer()
+        dismissButton
+      }
+    }
+    .padding(28)
+    .frame(width: 420)
+    .modifier(PopupSurfaceModifier(usesGlass: usesGlass, isDark: isDark))
+  }
+
+  private var eyebrowBadge: some View {
+    Text(content.eyebrow)
+      .font(.system(size: 13, weight: .medium))
+      .foregroundStyle(usesGlass ? .secondary : Color("colorPrimary"))
+      .padding(.horizontal, 10)
+      .padding(.vertical, 5)
+      .background {
+        if usesGlass {
+          ZStack {
+            Capsule(style: .continuous).fill(.ultraThinMaterial)
+            Capsule(style: .continuous).fill(
+              Color("colorPrimary").opacity(isDark ? 0.15 : 0.10))
           }
-          .clipShape(Capsule(style: .continuous))
-
-        VStack(alignment: .leading, spacing: 10) {
-          Text(content.title)
-            .font(
-              usesGlass
-                ? .system(size: 26, weight: .bold)
-                : .custom("IndieFlower", size: 32)
-            )
-            .foregroundStyle(usesGlass ? .primary : Color("colorText"))
-
-          Text(content.message)
-            .font(
-              usesGlass
-                ? .system(size: 16)
-                : .custom("CrimsonText-Regular", size: 19)
-            )
-            .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.82))
-            .fixedSize(horizontal: false, vertical: true)
-        }
-
-        HStack {
-          Spacer()
-
-          Button(content.primaryActionTitle, action: onDismiss)
-            .buttonStyle(AiraCardCastButtonStyle())
+        } else {
+          Capsule(style: .continuous)
+            .fill(Color("colorPrimary").opacity(0.12))
         }
       }
-      .padding(28)
-      .frame(width: 420)
-      .managerSurface(
-        cornerRadius: 30,
-        classicFill: Color("colorBackground"),
-        strokeOpacity: 0.18
-      )
-      .shadow(color: .black.opacity(0.16), radius: 22, y: 12)
+      .clipShape(Capsule(style: .continuous))
+  }
+
+  @ViewBuilder
+  private var dismissButton: some View {
+    if usesGlass {
+      Button(content.primaryActionTitle, action: onDismiss)
+        .modifier(GlassPopupButtonModifier())
+    } else {
+      Button(content.primaryActionTitle, action: onDismiss)
+        .buttonStyle(AiraCardCastButtonStyle())
+    }
+  }
+}
+
+private struct GlassPopupButtonModifier: ViewModifier {
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if #available(macOS 26.0, *) {
+      content.buttonStyle(.glassProminent)
+    } else {
+      content.buttonStyle(AiraCardCastButtonStyle())
+    }
+  }
+}
+
+private struct PopupSurfaceModifier: ViewModifier {
+  let usesGlass: Bool
+  let isDark: Bool
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    let shape = RoundedRectangle(cornerRadius: 30, style: .continuous)
+
+    if usesGlass {
+      if #available(macOS 26.0, *) {
+        content
+          .glassEffect(
+            .regular.tint(isDark ? Color.white.opacity(0.08) : Color.white.opacity(0.3)),
+            in: .rect(cornerRadius: 30)
+          )
+      } else {
+        content
+          .background {
+            ZStack {
+              shape.fill(.ultraThinMaterial)
+              shape.fill(isDark ? Color.black.opacity(0.18) : Color.white.opacity(0.45))
+            }
+          }
+          .clipShape(shape)
+          .overlay(
+            shape.strokeBorder(
+              isDark ? Color.white.opacity(0.22) : Color.white.opacity(0.50),
+              lineWidth: 0.5
+            )
+          )
+      }
+    } else {
+      content
+        .managerSurface(
+          cornerRadius: 30,
+          classicFill: Color("colorBackground"),
+          strokeOpacity: 0.18
+        )
     }
   }
 }

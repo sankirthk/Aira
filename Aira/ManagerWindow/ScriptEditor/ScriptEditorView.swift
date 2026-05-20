@@ -340,6 +340,10 @@ struct ScriptEditorView: View {
             onPrimaryPress: {
               isLaunchMenuPresented = false
               onCast()
+            },
+            onCastWithSatellite: {
+              isLaunchMenuPresented = false
+              handleLaunchMenuAction(.castWithSatellite)
             }
           )
           .disabled(isReadOnly)
@@ -406,26 +410,6 @@ struct ScriptEditorView: View {
         classicFill: classicEditorSurfaceBackground,
         strokeOpacity: 0.12
       )
-
-      if isLaunchMenuPresented {
-        Color.clear
-          .contentShape(Rectangle())
-          .ignoresSafeArea()
-          .onTapGesture {
-            isLaunchMenuPresented = false
-            isSatelliteLaunchPanelPresented = false
-          }
-
-        ScriptEditorLaunchMenuPanel(
-          actions: ScriptEditorLaunchMenuAction.defaultItems,
-          onActionSelected: { action in
-            isLaunchMenuPresented = false
-            handleLaunchMenuAction(action.kind)
-          }
-        )
-        .padding(.top, 58)
-        .padding(.trailing, 16)
-      }
 
       if isSatelliteLaunchPanelPresented {
         Color.clear
@@ -570,6 +554,7 @@ private struct ScriptEditorRootBorder: ViewModifier {
 private struct ScriptEditorLaunchSplitButton: View {
   @Binding var isMenuPresented: Bool
   let onPrimaryPress: () -> Void
+  let onCastWithSatellite: () -> Void
   @Environment(\.managerFontScale) private var managerFontScale
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
@@ -582,6 +567,12 @@ private struct ScriptEditorLaunchSplitButton: View {
   private var cornerRadius: CGFloat { ManagerLayoutParity.toolbarButtonCornerRadius }
   private var controlHeight: CGFloat { ManagerLayoutParity.toolbarButtonHeight }
   private var dividerHeight: CGFloat { 24 }
+
+  private var menuFont: Font {
+    usesGlass
+      ? .system(size: 14 * managerFontScale, weight: .regular, design: .default)
+      : .custom("CrimsonText-Regular", size: 15 * managerFontScale)
+  }
 
   var body: some View {
     ZStack(alignment: .topTrailing) {
@@ -613,6 +604,9 @@ private struct ScriptEditorLaunchSplitButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .popover(isPresented: $isMenuPresented, arrowEdge: .bottom) {
+          popoverContent
+        }
       }
       .frame(height: controlHeight)
       .font(
@@ -636,6 +630,37 @@ private struct ScriptEditorLaunchSplitButton: View {
       .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
     }
     .frame(height: controlHeight)
+  }
+
+  private var popoverContent: some View {
+    Button {
+      isMenuPresented = false
+      onCastWithSatellite()
+    } label: {
+      HStack(spacing: 10) {
+        Text("Cast with Pill Windows")
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 9)
+      .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .font(menuFont)
+    .foregroundStyle(usesGlass ? .primary : Color("colorText"))
+    .background(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .fill(usesGlass ? AnyShapeStyle(.background) : AnyShapeStyle(Color("colorBackground")))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .stroke(
+          (usesGlass ? Color.primary : Color("colorText")).opacity(0.12),
+          lineWidth: 1
+        )
+    )
+    .padding(8)
+    .frame(width: 210)
   }
 
   private var splitButtonBorder: some View {
@@ -668,53 +693,6 @@ enum ScriptEditorLaunchButtonAffordances {
   static let classicUsesOutlinedToolbarTreatment = true
   static let classicPreservesTerracottaFillAndWhiteText = true
   static let liquidGlassKeepsProminentLaunchTreatment = true
-}
-
-private struct ScriptEditorLaunchMenuPanel: View {
-  let actions: [ScriptEditorLaunchMenuAction]
-  let onActionSelected: (ScriptEditorLaunchMenuAction) -> Void
-  @Environment(\.managerFontScale) private var managerFontScale
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      ForEach(actions) { action in
-        Button {
-          onActionSelected(action)
-        } label: {
-          HStack(spacing: 10) {
-            Text(action.title)
-              .frame(maxWidth: .infinity, alignment: .leading)
-          }
-          .padding(.horizontal, 12)
-          .padding(.vertical, 9)
-          .contentShape(RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(.plain)
-        .font(.custom("CrimsonText-Regular", size: 15 * managerFontScale))
-        .foregroundStyle(Color("colorText"))
-        .background(
-          RoundedRectangle(cornerRadius: 10)
-            .fill(Color("colorBackground"))
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 10)
-            .stroke(Color("colorText").opacity(0.12), lineWidth: 1)
-        )
-        .pointingHandCursor()
-      }
-    }
-    .padding(8)
-    .frame(width: 248)
-    .background(
-      RoundedRectangle(cornerRadius: 14)
-        .fill(Color("colorSurface"))
-        .overlay(
-          RoundedRectangle(cornerRadius: 14)
-            .stroke(Color("colorText"), lineWidth: 2)
-        )
-        .shadow(color: .black.opacity(0.16), radius: 10, y: 6)
-    )
-  }
 }
 
 struct ScriptEditorSatelliteLaunchPanel: View {

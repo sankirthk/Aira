@@ -21,7 +21,7 @@ struct AiraPrimaryButtonStyle: ButtonStyle {
       )
       .foregroundStyle(.white)
       .padding(.horizontal, 16)
-      .padding(.vertical, 8)
+      .padding(.vertical, 10)
 
     if usesGlass {
       let tintOpacity =

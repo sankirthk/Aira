@@ -4,13 +4,14 @@ import SwiftUI
 // MARK: - Tab
 
 private enum SettingsTab: CaseIterable, Hashable {
-  case appearance, notch, satellite, system
+  case appearance, notch, satellite, shortcuts, system
 
   var label: String {
     switch self {
     case .appearance: return "Appearance"
     case .notch: return "The Notch"
     case .satellite: return "Pill Windows"
+    case .shortcuts: return "Shortcuts"
     case .system: return "Session"
     }
   }
@@ -365,6 +366,10 @@ struct SettingsView: View {
         case .satellite:
           settingsScrollContainer {
             SatelliteTabContent()
+          }
+        case .shortcuts:
+          settingsScrollContainer {
+            ShortcutsTabContent()
           }
         case .system:
           settingsScrollContainer {
@@ -774,16 +779,10 @@ private struct SystemFontPicker: View {
                 isExpanded = false
               } label: {
                 HStack(spacing: 12) {
-                  VStack(alignment: .leading, spacing: 2) {
-                    Text(family)
-                      .font(.custom(family, size: 15))
-                      .foregroundStyle(Color("colorText"))
-                      .lineLimit(1)
-                    Text("The quick brown fox")
-                      .font(.custom(family, size: 12))
-                      .foregroundStyle(Color("colorText").opacity(0.55))
-                      .lineLimit(1)
-                  }
+                  Text(family)
+                    .font(.custom(family, size: 15))
+                    .foregroundStyle(Color("colorText"))
+                    .lineLimit(1)
                   Spacer()
                   if selectedFont == family {
                     Image(systemName: "checkmark")
@@ -1755,55 +1754,55 @@ private struct SatelliteTabContent: View {
 
   var body: some View {
     VStack(spacing: 16) {
-      SettingsPanel {
-        SectionTitle(text: "Pill Windows")
-        Text(
-          "Choose how many free-moving Pill Windows are available. Content is chosen when launching from the Script Editor."
-        )
-        .settingsFont(.body, size: 14)
-        .foregroundStyle(Color("colorText").opacity(0.6))
-        .padding(.top, 2)
-
-        VStack(alignment: .leading, spacing: 16) {
-          VStack(alignment: .leading, spacing: 8) {
-            FieldLabel(text: "Pill Window Count")
-            HStack(spacing: 8) {
-              satelliteCountButton(count: 1)
-              satelliteCountButton(count: 2)
-            }
-
-            Text(
-              "Choose whether the explicit Pill Window launch flow offers one or two floating Pill Windows during a live session."
-            )
-            .settingsFont(.body, size: 14)
-            .foregroundStyle(Color("colorText").opacity(0.62))
-          }
-
-          Divider().opacity(0.2)
-
-          VStack(alignment: .leading, spacing: 10) {
-            FieldLabel(text: "Configure Slot")
-            HStack(spacing: 8) {
-              satelliteSlotButton(slot: 1)
-              satelliteSlotButton(slot: 2)
-            }
-
-            Text(
-              selectedSlotIsInherited
-                ? "Pill Window \(selectedSatelliteSlot) is currently inheriting The Notch defaults. Adjust any control below to create a slot-specific override."
-                : "Pill Window \(selectedSatelliteSlot) is using its own saved appearance and readability defaults."
-            )
-            .settingsFont(.body, size: 14)
-            .foregroundStyle(Color("colorText").opacity(0.62))
-          }
-        }
-        .padding(.top, 12)
-      }
-
       satellitePreviewPanel
 
       ScrollView {
         VStack(spacing: 16) {
+          SettingsPanel {
+            SectionTitle(text: "Pill Windows")
+            Text(
+              "Choose how many free-moving Pill Windows are available. Content is chosen when launching from the Script Editor."
+            )
+            .settingsFont(.body, size: 14)
+            .foregroundStyle(Color("colorText").opacity(0.6))
+            .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 16) {
+              VStack(alignment: .leading, spacing: 8) {
+                FieldLabel(text: "Pill Window Count")
+                HStack(spacing: 8) {
+                  satelliteCountButton(count: 1)
+                  satelliteCountButton(count: 2)
+                }
+
+                Text(
+                  "Choose whether the explicit Pill Window launch flow offers one or two floating Pill Windows during a live session."
+                )
+                .settingsFont(.body, size: 14)
+                .foregroundStyle(Color("colorText").opacity(0.62))
+              }
+
+              Divider().opacity(0.2)
+
+              VStack(alignment: .leading, spacing: 10) {
+                FieldLabel(text: "Configure Slot")
+                HStack(spacing: 8) {
+                  satelliteSlotButton(slot: 1)
+                  satelliteSlotButton(slot: 2)
+                }
+
+                Text(
+                  selectedSlotIsInherited
+                    ? "Pill Window \(selectedSatelliteSlot) is currently inheriting The Notch defaults. Adjust any control below to create a slot-specific override."
+                    : "Pill Window \(selectedSatelliteSlot) is using its own saved appearance and readability defaults."
+                )
+                .settingsFont(.body, size: 14)
+                .foregroundStyle(Color("colorText").opacity(0.62))
+              }
+            }
+            .padding(.top, 12)
+          }
+
           SettingsPanel {
             SectionTitle(text: "Overlay Color")
 
@@ -2361,6 +2360,46 @@ private struct NotchWrapShape: Shape {
   }
 }
 
+// MARK: - Shortcuts Tab
+
+private struct ShortcutsTabContent: View {
+  @EnvironmentObject var appState: AppState
+
+  var body: some View {
+    VStack(spacing: 16) {
+      SettingsPanel {
+        SectionTitle(text: "Keyboard Shortcuts")
+        Text("Record the keys Aira listens for while launching or controlling a live session.")
+          .settingsFont(.body, size: 14)
+          .foregroundStyle(Color("colorText").opacity(0.62))
+          .padding(.top, 2)
+
+        VStack(spacing: 8) {
+          shortcutRow("Toggle Notch", $appState.settings.shortcutToggleNotch)
+          shortcutRow("Toggle Pill Window", $appState.settings.shortcutTogglePill)
+          shortcutRow("Space to Pause", $appState.settings.shortcutToggleVoiceSync)
+          shortcutRow("Scroll Up", $appState.settings.shortcutScrollUp)
+          shortcutRow("Scroll Down", $appState.settings.shortcutScrollDown)
+          shortcutRow("End Session", $appState.settings.shortcutEndSession)
+        }
+        .padding(.top, 12)
+      }
+    }
+  }
+
+  private func shortcutRow(_ label: String, _ key: Binding<String>) -> some View {
+    HStack(alignment: .center) {
+      Text(label)
+        .settingsFont(.body, size: 18)
+        .foregroundStyle(Color("colorText"))
+      Spacer()
+      ShortcutKeyCapsField(shortcut: key)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+  }
+}
+
 // MARK: - System Tab
 
 private struct SystemTabContent: View {
@@ -2409,10 +2448,14 @@ private struct SystemTabContent: View {
       VStack(alignment: .leading, spacing: 5) {
         Text(mode.settingsTitle)
           .settingsFont(.body, size: 17)
-          .foregroundStyle(Color("colorText"))
+          .foregroundStyle(isActive ? Color.white : Color("colorText"))
         Text(mode.settingsDescription)
           .settingsFont(.body, size: 13)
-          .foregroundStyle(Color("colorText").opacity(0.62))
+          .foregroundStyle(
+            isActive
+              ? Color.white.opacity(0.82)
+              : Color("colorText").opacity(0.62)
+          )
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -2420,17 +2463,17 @@ private struct SystemTabContent: View {
       .padding(.vertical, 12)
       .background(
         isActive
-          ? Color("colorPrimary").opacity(0.1)
-          : Color("colorBackground").opacity(0.75)
+          ? Color("colorPrimary").opacity(0.82)
+          : Color("colorBackground").opacity(0.56)
       )
       .clipShape(RoundedRectangle(cornerRadius: 14))
       .overlay(
         RoundedRectangle(cornerRadius: 14)
           .stroke(
             isActive
-              ? Color("colorPrimary")
+              ? Color("colorBackground").opacity(0.84)
               : Color("colorText").opacity(0.14),
-            lineWidth: isActive ? 3 : 2
+            lineWidth: isActive ? 2 : 1.5
           )
       )
       .contentShape(RoundedRectangle(cornerRadius: 14))
@@ -2575,7 +2618,7 @@ private struct SystemTabContent: View {
                     .padding(.vertical, 10)
                     .background(
                       isActive && usesSpeechSensitivity
-                        ? Color("colorPrimary").opacity(0.1)
+                        ? Color("colorPrimary").opacity(0.24)
                         : Color("colorBackground").opacity(0.75)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -2667,19 +2710,6 @@ private struct SystemTabContent: View {
       }
 
       SettingsPanel {
-        SectionTitle(text: "Controls")
-        VStack(spacing: 8) {
-          shortcutRow("Toggle Notch", $appState.settings.shortcutToggleNotch)
-          shortcutRow("Toggle Pill Window", $appState.settings.shortcutTogglePill)
-          shortcutRow("Space to Pause", $appState.settings.shortcutToggleVoiceSync)
-          shortcutRow("Scroll Up", $appState.settings.shortcutScrollUp)
-          shortcutRow("Scroll Down", $appState.settings.shortcutScrollDown)
-          shortcutRow("End Session", $appState.settings.shortcutEndSession)
-        }
-        .padding(.top, 12)
-      }
-
-      SettingsPanel {
         SectionTitle(text: "Privacy")
         VStack(alignment: .leading, spacing: 16) {
           HStack {
@@ -2711,18 +2741,6 @@ private struct SystemTabContent: View {
         .padding(.top, 14)
       }
     }
-  }
-
-  private func shortcutRow(_ label: String, _ key: Binding<String>) -> some View {
-    HStack(alignment: .center) {
-      Text(label)
-        .settingsFont(.body, size: 18)
-        .foregroundStyle(Color("colorText"))
-      Spacer()
-      ShortcutKeyCapsField(shortcut: key)
-    }
-    .padding(.horizontal, 16)
-    .padding(.vertical, 14)
   }
 
   private func countdownStepButton(systemName: String, action: @escaping () -> Void) -> some View {

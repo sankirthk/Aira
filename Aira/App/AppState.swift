@@ -126,6 +126,10 @@ class AppState: ObservableObject {
     var updatedScript = script
     updatedScript.lastEdited = Date()
 
+    if updatedScript.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      updatedScript.title = Self.autoTitle(from: updatedScript.body)
+    }
+
     try scriptStore.save(updatedScript)
     for collectionID in updatedScript.collectionIds {
       try collectionStore.addScript(updatedScript.id, toCollection: collectionID)
@@ -133,6 +137,17 @@ class AppState: ObservableObject {
     activeScript = updatedScript
     try refreshScripts()
     try refreshCollections()
+  }
+
+  static func autoTitle(from body: String) -> String {
+    let words =
+      body
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .components(separatedBy: .whitespacesAndNewlines)
+      .filter { !$0.isEmpty }
+    guard !words.isEmpty else { return "Untitled Script" }
+    let snippet = words.prefix(3).joined(separator: " ")
+    return snippet.count > 30 ? String(snippet.prefix(30)) + "…" : snippet
   }
 
   func deleteScript(id: UUID) throws {

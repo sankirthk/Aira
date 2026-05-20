@@ -231,6 +231,7 @@ struct ScriptCardView: View {
         .frame(maxWidth: .infinity)
     }
     .buttonStyle(AiraCardEditButtonStyle())
+    .frame(maxWidth: .infinity, minHeight: 36)
     .disabled(!editingIsAvailable)
     .opacity(editingIsAvailable ? 1 : 0.55)
   }
@@ -320,20 +321,7 @@ private struct ScriptCardCastSplitButton: View {
       }
       .buttonStyle(.plain)
       .popover(isPresented: $isCastMenuPresented, arrowEdge: .bottom) {
-        Button {
-          isCastMenuPresented = false
-          onRequestCastWithSatellite()
-        } label: {
-          Text("Cast with Pill Windows")
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .font(menuFont)
-        .foregroundStyle(Color("colorText"))
-        .frame(width: 210)
+        castPopoverContent
       }
     }
     .font(actionFont)
@@ -363,7 +351,38 @@ private struct ScriptCardCastSplitButton: View {
       }
     }
     .clipShape(controlShape)
-    .frame(maxWidth: .infinity)
+    .frame(maxWidth: .infinity, minHeight: 36)
+  }
+
+  private var castPopoverContent: some View {
+    Button {
+      isCastMenuPresented = false
+      onRequestCastWithSatellite()
+    } label: {
+      HStack(spacing: 10) {
+        Text("Cast with Pill Windows")
+          .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 9)
+      .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .font(menuFont)
+    .foregroundStyle(usesGlass ? .primary : Color("colorText"))
+    .background(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .fill(usesGlass ? AnyShapeStyle(.background) : AnyShapeStyle(Color("colorBackground")))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 8, style: .continuous)
+        .stroke(
+          (usesGlass ? Color.primary : Color("colorText")).opacity(0.12),
+          lineWidth: 1
+        )
+    )
+    .padding(8)
+    .frame(width: 210)
   }
 }
 
