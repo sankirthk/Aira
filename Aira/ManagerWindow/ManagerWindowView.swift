@@ -225,9 +225,11 @@ struct ManagerWindowView: View {
           action: {}
         )
       }
-      .padding(.leading, SidebarView.SidebarChromeMetrics.appControlLeading)
+      .frame(height: 28, alignment: .leading)
+      .padding(.leading, 96)
+      .padding(.top, 16)
     }
-    .frame(height: SidebarView.SidebarChromeMetrics.height)
+    .frame(height: SidebarView.SidebarChromeMetrics.height, alignment: .topLeading)
   }
 
   private func collapsedChromeButton(

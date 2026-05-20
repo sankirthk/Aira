@@ -166,7 +166,7 @@ struct SidebarView: View {
     let onGoBack: () -> Void
 
     var body: some View {
-      ZStack(alignment: .leading) {
+      ZStack(alignment: .topLeading) {
         SidebarTrafficLightBridge(sidebarVisible: $sidebarVisible)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -200,8 +200,8 @@ struct SidebarView: View {
           )
         }
         .frame(width: SidebarChromeMetrics.appControlWidth, height: 28, alignment: .leading)
-        .padding(.leading, SidebarChromeMetrics.appControlLeading)
-        .padding(.top, 9)
+        .padding(.leading, SidebarChromeMetrics.appControlLeading + 16)
+        .padding(.top, 16)
       }
       .overlay(alignment: .bottom) {
         Rectangle()
@@ -249,10 +249,18 @@ struct SidebarView: View {
   final class SidebarTrafficLightHostView: NSView {
     var sidebarVisible: Bool = true
     private var windowObservers: [NSObjectProtocol] = []
-    /// Natural (macOS-set) y origin of the traffic light row. Captured before applying our offset.
-    private var trafficLightBaseY: CGFloat?
+    /// Natural (macOS-set) origin of the traffic light row, shared across all instances
+    /// so that toggling the sidebar (which destroys one host and creates another) never
+    /// re-captures an already-shifted value.
+    private static var trafficLightBaseY: CGFloat?
+    /// Per-button natural X origins, keyed by button identity (pointer).
+    private static var trafficLightBaseXByButton: [ObjectIdentifier: CGFloat] = [:]
+    /// The window whose base position we captured — reset the cached values if the window changes.
+    private static weak var baseYWindow: NSWindow?
     /// How far to shift the traffic lights downward (AppKit: decrease y = visually lower).
-    private let trafficLightDownShift: CGFloat = 8
+    private let trafficLightDownShift: CGFloat = 22
+    /// How far to shift the traffic lights to the right.
+    private let trafficLightRightShift: CGFloat = 8
 
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
@@ -280,6 +288,46 @@ struct SidebarView: View {
       DispatchQueue.main.async { [weak self] in
         self?.syncTrafficLights()
       }
+    }
+
+    // MARK: — Click forwarding for repositioned traffic lights
+
+    /// The traffic light buttons are shifted outside their titlebar container's bounds,
+    /// so normal hit testing never reaches them. We intercept clicks on this host view
+    /// and forward to the appropriate button based on position.
+    override func mouseDown(with event: NSEvent) {
+      guard let window else {
+        super.mouseDown(with: event)
+        return
+      }
+      let buttons: [(NSWindow.ButtonType, NSButton)] = [
+        (.closeButton, window.standardWindowButton(.closeButton)),
+        (.miniaturizeButton, window.standardWindowButton(.miniaturizeButton)),
+        (.zoomButton, window.standardWindowButton(.zoomButton)),
+      ].compactMap { type, btn in btn.map { (type, $0) } }
+
+      let locationInSelf = convert(event.locationInWindow, from: nil)
+
+      for (buttonType, button) in buttons {
+        let buttonFrameInSelf = button.convert(button.bounds, to: self)
+        // Use a slightly expanded rect for easier targeting
+        let hitRect = buttonFrameInSelf.insetBy(dx: -3, dy: -3)
+        if hitRect.contains(locationInSelf) {
+          switch buttonType {
+          case .closeButton:
+            window.performClose(nil)
+          case .miniaturizeButton:
+            window.miniaturize(nil)
+          case .zoomButton:
+            window.zoom(nil)
+          default:
+            break
+          }
+          return
+        }
+      }
+
+      super.mouseDown(with: event)
     }
 
     // MARK: — Window event observers
@@ -367,20 +415,46 @@ struct SidebarView: View {
     private func shiftTrafficLightsDown(buttons: [NSButton]) {
       guard let reference = buttons.first else { return }
       let currentY = reference.frame.origin.y
-      let shiftedY = (trafficLightBaseY ?? currentY) - trafficLightDownShift
 
-      if abs(currentY - shiftedY) < 0.5 {
-        // Already at target position — no-op to prevent drift.
-        buttons.forEach { $0.needsDisplay = true }
-        return
+      // Reset the cached base when the window changes (e.g. window replacement).
+      if let win = window, Self.baseYWindow !== win {
+        Self.trafficLightBaseY = nil
+        Self.trafficLightBaseXByButton.removeAll()
+        Self.baseYWindow = win
       }
 
-      // macOS reset buttons to natural position — capture it and re-apply offset.
-      trafficLightBaseY = currentY
+      // Capture natural position once across ALL instances so toggling the sidebar
+      // (which creates a fresh host view) cannot re-capture an already-shifted value.
+      if Self.trafficLightBaseY == nil {
+        Self.trafficLightBaseY = currentY
+      }
+      for button in buttons {
+        let key = ObjectIdentifier(button)
+        if Self.trafficLightBaseXByButton[key] == nil {
+          Self.trafficLightBaseXByButton[key] = button.frame.origin.x
+        }
+      }
+
+      let targetY = Self.trafficLightBaseY! - trafficLightDownShift
+
       buttons.forEach { button in
         var frame = button.frame
-        frame.origin.y -= trafficLightDownShift
-        button.frame = frame
+        let key = ObjectIdentifier(button)
+        let baseX = Self.trafficLightBaseXByButton[key] ?? frame.origin.x
+        let targetX = baseX + trafficLightRightShift
+        var needsUpdate = false
+
+        if abs(frame.origin.y - targetY) > 0.5 {
+          frame.origin.y = targetY
+          needsUpdate = true
+        }
+        if abs(frame.origin.x - targetX) > 0.5 {
+          frame.origin.x = targetX
+          needsUpdate = true
+        }
+        if needsUpdate {
+          button.frame = frame
+        }
         button.needsDisplay = true
       }
     }
