@@ -19,11 +19,13 @@ struct SidebarView: View {
   @Binding var pendingDeleteCollection: AiraCollection?
   @Binding var collectionErrorMessage: String?
   let canGoBack: Bool
+  let canGoForward: Bool
   var onOpenSettings: () -> Void
   var onNewScript: () -> Void
   var onOpenScript: (UUID) -> Void
   var onMoveScriptToCollection: (UUID, UUID) -> Void
   var onGoBack: () -> Void
+  var onGoForward: () -> Void
 
   @State private var collectionsExpanded: Bool = false
   @State private var starredExpanded: Bool = false
@@ -47,7 +49,9 @@ struct SidebarView: View {
       SidebarChromeBand(
         sidebarVisible: $sidebarVisible,
         canGoBack: canGoBack,
-        onGoBack: onGoBack
+        canGoForward: canGoForward,
+        onGoBack: onGoBack,
+        onGoForward: onGoForward
       )
       .frame(height: SidebarChromeMetrics.height)
 
@@ -163,7 +167,9 @@ struct SidebarView: View {
   private struct SidebarChromeBand: View {
     @Binding var sidebarVisible: Bool
     let canGoBack: Bool
+    let canGoForward: Bool
     let onGoBack: () -> Void
+    let onGoForward: () -> Void
 
     var body: some View {
       ZStack(alignment: .topLeading) {
@@ -193,10 +199,10 @@ struct SidebarView: View {
 
           chromeButton(
             help: "Go Forward",
-            isEnabled: false,
+            isEnabled: canGoForward,
             icon: .forward,
-            iconOpacity: 0.28,
-            action: {}
+            iconOpacity: canGoForward ? 0.80 : 0.28,
+            action: onGoForward
           )
         }
         .frame(width: SidebarChromeMetrics.appControlWidth, height: 28, alignment: .leading)

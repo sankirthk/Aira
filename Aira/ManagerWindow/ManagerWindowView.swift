@@ -13,6 +13,7 @@ struct ManagerWindowView: View {
   @State private var managerShortcutCoordinator = ManagerShortcutCoordinator()
   @State private var selectedNav: SidebarNav = .allScripts
   @State private var activeScript: Script? = nil
+  @State private var forwardStack: [UUID] = []
   @State private var sidebarVisible: Bool = true
   @State private var creationErrorMessage: String? = nil
   @State private var importErrorMessage: String? = nil
@@ -23,6 +24,7 @@ struct ManagerWindowView: View {
   @State private var pendingDeleteCollection: AiraCollection? = nil
   @State private var managerWindow: NSWindow?
   var canGoBack: Bool { activeScript != nil }
+  var canGoForward: Bool { !forwardStack.isEmpty }
 
   var body: some View {
     contentView
@@ -143,6 +145,7 @@ struct ManagerWindowView: View {
             pendingDeleteCollection: $pendingDeleteCollection,
             collectionErrorMessage: $collectionErrorMessage,
             canGoBack: canGoBack,
+            canGoForward: canGoForward,
             onOpenSettings: {
               presentSettings()
             },
@@ -157,6 +160,9 @@ struct ManagerWindowView: View {
             },
             onGoBack: {
               dismissEditor()
+            },
+            onGoForward: {
+              goForward()
             }
           )
           .frame(width: SidebarLayoutMetrics.expandedWidth)
@@ -167,6 +173,7 @@ struct ManagerWindowView: View {
 
         contentArea
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(WindowDragBlocker())
           .modifier(GlassContentAreaModifier())
           .padding(.top, LayoutMetrics.chromeBandHeight + LayoutMetrics.topInset)
           .padding(.bottom, LayoutMetrics.outerBottom)
@@ -220,9 +227,9 @@ struct ManagerWindowView: View {
         collapsedChromeButton(
           help: "Go Forward",
           icon: .forward,
-          iconOpacity: 0.28,
-          isEnabled: false,
-          action: {}
+          iconOpacity: canGoForward ? 0.80 : 0.28,
+          isEnabled: canGoForward,
+          action: { goForward() }
         )
       }
       .frame(height: 28, alignment: .leading)
@@ -321,10 +328,12 @@ struct ManagerWindowView: View {
 
   private func createAndOpenScript() {
     if activeScript != nil {
-      guard dismissEditor() else {
+      guard dismissEditor(pushToForwardStack: false) else {
         return
       }
     }
+
+    forwardStack.removeAll()
 
     let collectionID: UUID?
     if case .collection(let id) = selectedNav {
@@ -532,7 +541,7 @@ struct ManagerWindowView: View {
   }
 
   @discardableResult
-  private func dismissEditor() -> Bool {
+  private func dismissEditor(pushToForwardStack: Bool = true) -> Bool {
     guard let script = activeScript else {
       activeScript = nil
       return true
@@ -550,6 +559,9 @@ struct ManagerWindowView: View {
         try appState.saveScript(script)
       case .closeWithoutSaving:
         break
+      }
+      if pushToForwardStack {
+        forwardStack.append(script.id)
       }
       activeScript = nil
       return true
@@ -572,6 +584,8 @@ struct ManagerWindowView: View {
     guard panel.runModal() == .OK, let url = panel.url else {
       return
     }
+
+    forwardStack.removeAll()
 
     do {
       let script = try appState.importScript(from: url, inCollection: selectedCollectionID)
@@ -609,10 +623,12 @@ struct ManagerWindowView: View {
     }
 
     if activeScript != nil {
-      guard dismissEditor() else {
+      guard dismissEditor(pushToForwardStack: false) else {
         return
       }
     }
+
+    forwardStack.removeAll()
 
     do {
       let script = try appState.loadScript(id: id)
@@ -620,6 +636,32 @@ struct ManagerWindowView: View {
     } catch {
       AiraLogger.shared.error(
         error, category: "editor", context: "Failed to open script \(id.uuidString)")
+      creationErrorMessage = error.localizedDescription
+    }
+  }
+
+  private func goForward() {
+    guard let scriptID = forwardStack.popLast() else { return }
+
+    guard !appState.isScriptLockedForSessionEditing(scriptID) else {
+      sessionRestrictionMessage = "End the active session before editing this script."
+      return
+    }
+
+    if activeScript != nil {
+      guard dismissEditor(pushToForwardStack: false) else {
+        forwardStack.append(scriptID)
+        return
+      }
+    }
+
+    do {
+      let script = try appState.loadScript(id: scriptID)
+      activeScript = script
+    } catch {
+      AiraLogger.shared.error(
+        error, category: "editor", context: "Failed to go forward to script \(scriptID.uuidString)"
+      )
       creationErrorMessage = error.localizedDescription
     }
   }
@@ -1065,4 +1107,22 @@ enum SidebarNav: Hashable {
   case starred
   case recent
   case collection(UUID)
+}
+
+// MARK: - Window drag prevention for content area
+
+/// An NSView that returns `false` from `mouseDownCanMoveWindow`,
+/// preventing `isMovableByWindowBackground` from intercepting drags
+/// in the content area (document library cards, editor, etc.).
+private final class NonDraggableBackgroundView: NSView {
+  override var mouseDownCanMoveWindow: Bool { false }
+}
+
+private struct WindowDragBlocker: NSViewRepresentable {
+  func makeNSView(context: Context) -> NonDraggableBackgroundView {
+    let view = NonDraggableBackgroundView()
+    view.wantsLayer = false
+    return view
+  }
+  func updateNSView(_ nsView: NonDraggableBackgroundView, context: Context) {}
 }
