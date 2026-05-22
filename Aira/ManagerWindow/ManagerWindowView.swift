@@ -9,6 +9,7 @@ struct ManagerWindowView: View {
 
   @EnvironmentObject var appState: AppState
   @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   let overlayController: OverlayWindowController
   @State private var managerShortcutCoordinator = ManagerShortcutCoordinator()
   @State private var selectedNav: SidebarNav = .allScripts
@@ -32,7 +33,11 @@ struct ManagerWindowView: View {
       .ignoresSafeArea(.container, edges: .top)
       .environment(
         \.managerTheme,
-        ManagerTheme(interfaceStyle: appState.settings.managerInterfaceStyle)
+        ManagerTheme(
+          interfaceStyle: appState.settings.managerInterfaceStyle,
+          colorPalette: appState.settings.managerColorPalette,
+          accentColorHex: appState.settings.managerAccentColorHex
+        )
       )
       .background(
         ManagerWindowAccessor { window in
@@ -250,7 +255,7 @@ struct ManagerWindowView: View {
       AiraIcon(
         type: icon,
         size: 17,
-        color: Color("colorText").opacity(iconOpacity),
+        color: (colorScheme == .dark ? Color.white : Color("colorText")).opacity(iconOpacity),
         animated: false
       )
       .frame(width: 26, height: 26)
@@ -1018,13 +1023,16 @@ final class ManagerShortcutCoordinator {
 }
 
 /// Styled frame for the main content area.
-/// Glass mode: frosted sage glass backing. Classic mode: solid cream.
+/// Glass mode: frosted palette-aware glass backing. Classic mode: solid theme background.
 private struct GlassContentAreaModifier: ViewModifier {
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
 
   private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
   private var isDark: Bool { colorScheme == .dark }
+  private var usesAiraDarkGlass: Bool {
+    usesGlass && isDark && managerTheme.colorPalette == .aira
+  }
   private var cornerRadius: CGFloat { ManagerLayoutParity.contentAreaCornerRadius }
 
   @ViewBuilder
@@ -1033,41 +1041,57 @@ private struct GlassContentAreaModifier: ViewModifier {
       content
         .background {
           ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-              .fill(.ultraThinMaterial)
+            if !usesAiraDarkGlass {
+              RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+            }
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
               .fill(
-                isDark ? Color(hex: "#3E4A40").opacity(0.25) : Color(hex: "#D5DCCF").opacity(0.18))
+                managerTheme.contentBackground(for: colorScheme).opacity(
+                  usesAiraDarkGlass ? 1.0 : (isDark ? 0.88 : 0.72))
+              )
           }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .strokeBorder(
-              isDark ? Color.white.opacity(0.18) : Color.white.opacity(0.50),
-              lineWidth: 0.5
+              isDark ? Color.white.opacity(0.18) : Color("colorText").opacity(0.20),
+              lineWidth: isDark ? 0.5 : 1
             )
         }
     } else {
       content
-        .background(Color("colorBackground"))
+        .background(managerTheme.contentBackground(for: colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay {
+          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(
+              colorScheme == .dark
+                ? Color.white.opacity(0.18)
+                : Color("colorText").opacity(0.20),
+              lineWidth: colorScheme == .dark ? 1.25 : 1
+            )
+        }
     }
   }
 }
 
 /// Background for the entire window container.
-/// Glass mode: app-owned sage/dark-green substrate. Classic mode: solid sage.
+/// Glass mode: app-owned palette substrate. Classic mode: solid theme substrate.
 private struct GlassWindowBackgroundModifier: ViewModifier {
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
 
   private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
   private var isDark: Bool { colorScheme == .dark }
+  private var usesAiraDarkGlass: Bool {
+    usesGlass && isDark && managerTheme.colorPalette == .aira
+  }
 
   private var baseColor: Color {
-    isDark ? Color(hex: "#253D2E") : Color(hex: "#849688")
+    managerTheme.windowSubstrate(for: colorScheme)
   }
 
   @ViewBuilder
@@ -1079,15 +1103,15 @@ private struct GlassWindowBackgroundModifier: ViewModifier {
             // Opaque root substrate normalizes wallpaper bleed before child glass samples it.
             baseColor
 
-            if isDark {
+            if isDark && !usesAiraDarkGlass {
               Color.black.opacity(0.10)
             }
 
             // Subtle depth gradient
             RadialGradient(
               colors: [
-                Color.white.opacity(isDark ? 0.04 : 0.18),
-                Color.black.opacity(isDark ? 0.12 : 0.04),
+                Color.white.opacity(usesAiraDarkGlass ? 0.025 : (isDark ? 0.04 : 0.18)),
+                Color.black.opacity(usesAiraDarkGlass ? 0.035 : (isDark ? 0.12 : 0.04)),
               ],
               center: .center, startRadius: 80, endRadius: 520
             )
@@ -1096,7 +1120,7 @@ private struct GlassWindowBackgroundModifier: ViewModifier {
         }
     } else {
       content
-        .background(isDark ? Color(hex: "#465649") : Color("colorPrimary"))
+        .background(managerTheme.windowSubstrate(for: colorScheme))
         .ignoresSafeArea(.container, edges: .top)
     }
   }

@@ -84,7 +84,7 @@ struct AiraMessagePopup: View {
   private var eyebrowBadge: some View {
     Text(content.eyebrow)
       .font(.system(size: 13, weight: .medium))
-      .foregroundStyle(usesGlass ? .secondary : Color("colorPrimary"))
+      .foregroundStyle(usesGlass ? .secondary : managerTheme.primaryAccent(for: colorScheme))
       .padding(.horizontal, 10)
       .padding(.vertical, 5)
       .background {
@@ -92,11 +92,11 @@ struct AiraMessagePopup: View {
           ZStack {
             Capsule(style: .continuous).fill(.ultraThinMaterial)
             Capsule(style: .continuous).fill(
-              Color("colorPrimary").opacity(isDark ? 0.15 : 0.10))
+              managerTheme.primaryAccent(for: colorScheme).opacity(isDark ? 0.15 : 0.10))
           }
         } else {
           Capsule(style: .continuous)
-            .fill(Color("colorPrimary").opacity(0.12))
+            .fill(managerTheme.primaryAccent(for: colorScheme).opacity(0.12))
         }
       }
       .clipShape(Capsule(style: .continuous))

@@ -56,6 +56,8 @@ struct AppSettings: Codable, Equatable {
   var notchFrostedGlassEnabled: Bool = false
   var pillFrostedGlassEnabled: Bool = false
   var managerInterfaceStyle: ManagerInterfaceStyle = .classic
+  var managerColorPalette: ManagerColorPalette = .aira
+  var managerAccentColorHex: String = ManagerColorPalette.defaultNeutralAccentHex
   var managerTypography: ManagerTypography = .medium
   var liveAnswerDisclosureAccepted: Bool = false
   var hasCompletedInitialPermissionPrompt: Bool = false
@@ -98,6 +100,8 @@ struct AppSettings: Codable, Equatable {
     notchFrostedGlassEnabled: Bool = false,
     pillFrostedGlassEnabled: Bool = false,
     managerInterfaceStyle: ManagerInterfaceStyle = .classic,
+    managerColorPalette: ManagerColorPalette = .aira,
+    managerAccentColorHex: String = ManagerColorPalette.defaultNeutralAccentHex,
     managerTypography: ManagerTypography = .medium,
     liveAnswerDisclosureAccepted: Bool = false,
     hasCompletedInitialPermissionPrompt: Bool = false,
@@ -127,6 +131,8 @@ struct AppSettings: Codable, Equatable {
     self.notchFrostedGlassEnabled = notchFrostedGlassEnabled
     self.pillFrostedGlassEnabled = pillFrostedGlassEnabled
     self.managerInterfaceStyle = managerInterfaceStyle
+    self.managerColorPalette = managerColorPalette
+    self.managerAccentColorHex = managerAccentColorHex
     self.managerTypography = managerTypography
     self.liveAnswerDisclosureAccepted = liveAnswerDisclosureAccepted
     self.hasCompletedInitialPermissionPrompt = hasCompletedInitialPermissionPrompt
@@ -223,6 +229,8 @@ struct AppSettings: Codable, Equatable {
     case notchFrostedGlassEnabled
     case pillFrostedGlassEnabled
     case managerInterfaceStyle
+    case managerColorPalette
+    case managerAccentColorHex
     case managerTypography
     case liveAnswerDisclosureAccepted
     case hasCompletedInitialPermissionPrompt
@@ -279,6 +287,12 @@ struct AppSettings: Codable, Equatable {
     managerInterfaceStyle =
       try container.decodeIfPresent(ManagerInterfaceStyle.self, forKey: .managerInterfaceStyle)
       ?? .classic
+    let rawManagerColorPalette =
+      try container.decodeIfPresent(String.self, forKey: .managerColorPalette)
+    managerColorPalette = ManagerColorPalette(rawValue: rawManagerColorPalette ?? "") ?? .aira
+    managerAccentColorHex =
+      try container.decodeIfPresent(String.self, forKey: .managerAccentColorHex)
+      ?? ManagerColorPalette.migratedAccentHex(fromLegacyRawValue: rawManagerColorPalette)
     managerTypography =
       try container.decodeIfPresent(ManagerTypography.self, forKey: .managerTypography) ?? .medium
     hasCompletedInitialPermissionPrompt =
@@ -326,6 +340,8 @@ struct AppSettings: Codable, Equatable {
     try container.encode(notchFrostedGlassEnabled, forKey: .notchFrostedGlassEnabled)
     try container.encode(pillFrostedGlassEnabled, forKey: .pillFrostedGlassEnabled)
     try container.encode(managerInterfaceStyle, forKey: .managerInterfaceStyle)
+    try container.encode(managerColorPalette, forKey: .managerColorPalette)
+    try container.encode(managerAccentColorHex, forKey: .managerAccentColorHex)
     try container.encode(managerTypography, forKey: .managerTypography)
     try container.encode(
       hasCompletedInitialPermissionPrompt, forKey: .hasCompletedInitialPermissionPrompt)
@@ -458,6 +474,70 @@ enum ManagerInterfaceStyle: String, Codable, CaseIterable {
       return "Keep Aira's current handcrafted manager chrome."
     case .liquidGlass:
       return "Use native glass surfaces with warm Aira accents."
+    }
+  }
+}
+
+enum ManagerColorPalette: String, Codable, CaseIterable {
+  case aira
+  case blue
+  case violet
+
+  static let defaultNeutralAccentHex = "#0A84FF"
+  static let violetAccentHex = "#7459B8"
+
+  init?(rawValue: String) {
+    switch rawValue {
+    case "aira":
+      self = .aira
+    case "neutral", "blue":
+      self = .blue
+    case "violet":
+      self = .violet
+    default:
+      return nil
+    }
+  }
+
+  static func migratedAccentHex(fromLegacyRawValue rawValue: String?) -> String {
+    switch rawValue {
+    case "violet":
+      return violetAccentHex
+    default:
+      return defaultNeutralAccentHex
+    }
+  }
+
+  var settingsTitle: String {
+    switch self {
+    case .aira:
+      return "Aira"
+    case .blue:
+      return "Blue"
+    case .violet:
+      return "Violet"
+    }
+  }
+
+  var settingsDescription: String {
+    switch self {
+    case .aira:
+      return "Sage and terracotta."
+    case .blue:
+      return "White or black with blue accents."
+    case .violet:
+      return "White or black with violet accents."
+    }
+  }
+
+  var lightPreviewColors: [String] {
+    switch self {
+    case .aira:
+      return ["#849688", "#C98B7A"]
+    case .blue:
+      return ["#FFFFFF", "#0A84FF"]
+    case .violet:
+      return ["#FFFFFF", Self.violetAccentHex]
     }
   }
 }

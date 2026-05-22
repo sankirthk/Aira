@@ -44,6 +44,28 @@ struct SidebarView: View {
     managerTheme.usesLiquidGlassMode
   }
 
+  private var sidebarForegroundColor: Color {
+    managerTheme.colorPalette == .aira || colorScheme == .dark ? .white : Color("colorText")
+  }
+
+  private var sidebarMutedForegroundColor: Color {
+    sidebarForegroundColor.opacity(
+      managerTheme.colorPalette == .aira || colorScheme == .dark ? 0.75 : 0.68)
+  }
+
+  private var selectedSidebarForegroundColor: Color {
+    if managerTheme.colorPalette == .aira {
+      return .white
+    }
+    if usesLiquidSidebar {
+      return .white
+    }
+    return managerTheme.readableAccentForeground(
+      for: colorScheme,
+      accent: managerTheme.actionAccent(for: colorScheme)
+    )
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       SidebarChromeBand(
@@ -56,20 +78,8 @@ struct SidebarView: View {
       .frame(height: SidebarChromeMetrics.height)
 
       if sidebarVisible {
-        // MARK: — Section 1: Action buttons
-        VStack(spacing: 8) {
-          Button {
-            onNewScript()
-          } label: {
-            HStack(spacing: 8) {
-              AiraIcon(type: .new, size: 20, color: .white)
-              Text("New Script")
-                .font(.custom("CrimsonText-Regular", size: scaled(16)))
-            }
-          }
-          .buttonStyle(AiraSidebarActionButtonStyle())
-
-          if appState.stealthWarning {
+        if appState.stealthWarning {
+          VStack(spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
               Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 12))
@@ -86,30 +96,20 @@ struct SidebarView: View {
             .background(Color("colorWarm"))
             .clipShape(RoundedRectangle(cornerRadius: 10))
           }
+          .padding(usesLiquidSidebar ? 8 : 18)
+          .padding(.horizontal, usesLiquidSidebar ? 2 : 0)
+          .padding(.bottom, usesLiquidSidebar ? 4 : 0)
         }
-        .padding(usesLiquidSidebar ? 8 : 18)
-        .padding(.horizontal, usesLiquidSidebar ? 2 : 0)
-        .padding(.top, 0)
-        .padding(.bottom, usesLiquidSidebar ? 4 : 0)
-
-        // MARK: — Section 2: Library
-        Text("LIBRARY")
-          .font(.custom("Manrope-Bold", size: scaled(12)))
-          .tracking(1.5)
-          .foregroundStyle(usesLiquidSidebar ? .white.opacity(0.68) : .white.opacity(0.5))
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, usesLiquidSidebar ? 14 : 16)
-          .padding(.top, usesLiquidSidebar ? 10 : 18)
-          .padding(.bottom, 6)
 
         ScrollView {
-          VStack(spacing: usesLiquidSidebar ? 6 : 2) {
+          VStack(spacing: 5) {
             navRow(label: "Scripts", iconType: .script, nav: .allScripts)
             collectionsSection
             starredSection
             recentSection
           }
-          .padding(.horizontal, usesLiquidSidebar ? 6 : 0)
+          .padding(.horizontal, 10)
+          .padding(.top, 16)
         }
         .scrollIndicators(.never)
 
@@ -117,19 +117,22 @@ struct SidebarView: View {
 
         sidebarSeparator()
 
-        // MARK: — Section 3: Preferences
+        // MARK: — Section 3: Settings
         Button {
           onOpenSettings()
         } label: {
           HStack(spacing: 8) {
-            AiraIcon(type: .settings, size: 20, color: .white.opacity(0.85))
-            Text("Preferences")
+            Image(systemName: "gearshape")
+              .font(.system(size: 17, weight: .medium))
+              .foregroundStyle(sidebarForegroundColor.opacity(0.85))
+              .frame(width: 20, height: 20)
+            Text("Settings")
               .font(.custom("CrimsonText-Regular", size: scaled(16)))
-              .foregroundStyle(.white.opacity(0.85))
+              .foregroundStyle(sidebarForegroundColor.opacity(0.85))
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
-          .padding(.vertical, usesLiquidSidebar ? 8 : 12)
+          .padding(.horizontal, 16)
+          .padding(.vertical, 12)
           .modifier(
             SidebarGlassPanelModifier(
               usesLiquidSidebar: usesLiquidSidebar,
@@ -152,8 +155,12 @@ struct SidebarView: View {
           usesLiquidSidebar
             ? (colorScheme == .dark
               ? Color.white.opacity(0.10) : Color(hex: "#627363").opacity(0.35))
-            : Color.black.opacity(0.08),
-          lineWidth: 1
+            : (colorScheme == .dark
+              ? Color.white.opacity(0.20)
+              : (managerTheme.colorPalette == .aira
+                ? Color.black.opacity(0.08)
+                : Color.black.opacity(0.16))),
+          lineWidth: !usesLiquidSidebar && colorScheme == .dark ? 1.25 : 1
         )
     }
   }
@@ -165,6 +172,7 @@ struct SidebarView: View {
   }
 
   private struct SidebarChromeBand: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var sidebarVisible: Bool
     let canGoBack: Bool
     let canGoForward: Bool
@@ -227,7 +235,7 @@ struct SidebarView: View {
         AiraIcon(
           type: icon,
           size: 17,
-          color: Color("colorText").opacity(iconOpacity),
+          color: (colorScheme == .dark ? Color.white : Color("colorText")).opacity(iconOpacity),
           animated: false
         )
         .frame(width: 26, height: 26)
@@ -543,7 +551,7 @@ struct SidebarView: View {
         } label: {
           Image(systemName: "plus")
             .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.6))
+            .foregroundStyle(sidebarMutedForegroundColor)
         }
         .buttonStyle(.plain)
       } toggleAction: {
@@ -583,7 +591,9 @@ struct SidebarView: View {
               } label: {
                 Text(collection.name)
                   .font(.custom("CrimsonText-Regular", size: scaled(15)))
-                  .foregroundStyle(isActive ? .white : .white.opacity(0.75))
+                  .foregroundStyle(
+                    isActive ? selectedSidebarForegroundColor : sidebarMutedForegroundColor
+                  )
                   .lineLimit(nil)
                   .multilineTextAlignment(.leading)
                   .fixedSize(horizontal: false, vertical: true)
@@ -594,10 +604,15 @@ struct SidebarView: View {
               if scriptCount > 0 {
                 Text("\(scriptCount)")
                   .font(.custom("CrimsonText-Regular", size: scaled(12)))
-                  .foregroundStyle(Color("colorBackground"))
+                  .foregroundStyle(
+                    managerTheme.readableAccentForeground(
+                      for: colorScheme,
+                      accent: managerTheme.actionAccent(for: colorScheme)
+                    )
+                  )
                   .padding(.horizontal, 8)
                   .padding(.vertical, 2)
-                  .background(Color("colorSecondary"))
+                  .background(managerTheme.actionAccent(for: colorScheme))
                   .clipShape(Capsule())
               }
 
@@ -606,9 +621,9 @@ struct SidebarView: View {
               } label: {
                 Image(systemName: "xmark")
                   .font(.system(size: 8, weight: .bold))
-                  .foregroundStyle(.white.opacity(0.7))
+                  .foregroundStyle(Color.red.opacity(0.82))
                   .frame(width: 16, height: 16)
-                  .background(Color.white.opacity(0.08))
+                  .background(Color.red.opacity(0.10))
                   .clipShape(Circle())
               }
               .buttonStyle(.plain)
@@ -677,15 +692,15 @@ struct SidebarView: View {
               HStack(spacing: 8) {
                 Text(script.title)
                   .font(.custom("CrimsonText-Regular", size: scaled(15)))
-                  .foregroundStyle(.white.opacity(0.8))
+                  .foregroundStyle(sidebarForegroundColor.opacity(0.88))
                   .lineLimit(1)
                 Spacer()
                 Text(script.lastEdited.formatted(.dateTime.month(.abbreviated).day()))
                   .font(.custom("CrimsonText-Regular", size: scaled(11)))
-                  .foregroundStyle(.white.opacity(0.55))
+                  .foregroundStyle(sidebarMutedForegroundColor.opacity(0.78))
                   .padding(.horizontal, 6)
                   .padding(.vertical, 2)
-                  .background(Color.white.opacity(0.08))
+                  .background(managerTheme.controlFill(for: colorScheme).opacity(0.72))
                   .clipShape(RoundedRectangle(cornerRadius: 5))
               }
               .frame(maxWidth: .infinity, alignment: .leading)
@@ -695,9 +710,15 @@ struct SidebarView: View {
             Button {
               toggleStarred(script.id)
             } label: {
-              AiraIcon(type: .star, size: 18, color: .white, animated: false, filled: true)
-                .opacity(0.9)
-                .frame(width: 22, height: 22)
+              AiraIcon(
+                type: .star,
+                size: 18,
+                color: managerTheme.actionAccent(for: colorScheme),
+                animated: false,
+                filled: true
+              )
+              .opacity(0.9)
+              .frame(width: 22, height: 22)
             }
             .buttonStyle(.plain)
             .help("Unstar")
@@ -709,6 +730,7 @@ struct SidebarView: View {
         }
       }
     }
+    .padding(.top, 6)
   }
 
   @ViewBuilder
@@ -737,15 +759,15 @@ struct SidebarView: View {
             HStack(spacing: 8) {
               Text(script.title)
                 .font(.custom("CrimsonText-Regular", size: scaled(15)))
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(sidebarForegroundColor.opacity(0.88))
                 .lineLimit(1)
               Spacer()
               Text(script.lastEdited.formatted(.dateTime.month(.abbreviated).day()))
                 .font(.custom("CrimsonText-Regular", size: scaled(11)))
-                .foregroundStyle(.white.opacity(0.55))
+                .foregroundStyle(sidebarMutedForegroundColor.opacity(0.78))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.white.opacity(0.08))
+                .background(managerTheme.controlFill(for: colorScheme).opacity(0.72))
                 .clipShape(RoundedRectangle(cornerRadius: 5))
             }
             .padding(.leading, 40)
@@ -757,6 +779,7 @@ struct SidebarView: View {
         }
       }
     }
+    .padding(.top, 8)
   }
 
   private func sectionHeader<TrailingAccessory: View>(
@@ -770,15 +793,15 @@ struct SidebarView: View {
     HStack(spacing: 8) {
       Button(action: toggleAction) {
         HStack(spacing: 8) {
-          AiraIcon(type: iconType, size: 20, color: .white, filled: filledIcon)
+          AiraIcon(type: iconType, size: 20, color: sidebarForegroundColor, filled: filledIcon)
           Text(title)
             .font(.custom("CrimsonText-Regular", size: scaled(16)))
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(sidebarForegroundColor.opacity(0.9))
             .lineLimit(1)
           Spacer(minLength: 2)
           Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.5))
+            .foregroundStyle(sidebarMutedForegroundColor.opacity(0.75))
             .frame(width: 12, height: 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -788,8 +811,8 @@ struct SidebarView: View {
       trailingAccessory()
         .frame(width: 16)
     }
-    .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
-    .padding(.vertical, usesLiquidSidebar ? 6 : 8)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 8)
   }
 
   private func collectionDropBinding(for collectionID: UUID) -> Binding<Bool> {
@@ -946,14 +969,14 @@ struct SidebarView: View {
       HStack(spacing: 8) {
         AiraIcon(
           type: iconType, size: 20,
-          color: isActive ? .white : .white.opacity(0.7))
+          color: isActive ? selectedSidebarForegroundColor : sidebarMutedForegroundColor)
         Text(label)
           .font(.custom("CrimsonText-Regular", size: scaled(16)))
-          .foregroundStyle(isActive ? .white : .white.opacity(0.75))
+          .foregroundStyle(isActive ? selectedSidebarForegroundColor : sidebarMutedForegroundColor)
         Spacer()
       }
-      .padding(.horizontal, usesLiquidSidebar ? 10 : 16)
-      .padding(.vertical, usesLiquidSidebar ? 8 : 8)
+      .padding(.horizontal, 16)
+      .padding(.vertical, 8)
       .frame(maxWidth: .infinity)
       .modifier(
         SidebarNavRowGlassModifier(
@@ -964,7 +987,7 @@ struct SidebarView: View {
       .overlay(alignment: .leading) {
         if usesLiquidSidebar && isActive {
           Capsule()
-            .fill(Color("colorSecondary"))
+            .fill(managerTheme.actionAccent(for: colorScheme))
             .frame(width: 4, height: 22)
             .padding(.leading, 6)
             .allowsHitTesting(false)
@@ -1019,6 +1042,8 @@ private struct SidebarGlassPanelModifier: ViewModifier {
 /// Nav row styling: active rows get terracotta tint fill, inactive rows are transparent.
 /// No glassEffect — relies on the outer sidebar glass layer.
 private struct SidebarNavRowGlassModifier: ViewModifier {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   let usesLiquidSidebar: Bool
   let isActive: Bool
 
@@ -1029,7 +1054,8 @@ private struct SidebarNavRowGlassModifier: ViewModifier {
     if usesLiquidSidebar {
       let bgColor: Color = {
         if isActive {
-          return Color("colorSecondary").opacity(0.25)
+          return managerTheme.actionAccent(for: colorScheme)
+            .opacity(colorScheme == .dark ? 0.48 : 0.62)
         } else if isHovered {
           return Color.white.opacity(0.10)
         } else {
@@ -1038,7 +1064,7 @@ private struct SidebarNavRowGlassModifier: ViewModifier {
       }()
       let strokeColor: Color =
         isActive
-        ? Color("colorSecondary").opacity(0.45)
+        ? managerTheme.actionAccent(for: colorScheme).opacity(0.70)
         : (isHovered ? Color.white.opacity(0.12) : Color.clear)
       content
         .background(
@@ -1052,15 +1078,39 @@ private struct SidebarNavRowGlassModifier: ViewModifier {
         .onHover { hovering in isHovered = hovering }
         .animation(.easeOut(duration: 0.15), value: isHovered)
     } else {
+      let bgColor: Color = {
+        if isActive {
+          return managerTheme.colorPalette == .aira
+            ? managerTheme.actionAccent(for: colorScheme)
+              .opacity(colorScheme == .dark ? 0.74 : 0.92)
+            : managerTheme.actionAccent(for: colorScheme)
+        }
+        if isHovered {
+          return managerTheme.colorPalette == .aira
+            ? Color.white.opacity(0.10)
+            : Color("colorText").opacity(0.06)
+        }
+        return Color.clear
+      }()
       content
-        .background(isActive ? Color.white.opacity(0.15) : Color.clear)
+        .background(bgColor)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+          if managerTheme.colorPalette == .aira && isActive {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+              .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+          }
+        }
+        .onHover { hovering in isHovered = hovering }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
   }
 }
 
 /// Collection row styling with drop-target highlight. No glassEffect — uses translucent fills.
 private struct SidebarCollectionRowGlassModifier: ViewModifier {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   let usesLiquidSidebar: Bool
   let isActive: Bool
   let isDropTarget: Bool
@@ -1071,13 +1121,18 @@ private struct SidebarCollectionRowGlassModifier: ViewModifier {
   func body(content: Content) -> some View {
     if usesLiquidSidebar {
       let bgColor: Color = {
-        if isDropTarget { return Color("colorSecondary").opacity(0.30) }
-        if isActive { return Color("colorSecondary").opacity(0.20) }
+        if isDropTarget { return managerTheme.actionAccent(for: colorScheme).opacity(0.30) }
+        if isActive {
+          return managerTheme.actionAccent(for: colorScheme)
+            .opacity(colorScheme == .dark ? 0.44 : 0.56)
+        }
         if isHovered { return Color.white.opacity(0.08) }
         return Color.clear
       }()
       let strokeColor: Color = {
-        if isDropTarget || isActive { return Color("colorSecondary").opacity(0.35) }
+        if isDropTarget || isActive {
+          return managerTheme.actionAccent(for: colorScheme).opacity(0.62)
+        }
         if isHovered { return Color.white.opacity(0.10) }
         return Color.clear
       }()
@@ -1095,11 +1150,30 @@ private struct SidebarCollectionRowGlassModifier: ViewModifier {
     } else {
       let fill: Color = {
         if isDropTarget { return Color.white.opacity(0.22) }
-        return isActive ? Color.white.opacity(0.15) : Color.clear
+        if isActive {
+          return managerTheme.colorPalette == .aira
+            ? managerTheme.actionAccent(for: colorScheme)
+              .opacity(colorScheme == .dark ? 0.74 : 0.92)
+            : managerTheme.actionAccent(for: colorScheme)
+        }
+        if isHovered {
+          return managerTheme.colorPalette == .aira
+            ? Color.white.opacity(0.10)
+            : Color("colorText").opacity(0.06)
+        }
+        return Color.clear
       }()
       content
         .background(fill)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay {
+          if managerTheme.colorPalette == .aira && isActive {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+              .strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+          }
+        }
+        .onHover { hovering in isHovered = hovering }
+        .animation(.easeOut(duration: 0.12), value: isHovered)
     }
   }
 }

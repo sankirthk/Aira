@@ -33,13 +33,19 @@ enum ManagerThemePolicy {
 
 struct ManagerTheme: Equatable {
   let interfaceStyle: ManagerInterfaceStyle
+  let colorPalette: ManagerColorPalette
+  let accentColorHex: String
   let surfaceTreatment: ManagerSurfaceTreatment
 
   init(
     interfaceStyle: ManagerInterfaceStyle,
+    colorPalette: ManagerColorPalette = .aira,
+    accentColorHex: String = ManagerColorPalette.defaultNeutralAccentHex,
     operatingSystemMajorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
   ) {
     self.interfaceStyle = interfaceStyle
+    self.colorPalette = colorPalette
+    self.accentColorHex = accentColorHex
     self.surfaceTreatment = ManagerThemePolicy.surfaceTreatment(
       for: interfaceStyle,
       operatingSystemMajorVersion: operatingSystemMajorVersion
@@ -49,19 +55,171 @@ struct ManagerTheme: Equatable {
   var usesLiquidGlassMode: Bool {
     interfaceStyle == .liquidGlass
   }
+
+  func primaryAccent(for colorScheme: ColorScheme) -> Color {
+    colorPalette.primaryAccent(for: colorScheme, accentColorHex: accentColorHex)
+  }
+
+  func secondaryAccent(for colorScheme: ColorScheme) -> Color {
+    colorPalette.secondaryAccent(for: colorScheme, accentColorHex: accentColorHex)
+  }
+
+  func secondaryTextAccent(for colorScheme: ColorScheme) -> Color {
+    colorPalette.secondaryTextAccent(for: colorScheme, accentColorHex: accentColorHex)
+  }
+
+  func actionAccent(for colorScheme: ColorScheme) -> Color {
+    colorPalette == .aira
+      ? secondaryAccent(for: colorScheme)
+      : primaryAccent(for: colorScheme)
+  }
+
+  func classicSelectedActionFill(for colorScheme: ColorScheme, isPressed: Bool = false) -> Color {
+    let accent = actionAccent(for: colorScheme)
+    if colorPalette == .aira {
+      return accent.opacity(isPressed ? 0.82 : (colorScheme == .dark ? 0.74 : 0.92))
+    }
+    return accent.opacity(isPressed ? 0.82 : 1)
+  }
+
+  func sidebarFill(for colorScheme: ColorScheme) -> Color {
+    colorPalette.sidebarFill(for: colorScheme)
+  }
+
+  func windowSubstrate(for colorScheme: ColorScheme) -> Color {
+    colorPalette.windowSubstrate(for: colorScheme)
+  }
+
+  func contentBackground(for colorScheme: ColorScheme) -> Color {
+    colorPalette.contentBackground(for: colorScheme)
+  }
+
+  func surfaceFill(for colorScheme: ColorScheme) -> Color {
+    colorPalette.surfaceFill(for: colorScheme)
+  }
+
+  func controlFill(for colorScheme: ColorScheme) -> Color {
+    colorPalette.controlFill(for: colorScheme)
+  }
+
+  func readableAccentForeground(for colorScheme: ColorScheme, accent: Color) -> Color {
+    colorPalette == .aira || colorPalette == .blue || colorScheme == .dark
+      ? .white : accent.readableTextColor
+  }
 }
 
 enum ManagerClassicAccentPalette {
-  static func primary(for colorScheme: ColorScheme) -> Color {
-    colorScheme == .dark ? Color(hex: "#5F755F") : Color("colorPrimary")
+  static func primary(for colorScheme: ColorScheme, palette: ManagerColorPalette = .aira) -> Color {
+    palette.primaryAccent(for: colorScheme)
   }
 
-  static func secondary(for colorScheme: ColorScheme) -> Color {
-    colorScheme == .dark ? Color(hex: "#A96A60") : Color("colorSecondary")
+  static func secondary(for colorScheme: ColorScheme, palette: ManagerColorPalette = .aira) -> Color
+  {
+    palette.secondaryAccent(for: colorScheme)
   }
 
-  static func secondaryText(for colorScheme: ColorScheme) -> Color {
-    colorScheme == .dark ? Color(hex: "#D99B90") : Color("colorSecondary")
+  static func secondaryText(for colorScheme: ColorScheme, palette: ManagerColorPalette = .aira)
+    -> Color
+  {
+    palette.secondaryTextAccent(for: colorScheme)
+  }
+}
+
+extension ManagerColorPalette {
+  func primaryAccent(
+    for colorScheme: ColorScheme,
+    accentColorHex: String = ManagerColorPalette.defaultNeutralAccentHex
+  ) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#7A9278") : Color("colorPrimary")
+    case .blue:
+      return Color(hex: "#0A84FF")
+    case .violet:
+      return Color(hex: ManagerColorPalette.violetAccentHex)
+    }
+  }
+
+  func secondaryAccent(
+    for colorScheme: ColorScheme,
+    accentColorHex: String = ManagerColorPalette.defaultNeutralAccentHex
+  ) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#DE917F") : Color("colorSecondary")
+    case .blue:
+      return Color(hex: "#0A84FF")
+    case .violet:
+      return Color(hex: ManagerColorPalette.violetAccentHex)
+    }
+  }
+
+  func secondaryTextAccent(
+    for colorScheme: ColorScheme,
+    accentColorHex: String = ManagerColorPalette.defaultNeutralAccentHex
+  ) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#F0AA9A") : Color("colorSecondary")
+    case .blue:
+      return Color(hex: "#0A84FF")
+    case .violet:
+      return Color(hex: ManagerColorPalette.violetAccentHex)
+    }
+  }
+
+  func sidebarFill(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#26372D") : Color("colorPrimary")
+    case .blue, .violet:
+      return colorScheme == .dark ? Color(hex: "#2B2B2B") : Color.white
+    }
+  }
+
+  func windowSubstrate(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#223126") : Color(hex: "#849688")
+    case .blue, .violet:
+      return colorScheme == .dark ? Color(hex: "#242424") : Color.white
+    }
+  }
+
+  func contentBackground(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#26382C") : Color("colorBackground")
+    case .blue, .violet:
+      return colorScheme == .dark ? Color(hex: "#2A2A2A") : Color.white
+    }
+  }
+
+  func surfaceFill(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#2B3E32") : Color("colorSurface")
+    case .blue, .violet:
+      return colorScheme == .dark ? Color(hex: "#303030") : Color.white
+    }
+  }
+
+  func controlFill(for colorScheme: ColorScheme) -> Color {
+    switch self {
+    case .aira:
+      return colorScheme == .dark ? Color(hex: "#31463A") : Color("colorBackground")
+    case .blue, .violet:
+      return colorScheme == .dark ? Color(hex: "#363636") : Color(hex: "#F6F7F9")
+    }
+  }
+
+  var classicContentSurface: Color {
+    switch self {
+    case .aira:
+      return Color("colorBackground")
+    case .blue, .violet:
+      return Color.white
+    }
   }
 }
 
@@ -97,27 +255,53 @@ struct ManagerSurfaceModifier: ViewModifier {
   let strokeOpacity: Double
 
   private var isDark: Bool { colorScheme == .dark }
+  private var usesAiraDarkGlass: Bool {
+    isDark && managerTheme.colorPalette == .aira && managerTheme.usesLiquidGlassMode
+  }
 
   @ViewBuilder
   func body(content: Content) -> some View {
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    let resolvedClassicFill =
+      managerTheme.colorPalette == .aira ? classicFill : managerTheme.surfaceFill(for: colorScheme)
+    let resolvedClassicStroke =
+      managerTheme.colorPalette == .aira
+      ? Color("colorText").opacity(strokeOpacity)
+      : Color("colorText").opacity(isDark ? max(strokeOpacity, 0.18) : strokeOpacity)
 
     switch managerTheme.surfaceTreatment {
     case .classic:
       content
-        .background(classicFill)
+        .background(resolvedClassicFill)
         .clipShape(shape)
-        .overlay(shape.stroke(Color("colorText").opacity(strokeOpacity), lineWidth: 1.5))
+        .overlay(shape.stroke(resolvedClassicStroke, lineWidth: isDark ? 1.25 : 1.5))
     case .materialFallback:
       content
-        .background(.regularMaterial, in: shape)
+        .background {
+          ZStack {
+            if usesAiraDarkGlass {
+              shape.fill(managerTheme.surfaceFill(for: colorScheme))
+            } else {
+              shape.fill(.regularMaterial)
+              shape.fill(managerTheme.surfaceFill(for: colorScheme).opacity(isDark ? 0.82 : 0.0))
+            }
+          }
+        }
+        .clipShape(shape)
         .overlay(shape.stroke(Color("colorText").opacity(max(strokeOpacity, 0.14)), lineWidth: 1))
     case .nativeGlass:
       content
         .background {
           ZStack {
-            shape.fill(.ultraThinMaterial)
-            shape.fill(isDark ? Color.black.opacity(0.18) : Color.white.opacity(0.55))
+            if !usesAiraDarkGlass {
+              shape.fill(.ultraThinMaterial)
+            }
+            shape.fill(
+              usesAiraDarkGlass
+                ? managerTheme.surfaceFill(for: colorScheme)
+                : isDark
+                  ? managerTheme.surfaceFill(for: colorScheme).opacity(0.86)
+                  : Color.white.opacity(0.55))
           }
         }
         .clipShape(shape)
@@ -199,7 +383,7 @@ struct ManagerSidebarBackgroundModifier: ViewModifier {
 
   private var isDark: Bool { colorScheme == .dark }
   private var classicSidebarFill: Color {
-    isDark ? Color(hex: "#374A3D") : ManagerClassicAccentPalette.primary(for: colorScheme)
+    managerTheme.sidebarFill(for: colorScheme)
   }
 
   @ViewBuilder
@@ -209,7 +393,11 @@ struct ManagerSidebarBackgroundModifier: ViewModifier {
       content.background {
         ZStack {
           classicSidebarFill
-          Color.black.opacity(0.08)
+          if managerTheme.colorPalette == .aira {
+            Color.black.opacity(0.08)
+          } else if isDark {
+            Color.white.opacity(0.01)
+          }
         }
       }
     case .materialFallback:
@@ -255,8 +443,33 @@ struct ManagerSidebarBackgroundModifier: ViewModifier {
 
   private var lightLiquidSidebarFill: some View {
     ZStack {
-      Color("colorPrimary")
-      Color.black.opacity(0.08)
+      if managerTheme.colorPalette == .aira {
+        managerTheme.sidebarFill(for: colorScheme)
+        Color.black.opacity(0.08)
+      } else {
+        Rectangle()
+          .fill(.ultraThinMaterial)
+        Color.white.opacity(0.64)
+        LinearGradient(
+          colors: [
+            Color.white.opacity(0.60),
+            managerTheme.primaryAccent(for: colorScheme).opacity(0.035),
+            Color.white.opacity(0.50),
+          ],
+          startPoint: .topLeading,
+          endPoint: .bottomTrailing
+        )
+        RadialGradient(
+          colors: [
+            managerTheme.primaryAccent(for: colorScheme).opacity(0.080),
+            managerTheme.secondaryAccent(for: colorScheme).opacity(0.035),
+            .clear,
+          ],
+          center: .topLeading,
+          startRadius: 8,
+          endRadius: 260
+        )
+      }
     }
   }
 
@@ -264,11 +477,20 @@ struct ManagerSidebarBackgroundModifier: ViewModifier {
   private var darkLiquidSidebarGlass: some View {
     if #available(macOS 26.0, *) {
       ZStack {
-        sidebarBrandGradient
+        if managerTheme.colorPalette == .aira {
+          sidebarBrandGradient
+        } else {
+          neutralLiquidSidebarGlass
+        }
         Rectangle()
-          .fill(Color("colorPrimary").opacity(0.06))
+          .fill(
+            managerTheme.primaryAccent(for: colorScheme).opacity(
+              managerTheme.colorPalette == .aira ? 0.018 : 0.010)
+          )
           .glassEffect(
-            .regular.tint(Color("colorPrimary").opacity(0.18)),
+            .regular.tint(
+              managerTheme.primaryAccent(for: colorScheme).opacity(
+                managerTheme.colorPalette == .aira ? 0.045 : 0.0)),
             in: Rectangle()
           )
       }
@@ -279,18 +501,21 @@ struct ManagerSidebarBackgroundModifier: ViewModifier {
 
   private var sidebarBrandGradient: some View {
     ZStack {
-      Color.black.opacity(isDark ? 0.38 : 0.22)
+      Color.black.opacity(isDark ? (managerTheme.colorPalette == .aira ? 0.08 : 0.62) : 0.22)
       LinearGradient(
         colors: isDark
           ? [
-            Color("colorPrimary").opacity(0.72),
-            Color("colorPrimary").opacity(0.55),
-            Color("colorSecondary").opacity(0.20),
+            managerTheme.sidebarFill(for: colorScheme).opacity(
+              managerTheme.colorPalette == .aira ? 0.98 : 0.50),
+            managerTheme.primaryAccent(for: colorScheme).opacity(
+              managerTheme.colorPalette == .aira ? 0.14 : 0.12),
+            managerTheme.secondaryAccent(for: colorScheme).opacity(
+              managerTheme.colorPalette == .aira ? 0.06 : 0.06),
           ]
           : [
-            Color("colorPrimary").opacity(0.65),
-            Color("colorPrimary").opacity(0.55),
-            Color("colorSecondary").opacity(0.22),
+            managerTheme.sidebarFill(for: colorScheme).opacity(0.95),
+            managerTheme.primaryAccent(for: colorScheme).opacity(0.18),
+            managerTheme.secondaryAccent(for: colorScheme).opacity(0.14),
           ],
         startPoint: .top,
         endPoint: .bottom
@@ -298,18 +523,50 @@ struct ManagerSidebarBackgroundModifier: ViewModifier {
     }
   }
 
+  private var neutralLiquidSidebarGlass: some View {
+    ZStack {
+      Color(hex: "#2B2B2B").opacity(0.70)
+      Rectangle()
+        .fill(.ultraThinMaterial)
+      LinearGradient(
+        colors: [
+          Color.white.opacity(0.050),
+          Color.black.opacity(0.10),
+          Color.white.opacity(0.030),
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      RadialGradient(
+        colors: [
+          managerTheme.primaryAccent(for: colorScheme).opacity(0.035),
+          managerTheme.secondaryAccent(for: colorScheme).opacity(0.018),
+          .clear,
+        ],
+        center: .topLeading,
+        startRadius: 12,
+        endRadius: 280
+      )
+    }
+  }
+
   private var sidebarMaterialBackground: some View {
     Rectangle()
-      .fill(Color("colorPrimary").opacity(0.44))
+      .fill(
+        managerTheme.sidebarFill(for: colorScheme).opacity(
+          managerTheme.colorPalette == .aira ? (isDark ? 0.94 : 0.74) : (isDark ? 0.58 : 0.46))
+      )
       .background(.ultraThinMaterial)
       .overlay {
         Rectangle()
           .fill(
             LinearGradient(
               colors: [
-                Color("colorPrimary").opacity(0.18),
-                Color(hex: "#758573").opacity(0.24),
-                Color(hex: "#56634F").opacity(0.30),
+                managerTheme.primaryAccent(for: colorScheme).opacity(
+                  managerTheme.colorPalette == .aira ? (isDark ? 0.06 : 0.18) : 0.055),
+                managerTheme.sidebarFill(for: colorScheme).opacity(0.28),
+                managerTheme.secondaryAccent(for: colorScheme).opacity(
+                  managerTheme.colorPalette == .aira ? (isDark ? 0.04 : 0.16) : 0.035),
               ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing

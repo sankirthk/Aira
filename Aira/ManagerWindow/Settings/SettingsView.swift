@@ -58,6 +58,7 @@ private enum SettingsFontRole {
 
   func font(size: CGFloat, usesGlass: Bool) -> Font {
     guard usesGlass else {
+      let size = classicSize(for: size)
       switch self {
       case .display:
         return .custom("IndieFlower", size: size)
@@ -68,6 +69,7 @@ private enum SettingsFontRole {
       }
     }
 
+    let size = glassSize(for: size)
     switch self {
     case .display:
       return .system(size: size, weight: .medium, design: .default)
@@ -77,6 +79,44 @@ private enum SettingsFontRole {
       return .system(size: size, weight: .medium, design: .default)
     case .compact:
       return .system(size: size, weight: .regular, design: .default)
+    }
+  }
+
+  private func classicSize(for requestedSize: CGFloat) -> CGFloat {
+    switch self {
+    case .display:
+      if requestedSize >= 28 { return 28 }
+      if requestedSize >= 20 { return 22 }
+      return 14
+    case .body:
+      if requestedSize >= 17 { return 18 }
+      if requestedSize >= 15 { return 16 }
+      return 14
+    case .bodyBold:
+      if requestedSize >= 17 { return 18 }
+      if requestedSize >= 15 { return 16 }
+      return 14
+    case .compact:
+      return 11
+    }
+  }
+
+  private func glassSize(for requestedSize: CGFloat) -> CGFloat {
+    switch self {
+    case .display:
+      if requestedSize >= 28 { return 24 }
+      if requestedSize >= 20 { return 20 }
+      return 12
+    case .body:
+      if requestedSize >= 17 { return 16 }
+      if requestedSize >= 15 { return 15 }
+      return 13
+    case .bodyBold:
+      if requestedSize >= 17 { return 16 }
+      if requestedSize >= 15 { return 15 }
+      return 13
+    case .compact:
+      return 12
     }
   }
 }
@@ -106,7 +146,35 @@ enum SettingsChromePalette {
   static let liquidGlassPanelTintOpacity = 0.16
 
   static func classicSurface(appearanceMode: AppearanceMode) -> Color {
-    appearanceMode == .dark ? Color(hex: classicDarkSurfaceHex) : Color("colorBackground")
+    classicSurface(appearanceMode: appearanceMode, palette: .aira)
+  }
+
+  static func classicSurface(
+    appearanceMode: AppearanceMode,
+    palette: ManagerColorPalette
+  ) -> Color {
+    classicSurface(
+      appearanceMode: appearanceMode,
+      palette: palette,
+      colorScheme: appearanceMode == .dark ? .dark : .light
+    )
+  }
+
+  static func classicSurface(
+    appearanceMode: AppearanceMode,
+    palette: ManagerColorPalette,
+    colorScheme: ColorScheme
+  ) -> Color {
+    colorScheme == .dark ? palette.windowSubstrate(for: .dark) : palette.classicContentSurface
+  }
+
+  static func liquidGlassSubstrate(
+    appearanceMode: AppearanceMode,
+    palette: ManagerColorPalette,
+    colorScheme: ColorScheme
+  ) -> Color {
+    colorScheme == .dark
+      ? palette.windowSubstrate(for: .dark) : palette.windowSubstrate(for: .light)
   }
 }
 
@@ -117,6 +185,7 @@ enum SettingsLayoutParity {
   static let sectionTitleHeight: CGFloat = 34
   static let sectionDescriptionHeight: CGFloat = 40
   static let appearanceThemeCardHeight: CGFloat = 160
+  static let paletteCardHeight: CGFloat = 58
   static let managerInterfaceCardHeight: CGFloat = 92
   static let typographyControlHeight: CGFloat = 46
 }
@@ -209,6 +278,7 @@ private struct SettingsColorPanelButtonBridge: NSViewRepresentable {
 struct SettingsView: View {
   @EnvironmentObject var appState: AppState
   @Environment(\.dismiss) var dismiss
+  @Environment(\.colorScheme) private var colorScheme
   @State private var activeTab: SettingsTab = .appearance
   var availableSize: CGSize? = nil
   var onClose: (() -> Void)? = nil
@@ -230,24 +300,53 @@ struct SettingsView: View {
     appState.settings.managerInterfaceStyle == .liquidGlass
   }
 
+  private var resolvedManagerColorScheme: ColorScheme {
+    switch appState.settings.appearanceMode {
+    case .light:
+      return .light
+    case .dark:
+      return .dark
+    case .system:
+      return colorScheme
+    }
+  }
+
+  private var activeManagerTheme: ManagerTheme {
+    ManagerTheme(
+      interfaceStyle: appState.settings.managerInterfaceStyle,
+      colorPalette: appState.settings.managerColorPalette,
+      accentColorHex: appState.settings.managerAccentColorHex
+    )
+  }
+
   private var topChromeColor: Color {
     if usesLiquidGlassMode {
       return settingsLiquidGlassSubstrateColor
     }
 
-    return SettingsChromePalette.classicSurface(appearanceMode: appState.settings.appearanceMode)
+    return SettingsChromePalette.classicSurface(
+      appearanceMode: appState.settings.appearanceMode,
+      palette: appState.settings.managerColorPalette,
+      colorScheme: resolvedManagerColorScheme
+    )
   }
 
   private var settingsLiquidGlassSubstrateColor: Color {
-    appState.settings.appearanceMode == .dark
-      ? Color(hex: SettingsChromePalette.liquidGlassDarkSurfaceHex)
-      : Color(hex: SettingsChromePalette.liquidGlassLightSurfaceHex)
+    SettingsChromePalette.liquidGlassSubstrate(
+      appearanceMode: appState.settings.appearanceMode,
+      palette: appState.settings.managerColorPalette,
+      colorScheme: resolvedManagerColorScheme
+    )
   }
 
   private var settingsContentBackgroundColor: Color {
     usesLiquidGlassMode
       ? settingsLiquidGlassSubstrateColor
-      : SettingsChromePalette.classicSurface(appearanceMode: appState.settings.appearanceMode)
+      : SettingsChromePalette.classicSurface(
+        appearanceMode: appState.settings.appearanceMode,
+        palette: appState.settings.managerColorPalette,
+        colorScheme: resolvedManagerColorScheme
+      )
   }
 
   var body: some View {
@@ -262,7 +361,7 @@ struct SettingsView: View {
       )
       .environment(
         \.managerTheme,
-        ManagerTheme(interfaceStyle: appState.settings.managerInterfaceStyle)
+        activeManagerTheme
       )
       .modifier(
         SettingsChromeModifier(
@@ -318,14 +417,19 @@ struct SettingsView: View {
           .foregroundStyle(
             appState.settings.appearanceMode == .dark
               ? Color.white
-              : (isActive ? Color.white : Color("colorText").opacity(0.82))
+              : (isActive
+                ? activeManagerTheme.readableAccentForeground(
+                  for: colorScheme,
+                  accent: activeManagerTheme.primaryAccent(for: colorScheme)
+                )
+                : Color("colorText").opacity(0.82))
           )
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 14)
       .padding(.vertical, 14)
-      .background(isActive ? Color("colorPrimary") : Color.clear)
+      .background(isActive ? activeManagerTheme.primaryAccent(for: colorScheme) : Color.clear)
       .clipShape(RoundedRectangle(cornerRadius: 16))
       .shadow(color: Color("colorText").opacity(isActive ? 0.15 : 0), radius: 8, y: 8)
     }
@@ -534,13 +638,16 @@ private struct SettingsPanel<Content: View>: View {
           ZStack {
             shape.fill(.ultraThinMaterial)
             shape.fill(
-              colorScheme == .dark
-                ? Color.black.opacity(SettingsChromePalette.liquidGlassPanelTintOpacity)
-                : Color.white.opacity(SettingsChromePalette.liquidGlassPanelTintOpacity)
+              managerTheme.colorPalette == .aira
+                ? (colorScheme == .dark
+                  ? Color.black.opacity(SettingsChromePalette.liquidGlassPanelTintOpacity)
+                  : Color.white.opacity(SettingsChromePalette.liquidGlassPanelTintOpacity))
+                : managerTheme.surfaceFill(for: colorScheme).opacity(
+                  colorScheme == .dark ? 0.62 : 0.82)
             )
           }
         } else {
-          shape.fill(Color("colorSurface").opacity(0.82))
+          shape.fill(managerTheme.surfaceFill(for: colorScheme).opacity(0.92))
         }
       }
       .clipShape(shape)
@@ -573,6 +680,9 @@ private struct FieldLabel: View {
 }
 
 private struct FrostedGlassToggleRow: View {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
   let title: String
   var description: String? = nil
   @Binding var isOn: Bool
@@ -593,7 +703,7 @@ private struct FrostedGlassToggleRow: View {
       Spacer()
       Toggle("", isOn: $isOn)
         .toggleStyle(.switch)
-        .tint(Color("colorPrimary"))
+        .tint(managerTheme.primaryAccent(for: colorScheme))
         .labelsHidden()
     }
   }
@@ -604,6 +714,9 @@ private struct FrostedGlassToggleRow: View {
 /// Displays a keyboard shortcut as styled keycaps.
 /// Tap to enter recording mode; press the new combo to save; press Escape or click away to cancel.
 private struct ShortcutKeyCapsField: View {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
   @Binding var shortcut: String
   @State private var isRecording = false
   @State private var keyMonitor: Any?
@@ -613,14 +726,14 @@ private struct ShortcutKeyCapsField: View {
       if isRecording {
         Text("Type shortcut…")
           .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(Color("colorPrimary"))
+          .foregroundStyle(managerTheme.primaryAccent(for: colorScheme))
           .padding(.horizontal, 14)
           .padding(.vertical, 9)
-          .background(Color("colorBackground"))
+          .background(managerTheme.controlFill(for: colorScheme))
           .clipShape(RoundedRectangle(cornerRadius: 10))
           .overlay(
             RoundedRectangle(cornerRadius: 10)
-              .stroke(Color("colorPrimary"), lineWidth: 2))
+              .stroke(managerTheme.primaryAccent(for: colorScheme), lineWidth: 2))
       } else {
         ShortcutKeyCapsView(shortcut: shortcut)
           .onTapGesture { startRecording() }
@@ -734,6 +847,9 @@ private struct KeyCapView: View {
 // MARK: - System Font Picker
 
 private struct SystemFontPicker: View {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
   @Binding var selectedFont: String
   @State private var isExpanded = false
 
@@ -760,7 +876,7 @@ private struct SystemFontPicker: View {
         .contentShape(Rectangle())
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color("colorBackground"))
+        .background(managerTheme.controlFill(for: colorScheme))
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
           RoundedRectangle(cornerRadius: 14)
@@ -787,18 +903,19 @@ private struct SystemFontPicker: View {
                   if selectedFont == family {
                     Image(systemName: "checkmark")
                       .font(.system(size: 12, weight: .semibold))
-                      .foregroundStyle(Color("colorPrimary"))
+                      .foregroundStyle(managerTheme.primaryAccent(for: colorScheme))
                   }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color("colorBackground").opacity(0.92))
+                .background(managerTheme.controlFill(for: colorScheme).opacity(0.92))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(
                   RoundedRectangle(cornerRadius: 12)
                     .stroke(
                       selectedFont == family
-                        ? Color("colorPrimary") : Color("colorText").opacity(0.08),
+                        ? managerTheme.primaryAccent(for: colorScheme)
+                        : Color("colorText").opacity(0.08),
                       lineWidth: selectedFont == family ? 2 : 1
                     )
                 )
@@ -809,7 +926,7 @@ private struct SystemFontPicker: View {
           .padding(8)
         }
         .frame(maxHeight: 220)
-        .background(Color("colorSurface").opacity(0.72))
+        .background(managerTheme.surfaceFill(for: colorScheme).opacity(0.72))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
           RoundedRectangle(cornerRadius: 16)
@@ -836,6 +953,8 @@ private struct SystemFontPicker: View {
 
 private struct AppearanceTabContent: View {
   @EnvironmentObject var appState: AppState
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
   private let sizes: [(String, ManagerTypography)] = [
     ("Small", .small), ("Medium", .medium), ("Large", .large),
@@ -870,6 +989,28 @@ private struct AppearanceTabContent: View {
             Color(hex: "#2B2B2B"), .dark)
         }
         .padding(.top, 14)
+      }
+
+      SettingsPanel {
+        SectionTitle(text: "Palette")
+        Text("Choose Aira's signature palette, or a neutral app with blue or violet accents.")
+          .settingsFont(.body, size: 16)
+          .foregroundStyle(Color("colorText").opacity(0.68))
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(
+            maxWidth: .infinity,
+            minHeight: SettingsLayoutParity.sectionDescriptionHeight,
+            maxHeight: SettingsLayoutParity.sectionDescriptionHeight,
+            alignment: .topLeading
+          )
+          .padding(.top, 4)
+
+        HStack(spacing: 8) {
+          ForEach(ManagerColorPalette.allCases, id: \.self) { palette in
+            managerColorPaletteButton(palette)
+          }
+        }
+        .padding(.top, 10)
       }
 
       SettingsPanel {
@@ -918,14 +1059,16 @@ private struct AppearanceTabContent: View {
                     .frame(height: SettingsLayoutParity.typographyControlHeight)
                     .background(
                       isActive
-                        ? Color("colorPrimary").opacity(0.1)
-                        : Color("colorSurface").opacity(0.75)
+                        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.1)
+                        : managerTheme.controlFill(for: colorScheme).opacity(0.75)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                     .overlay(
                       RoundedRectangle(cornerRadius: 14)
                         .stroke(
-                          isActive ? Color("colorPrimary") : Color("colorText").opacity(0.14),
+                          isActive
+                            ? managerTheme.primaryAccent(for: colorScheme)
+                            : Color("colorText").opacity(0.14),
                           lineWidth: isActive ? 3 : 2))
                 }
                 .buttonStyle(.plain)
@@ -971,31 +1114,89 @@ private struct AppearanceTabContent: View {
       .frame(height: SettingsLayoutParity.appearanceThemeCardHeight, alignment: .topLeading)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        isActive ? Color("colorPrimary").opacity(0.1) : Color("colorSurface").opacity(0.82)
+        isActive
+          ? managerTheme.primaryAccent(for: colorScheme).opacity(0.1)
+          : managerTheme.surfaceFill(for: colorScheme).opacity(0.82)
       )
       .clipShape(RoundedRectangle(cornerRadius: 18))
       .overlay(
         RoundedRectangle(cornerRadius: 18)
           .stroke(
-            isActive ? Color("colorPrimary") : Color("colorText").opacity(0.16),
+            isActive
+              ? managerTheme.primaryAccent(for: colorScheme)
+              : Color("colorText").opacity(0.16),
             lineWidth: isActive ? 3 : 2))
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func managerColorPaletteButton(_ palette: ManagerColorPalette) -> some View {
+    let isActive = appState.settings.managerColorPalette == palette
+    let previewPrimary = palette.primaryAccent(for: colorScheme)
+    let selectedFill =
+      colorScheme == .dark ? Color.white.opacity(0.08) : Color("colorText").opacity(0.045)
+    let idleFill =
+      colorScheme == .dark
+      ? Color.white.opacity(0.035) : palette.controlFill(for: colorScheme).opacity(0.54)
+    return Button {
+      appState.settings.managerColorPalette = palette
+    } label: {
+      HStack(spacing: 10) {
+        HStack(spacing: -4) {
+          ForEach(palette.lightPreviewColors, id: \.self) { hex in
+            Circle()
+              .fill(Color(hex: hex))
+              .frame(width: 22, height: 22)
+              .overlay(Circle().stroke(Color("colorText").opacity(0.18), lineWidth: 1))
+          }
+        }
+        Text(palette.settingsTitle)
+          .settingsFont(.body, size: 18)
+          .foregroundStyle(Color("colorText"))
+          .lineLimit(1)
+        Spacer(minLength: 0)
+        if isActive {
+          Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(previewPrimary)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, 12)
+      .frame(height: SettingsLayoutParity.paletteCardHeight, alignment: .center)
+      .background(
+        isActive ? selectedFill : idleFill
+      )
+      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(
+            isActive ? previewPrimary : Color("colorText").opacity(0.14),
+            lineWidth: isActive ? 2 : 1
+          )
+      )
+      .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
     .buttonStyle(.plain)
   }
 
   private func managerInterfaceStyleButton(_ style: ManagerInterfaceStyle) -> some View {
     let isActive = appState.settings.managerInterfaceStyle == style
+    let activeForeground = managerTheme.readableAccentForeground(
+      for: colorScheme,
+      accent: managerTheme.primaryAccent(for: colorScheme)
+    )
     return Button {
       appState.settings.managerInterfaceStyle = style
     } label: {
       VStack(alignment: .leading, spacing: 6) {
         Text(style.settingsTitle)
           .settingsFont(.body, size: 18)
-          .foregroundStyle(isActive ? Color.white : Color("colorText"))
+          .foregroundStyle(isActive ? activeForeground : Color("colorText"))
         Text(style.settingsDescription)
           .settingsFont(.body, size: 13)
           .foregroundStyle(
-            isActive ? Color.white.opacity(0.82) : Color("colorText").opacity(0.64)
+            isActive ? activeForeground.opacity(0.82) : Color("colorText").opacity(0.64)
           )
           .lineSpacing(2)
           .fixedSize(horizontal: false, vertical: true)
@@ -1005,8 +1206,8 @@ private struct AppearanceTabContent: View {
       .frame(height: SettingsLayoutParity.managerInterfaceCardHeight, alignment: .topLeading)
       .background(
         isActive
-          ? Color("colorPrimary")
-          : Color("colorBackground").opacity(0.72)
+          ? managerTheme.primaryAccent(for: colorScheme)
+          : managerTheme.controlFill(for: colorScheme).opacity(0.72)
       )
       .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
       .overlay(
@@ -1026,6 +1227,8 @@ private struct AppearanceTabContent: View {
 
 private struct NotchTabContent: View {
   @EnvironmentObject var appState: AppState
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   private let swatchRowMaxWidth: CGFloat = 700
   private let swatchSpacing: CGFloat = 10
 
@@ -1323,10 +1526,10 @@ private struct NotchTabContent: View {
             } label: {
               Text("Reset to Defaults")
                 .settingsFont(.body, size: 16)
-                .foregroundStyle(Color("colorBackground"))
+                .foregroundStyle(Color.white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(Color("colorPrimary"))
+                .background(managerTheme.primaryAccent(for: colorScheme))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .contentShape(RoundedRectangle(cornerRadius: 12))
             }
@@ -1440,9 +1643,9 @@ private struct NotchTabContent: View {
         Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
         Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
-          Color("colorPrimary"))
+          managerTheme.primaryAccent(for: colorScheme))
       }
-      Slider(value: value, in: range).tint(Color("colorPrimary"))
+      Slider(value: value, in: range).tint(managerTheme.primaryAccent(for: colorScheme))
     }
   }
 
@@ -1455,9 +1658,9 @@ private struct NotchTabContent: View {
         Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
         Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
-          Color("colorPrimary"))
+          managerTheme.primaryAccent(for: colorScheme))
       }
-      Slider(value: value, in: range).tint(Color("colorPrimary"))
+      Slider(value: value, in: range).tint(managerTheme.primaryAccent(for: colorScheme))
     }
   }
 
@@ -1477,14 +1680,14 @@ private struct NotchTabContent: View {
     .frame(maxWidth: .infinity)
     .background(
       isActive
-        ? Color("colorPrimary").opacity(0.12)
-        : Color("colorBackground").opacity(0.7)
+        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.12)
+        : managerTheme.controlFill(for: colorScheme).opacity(0.7)
     )
     .clipShape(RoundedRectangle(cornerRadius: 13))
     .overlay(
       RoundedRectangle(cornerRadius: 13)
         .stroke(
-          isActive ? Color("colorPrimary") : Color("colorText").opacity(0.1),
+          isActive ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.1),
           lineWidth: isActive ? 2.5 : 1.5
         )
     )
@@ -1541,15 +1744,20 @@ private struct NotchTabContent: View {
     } label: {
       Text(label)
         .settingsFont(.body, size: 17)
-        .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
+        .foregroundStyle(isSelected ? Color.white : Color("colorText"))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(isSelected ? Color("colorPrimary") : Color("colorBackground"))
+        .background(
+          isSelected
+            ? managerTheme.primaryAccent(for: colorScheme)
+            : managerTheme.controlFill(for: colorScheme)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
           RoundedRectangle(cornerRadius: 12)
             .stroke(
-              isSelected ? Color("colorPrimary") : Color("colorText").opacity(0.14),
+              isSelected
+                ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.14),
               lineWidth: isSelected ? 2.5 : 1.5
             )
         )
@@ -1572,7 +1780,7 @@ private struct NotchTabContent: View {
         Spacer()
         Text(valueText)
           .settingsFont(.body, size: 16)
-          .foregroundStyle(Color("colorPrimary"))
+          .foregroundStyle(managerTheme.primaryAccent(for: colorScheme))
       }
 
       Slider(
@@ -1580,7 +1788,7 @@ private struct NotchTabContent: View {
         in: range,
         step: step
       )
-      .tint(Color("colorPrimary"))
+      .tint(managerTheme.primaryAccent(for: colorScheme))
 
       HStack {
         Text(minimumText)
@@ -1598,6 +1806,8 @@ private struct NotchTabContent: View {
 
 private struct SatelliteTabContent: View {
   @EnvironmentObject var appState: AppState
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
   @State private var selectedSatelliteSlot = 1
   private let swatchRowMaxWidth: CGFloat = 700
   private let swatchSpacing: CGFloat = 10
@@ -1898,13 +2108,13 @@ private struct SatelliteTabContent: View {
                 } label: {
                   Text(selectedSlotIsInherited ? "Using Notch Defaults" : "Use Notch Defaults")
                     .settingsFont(.body, size: 16)
-                    .foregroundStyle(Color("colorBackground"))
+                    .foregroundStyle(Color.white)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .background(
                       selectedSlotIsInherited
                         ? Color("colorText").opacity(0.35)
-                        : Color("colorPrimary")
+                        : managerTheme.primaryAccent(for: colorScheme)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .contentShape(RoundedRectangle(cornerRadius: 12))
@@ -2051,10 +2261,14 @@ private struct SatelliteTabContent: View {
     } label: {
       Text("\(count)")
         .settingsFont(.body, size: 16)
-        .foregroundStyle(isActive ? Color("colorBackground") : Color("colorText").opacity(0.7))
+        .foregroundStyle(isActive ? Color.white : Color("colorText").opacity(0.7))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(isActive ? Color("colorPrimary") : Color("colorBackground"))
+        .background(
+          isActive
+            ? managerTheme.primaryAccent(for: colorScheme)
+            : managerTheme.controlFill(for: colorScheme)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
           RoundedRectangle(cornerRadius: 12)
@@ -2082,16 +2296,20 @@ private struct SatelliteTabContent: View {
           .padding(.vertical, 4)
           .background(
             usesOverride
-              ? Color("colorSecondary").opacity(isActive ? 0.28 : 0.14)
-              : Color("colorPrimary").opacity(isActive ? 0.28 : 0.14)
+              ? managerTheme.secondaryAccent(for: colorScheme).opacity(isActive ? 0.28 : 0.14)
+              : managerTheme.primaryAccent(for: colorScheme).opacity(isActive ? 0.28 : 0.14)
           )
           .clipShape(Capsule())
       }
-      .foregroundStyle(isActive ? Color("colorBackground") : Color("colorText"))
+      .foregroundStyle(isActive ? Color.white : Color("colorText"))
       .padding(.horizontal, 14)
       .padding(.vertical, 12)
       .frame(maxWidth: .infinity)
-      .background(isActive ? Color("colorPrimary") : Color("colorBackground"))
+      .background(
+        isActive
+          ? managerTheme.primaryAccent(for: colorScheme)
+          : managerTheme.controlFill(for: colorScheme)
+      )
       .clipShape(RoundedRectangle(cornerRadius: 14))
       .overlay(
         RoundedRectangle(cornerRadius: 14)
@@ -2137,9 +2355,9 @@ private struct SatelliteTabContent: View {
         Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
         Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
-          Color("colorPrimary"))
+          managerTheme.primaryAccent(for: colorScheme))
       }
-      Slider(value: value, in: range).tint(Color("colorPrimary"))
+      Slider(value: value, in: range).tint(managerTheme.primaryAccent(for: colorScheme))
     }
   }
 
@@ -2152,9 +2370,9 @@ private struct SatelliteTabContent: View {
         Text(label).settingsFont(.display, size: 22).foregroundStyle(Color("colorText"))
         Spacer()
         Text(valueText).settingsFont(.display, size: 20).foregroundStyle(
-          Color("colorPrimary"))
+          managerTheme.primaryAccent(for: colorScheme))
       }
-      Slider(value: value, in: range).tint(Color("colorPrimary"))
+      Slider(value: value, in: range).tint(managerTheme.primaryAccent(for: colorScheme))
     }
   }
 
@@ -2174,14 +2392,14 @@ private struct SatelliteTabContent: View {
     .frame(maxWidth: .infinity)
     .background(
       isActive
-        ? Color("colorPrimary").opacity(0.12)
-        : Color("colorBackground").opacity(0.7)
+        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.12)
+        : managerTheme.controlFill(for: colorScheme).opacity(0.7)
     )
     .clipShape(RoundedRectangle(cornerRadius: 13))
     .overlay(
       RoundedRectangle(cornerRadius: 13)
         .stroke(
-          isActive ? Color("colorPrimary") : Color("colorText").opacity(0.1),
+          isActive ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.1),
           lineWidth: isActive ? 2.5 : 1.5
         )
     )
@@ -2234,15 +2452,20 @@ private struct SatelliteTabContent: View {
     } label: {
       Text(label)
         .settingsFont(.body, size: 17)
-        .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
+        .foregroundStyle(isSelected ? Color.white : Color("colorText"))
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(isSelected ? Color("colorPrimary") : Color("colorBackground"))
+        .background(
+          isSelected
+            ? managerTheme.primaryAccent(for: colorScheme)
+            : managerTheme.controlFill(for: colorScheme)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
           RoundedRectangle(cornerRadius: 12)
             .stroke(
-              isSelected ? Color("colorPrimary") : Color("colorText").opacity(0.14),
+              isSelected
+                ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.14),
               lineWidth: isSelected ? 2.5 : 1.5
             )
         )
@@ -2265,7 +2488,7 @@ private struct SatelliteTabContent: View {
         Spacer()
         Text(valueText)
           .settingsFont(.body, size: 16)
-          .foregroundStyle(Color("colorPrimary"))
+          .foregroundStyle(managerTheme.primaryAccent(for: colorScheme))
       }
 
       Slider(
@@ -2273,7 +2496,7 @@ private struct SatelliteTabContent: View {
         in: range,
         step: step
       )
-      .tint(Color("colorPrimary"))
+      .tint(managerTheme.primaryAccent(for: colorScheme))
 
       HStack {
         Text(minimumText)
@@ -2404,6 +2627,8 @@ private struct ShortcutsTabContent: View {
 
 private struct SystemTabContent: View {
   @EnvironmentObject var appState: AppState
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
   private var countdownDurationBinding: Binding<Int> {
     Binding(
@@ -2463,15 +2688,15 @@ private struct SystemTabContent: View {
       .padding(.vertical, 12)
       .background(
         isActive
-          ? Color("colorPrimary").opacity(0.82)
-          : Color("colorBackground").opacity(0.56)
+          ? managerTheme.primaryAccent(for: colorScheme)
+          : managerTheme.controlFill(for: colorScheme).opacity(0.82)
       )
       .clipShape(RoundedRectangle(cornerRadius: 14))
       .overlay(
         RoundedRectangle(cornerRadius: 14)
           .stroke(
             isActive
-              ? Color("colorBackground").opacity(0.84)
+              ? Color.white.opacity(colorScheme == .dark ? 0.42 : 0.58)
               : Color("colorText").opacity(0.14),
             lineWidth: isActive ? 2 : 1.5
           )
@@ -2499,7 +2724,7 @@ private struct SystemTabContent: View {
             Spacer()
             Text(countdownSummary)
               .settingsFont(.body, size: 18)
-              .foregroundStyle(Color("colorPrimary"))
+              .foregroundStyle(managerTheme.primaryAccent(for: colorScheme))
           }
 
           HStack(spacing: 12) {
@@ -2518,7 +2743,7 @@ private struct SystemTabContent: View {
             .foregroundStyle(Color("colorText"))
             .multilineTextAlignment(.center)
             .frame(width: 88, height: 66)
-            .background(Color("colorBackground"))
+            .background(managerTheme.controlFill(for: colorScheme))
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
               RoundedRectangle(cornerRadius: 14)
@@ -2551,7 +2776,7 @@ private struct SystemTabContent: View {
               Spacer()
               Text("\(Int(autoScrollSpeedSliderBinding.wrappedValue.rounded())) pt/s")
                 .settingsFont(.body, size: 18)
-                .foregroundStyle(Color("colorPrimary"))
+                .foregroundStyle(managerTheme.primaryAccent(for: colorScheme))
             }
 
             Slider(
@@ -2559,7 +2784,7 @@ private struct SystemTabContent: View {
               in: ManualScrollConfiguration.minimumWPM...ManualScrollConfiguration.maximumWPM,
               step: 1
             )
-            .tint(Color("colorPrimary"))
+            .tint(managerTheme.primaryAccent(for: colorScheme))
 
             HStack {
               Text("\(Int(ManualScrollConfiguration.minimumWPM)) pt/s")
@@ -2618,15 +2843,15 @@ private struct SystemTabContent: View {
                     .padding(.vertical, 10)
                     .background(
                       isActive && usesSpeechSensitivity
-                        ? Color("colorPrimary").opacity(0.24)
-                        : Color("colorBackground").opacity(0.75)
+                        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.24)
+                        : managerTheme.controlFill(for: colorScheme).opacity(0.75)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .overlay(
                       RoundedRectangle(cornerRadius: 12)
                         .stroke(
                           isActive && usesSpeechSensitivity
-                            ? Color("colorPrimary")
+                            ? managerTheme.primaryAccent(for: colorScheme)
                             : Color("colorText").opacity(0.14),
                           lineWidth: isActive && usesSpeechSensitivity ? 3 : 2
                         ))
@@ -2662,7 +2887,7 @@ private struct SystemTabContent: View {
             Spacer()
             Toggle("", isOn: $appState.settings.spokenWordHighlightingEnabled)
               .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
+              .tint(managerTheme.primaryAccent(for: colorScheme))
               .labelsHidden()
           }
 
@@ -2682,7 +2907,7 @@ private struct SystemTabContent: View {
             Spacer()
             Toggle("", isOn: $appState.settings.showScriptProgress)
               .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
+              .tint(managerTheme.primaryAccent(for: colorScheme))
               .labelsHidden()
           }
 
@@ -2702,7 +2927,7 @@ private struct SystemTabContent: View {
             Spacer()
             Toggle("", isOn: $appState.settings.pauseOnHoverEnabled)
               .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
+              .tint(managerTheme.primaryAccent(for: colorScheme))
               .labelsHidden()
           }
         }
@@ -2726,7 +2951,7 @@ private struct SystemTabContent: View {
             Spacer()
             Toggle("", isOn: $appState.settings.screenCaptureExclusionEnabled)
               .toggleStyle(.switch)
-              .tint(Color("colorPrimary"))
+              .tint(managerTheme.primaryAccent(for: colorScheme))
               .labelsHidden()
           }
 
@@ -2749,7 +2974,7 @@ private struct SystemTabContent: View {
         .font(.system(size: 14, weight: .bold))
         .foregroundStyle(Color("colorText"))
         .frame(width: 34, height: 34)
-        .background(Color("colorBackground").opacity(0.82))
+        .background(managerTheme.controlFill(for: colorScheme).opacity(0.82))
         .clipShape(Circle())
         .overlay(
           Circle()

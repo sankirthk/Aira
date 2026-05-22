@@ -95,19 +95,31 @@ struct DocumentLibraryView: View {
   }
 
   private var headerTitleColor: Color {
-    isDarkMode ? Color(hex: "#E8E2D6") : Color(hex: "#263126")
+    if managerTheme.colorPalette == .aira {
+      return isDarkMode ? Color(hex: "#E8E2D6") : Color(hex: "#263126")
+    }
+    return Color("colorText")
   }
 
   private var headerSubtitleColor: Color {
-    isDarkMode ? Color(hex: "#D8D0C2").opacity(0.72) : Color(hex: "#566454")
+    if managerTheme.colorPalette == .aira {
+      return isDarkMode ? Color(hex: "#D8D0C2").opacity(0.72) : Color(hex: "#566454")
+    }
+    return Color("colorText").opacity(0.70)
   }
 
   private var scriptsAreaControlFill: Color {
-    isDarkMode ? Color.black.opacity(0.12) : Color.white.opacity(0.25)
+    if managerTheme.colorPalette == .aira {
+      return isDarkMode ? Color.black.opacity(0.12) : Color.white.opacity(0.25)
+    }
+    return managerTheme.controlFill(for: colorScheme)
   }
 
   private var selectAllLabelColor: Color {
-    isDarkMode ? Color(hex: "#E8E2D6") : Color(hex: "#263126")
+    if managerTheme.colorPalette == .aira {
+      return isDarkMode ? Color(hex: "#E8E2D6") : Color(hex: "#263126")
+    }
+    return Color("colorText")
   }
 
   private var selectAllIdleOpacity: Double {
@@ -116,7 +128,7 @@ struct DocumentLibraryView: View {
 
   private var headerTitleFont: Font {
     usesGlass
-      ? .system(size: scaled(30), weight: .regular, design: .default)
+      ? .system(size: scaled(36), weight: .regular, design: .default)
       : .custom("IndieFlower", size: scaled(36))
   }
 
@@ -139,6 +151,15 @@ struct DocumentLibraryView: View {
           .font(headerTitleFont)
           .foregroundStyle(headerTitleColor)
         Spacer()
+        if filter == .allScripts {
+          Button {
+            onNewScript()
+          } label: {
+            Label("New Script", systemImage: "plus")
+              .lineLimit(1)
+          }
+          .buttonStyle(AiraLibraryHeaderPrimaryButtonStyle())
+        }
       }
       .frame(height: ManagerLayoutParity.documentLibraryHeaderHeight, alignment: .topLeading)
       .padding(.horizontal, ManagerLayoutParity.documentLibraryOuterPadding)
@@ -172,7 +193,7 @@ struct DocumentLibraryView: View {
     .overlay(alignment: .topLeading) {
       if isDragTargeted {
         RoundedRectangle(cornerRadius: 12)
-          .stroke(Color("colorPrimary"), lineWidth: 2)
+          .stroke(managerTheme.actionAccent(for: colorScheme), lineWidth: 2)
           .padding(8)
           .allowsHitTesting(false)
       }
@@ -308,7 +329,7 @@ struct DocumentLibraryView: View {
       } label: {
         Image(systemName: "trash")
           .font(.system(size: 15, weight: .semibold))
-          .foregroundStyle(usesGlass ? Color("colorSecondary") : Color("colorSecondary"))
+          .foregroundStyle(Color.red)
           .padding(10)
           .background(
             usesGlass
@@ -339,8 +360,8 @@ struct DocumentLibraryView: View {
       RoundedRectangle(cornerRadius: 4)
         .fill(
           usesGlass
-            ? (isFilled ? Color("colorPrimary") : Color.primary.opacity(0.08))
-            : (isFilled ? Color("colorPrimary") : scriptsAreaControlFill)
+            ? (isFilled ? managerTheme.actionAccent(for: colorScheme) : Color.primary.opacity(0.08))
+            : (isFilled ? managerTheme.actionAccent(for: colorScheme) : scriptsAreaControlFill)
         )
         .frame(width: 18, height: 18)
         .overlay(
@@ -358,12 +379,25 @@ struct DocumentLibraryView: View {
         EmptyView()
       case .mixed:
         RoundedRectangle(cornerRadius: 1)
-          .fill(usesGlass ? Color.white : Color("colorPrimary"))
+          .fill(
+            usesGlass
+              ? managerTheme.readableAccentForeground(
+                for: colorScheme,
+                accent: managerTheme.actionAccent(for: colorScheme)
+              )
+              : managerTheme.actionAccent(for: colorScheme)
+          )
           .frame(width: 10, height: 2.5)
       case .all:
         Image(systemName: "checkmark")
           .font(.system(size: 11, weight: .bold))
-          .foregroundStyle(usesGlass ? Color.white : Color("colorPrimary"))
+          .foregroundStyle(
+            usesGlass
+              ? managerTheme.readableAccentForeground(
+                for: colorScheme,
+                accent: managerTheme.actionAccent(for: colorScheme)
+              )
+              : managerTheme.actionAccent(for: colorScheme))
       }
     }
   }
@@ -707,7 +741,7 @@ struct DocumentLibraryView: View {
                       isDarkMode ? Color.white.opacity(0.08) : Color.white.opacity(0.40))
                   }
                 } else {
-                  Circle().fill(Color("colorSurface"))
+                  Circle().fill(managerTheme.surfaceFill(for: colorScheme))
                 }
               }
               .clipShape(Circle())
@@ -739,7 +773,7 @@ struct DocumentLibraryView: View {
                       .font(.system(size: 15, weight: .semibold))
                       .foregroundStyle(
                         isMember
-                          ? Color("colorPrimary")
+                          ? managerTheme.actionAccent(for: colorScheme)
                           : (usesGlass ? .secondary : Color("colorText").opacity(0.45))
                       )
 
@@ -764,7 +798,7 @@ struct DocumentLibraryView: View {
                           .fill(isDarkMode ? Color.white.opacity(0.05) : Color.white.opacity(0.30))
                       }
                     } else {
-                      Color("colorSurface").opacity(0.92)
+                      managerTheme.surfaceFill(for: colorScheme).opacity(0.92)
                     }
                   }
                   .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -806,7 +840,7 @@ struct DocumentLibraryView: View {
                       .fill(isDarkMode ? Color.black.opacity(0.10) : Color.white.opacity(0.50))
                   }
                 } else {
-                  Color("colorBackground")
+                  managerTheme.controlFill(for: colorScheme)
                 }
               }
               .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -933,23 +967,28 @@ struct DocumentLibraryView: View {
 
 struct EmptyLibraryView: View {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.colorScheme) private var colorScheme
   var onNewScript: () -> Void
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
   }
 
+  private var foreground: Color {
+    colorScheme == .dark ? .white : Color("colorText")
+  }
+
   var body: some View {
     VStack(spacing: 16) {
       Image(systemName: "doc.text")
         .font(.system(size: 48))
-        .foregroundStyle(Color("colorMuted"))
+        .foregroundStyle(foreground.opacity(0.58))
       Text("Your first script is waiting")
         .font(.custom("IndieFlower", size: scaled(28)))
-        .foregroundStyle(Color("colorText"))
+        .foregroundStyle(foreground)
       Text("Create a script to get started.")
         .font(.custom("CrimsonText-Regular", size: scaled(16)))
-        .foregroundStyle(Color("colorMuted"))
+        .foregroundStyle(foreground.opacity(0.62))
       Button("Create Script") {
         onNewScript()
       }
@@ -961,11 +1000,16 @@ struct EmptyLibraryView: View {
 
 struct EmptyFilteredLibraryView: View {
   @Environment(\.managerFontScale) private var managerFontScale
+  @Environment(\.colorScheme) private var colorScheme
   let filter: SidebarNav
   var onNewScript: () -> Void
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
+  }
+
+  private var foreground: Color {
+    colorScheme == .dark ? .white : Color("colorText")
   }
 
   private var title: String {
@@ -998,13 +1042,13 @@ struct EmptyFilteredLibraryView: View {
     VStack(spacing: 16) {
       Image(systemName: "folder")
         .font(.system(size: 44))
-        .foregroundStyle(Color("colorMuted"))
+        .foregroundStyle(foreground.opacity(0.58))
       Text(title)
         .font(.custom("IndieFlower", size: scaled(28)))
-        .foregroundStyle(Color("colorText"))
+        .foregroundStyle(foreground)
       Text(subtitle)
         .font(.custom("CrimsonText-Regular", size: scaled(16)))
-        .foregroundStyle(Color("colorMuted"))
+        .foregroundStyle(foreground.opacity(0.62))
         .multilineTextAlignment(.center)
         .frame(maxWidth: 320)
       if showsCreateButton {
