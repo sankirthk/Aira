@@ -100,8 +100,8 @@ struct ScriptCardView: View {
           .font(titleFont)
           .fontWeight(usesGlass ? nil : .bold)
           .foregroundStyle(primaryTextColor)
-          .lineLimit(2)
-          .fixedSize(horizontal: false, vertical: true)
+          .lineLimit(ScriptCardTitleLayout.lineLimit)
+          .truncationMode(.tail)
           .layoutPriority(1)
           .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -261,6 +261,11 @@ struct ScriptCardView: View {
     )
   }
 
+}
+
+enum ScriptCardTitleLayout {
+  static let lineLimit = 1
+  static let truncatesLongTitlesAtTail = true
 }
 
 private struct ScriptCardCastSplitButton: View {

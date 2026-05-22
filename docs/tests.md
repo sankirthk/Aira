@@ -82,6 +82,9 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-019v | Liquid Glass Preferences chrome uses a transparent window backing plus frosted translucent titlebar/parent/panel surfaces with low tint opacity instead of an opaque modal fill or fully see-through titlebar — REQ-021 | `[x]` |
 | UT-019w | Preferences Manager UI theme selector uses the same plain selected-card treatment as other option selectors, keeps selected text white for contrast, and does not apply native prominent glass blue accent or extra outer spacing — REQ-021 | `[x]` |
 | UT-019w-a | Preferences Appearance sections keep the same panel padding, text frames, section spacing, and option-card heights in Classic and Liquid Glass so switching Manager UI mode does not move the modal layout — REQ-021 | `[x]` |
+| UT-019w-b | Preferences Notch and Pill Windows `Frosted Glass` toggle labels use the same Overlay Feel control-label typography as adjacent controls in Classic and Liquid Glass modes — REQ-021 | `[x]` |
+| UT-019w-c | Document Library script-card titles stay to one line with tail truncation so long titles do not push metadata or action buttons out of alignment at the minimum Manager window size — REQ-021 | `[x]` |
+| UT-019w-d | Preferences Notch and Pill Windows `Frosted Glass` toggles appear after all Overlay Feel sliders and before the reset/defaults action — REQ-021 | `[x]` |
 | UT-019x | Manager top-left traffic-light hover tracking works before the window is key, keeps native controls visible without custom glyph overlays, and Dock reopen restores a miniaturized Manager window even when AppKit reports visible windows — REQ-021 | `[x]` |
 
 ### App Updater (Tasks T-043a, T-043b, T-043c, T-043d, T-043e)

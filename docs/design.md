@@ -211,6 +211,7 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Collection tags (small Inter pills in sage green, if the script belongs to any collection)
 - Hover utility action: **Add to Collection** button shown to the left of the star toggle. Uses `folder.badge.plus` in terracotta, reserves layout space so hover reveal does not shift other utility buttons, and opens the same collection-membership manager used by the context menu.
 - Starred toggle (top-right corner of card, filled/outline star)
+- Script titles stay on one line and truncate with a tail ellipsis so long titles do not push metadata or action buttons out of alignment at the minimum Manager window size.
 - Primary action: **Edit** button
 - Secondary action: **Cast to Notch** button
 - Pill Window launch is intentionally excluded from library-card quick actions in this pass; Pill Window-inclusive launch belongs to the Script Editor where per-Pill Window content choice can be made explicitly.
@@ -380,6 +381,8 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - Active tab label text stays white in both light and dark mode.
 - In Classic dark mode, the full Preferences modal surface uses the same dark green `#465649` across the top chrome, sidebar, root background, and main content area so the modal does not mix charcoal edges with a green center.
 - In Liquid Glass mode, the Preferences `NSWindow` uses a transparent backing with a native frosted translucent titlebar so the custom title/header area, sidebar, content root, and panels read as glass without becoming fully see-through. Preferences parent surfaces use a translucent frosted material with a very low-opacity green tint instead of an opaque fill, and Preferences typography routes through the same system-style font treatment as the Liquid Glass Manager App. Dynamic overlay font previews still render in their selected preview font.
+- The Notch and Pill Windows `Frosted Glass` toggle labels in Preferences use the same typography as other Overlay Feel control labels: Classic uses the display settings font at the overlay-control label size, and Liquid Glass uses the matching system medium label treatment.
+- The `Frosted Glass` toggle appears after all Overlay Feel sliders in both The Notch and Pill Windows Preferences sections, before the reset/defaults action.
 - Switching Preferences > Appearance > Manager UI between Classic and Liquid Glass must not move the modal layout. The Appearance sections use the same panel padding, section spacing, title/description text frames, and option-card heights in both modes; only materials, color, and typography treatment change.
 - Preferences > Appearance > Manager UI uses the same plain green selected-card treatment as the other Preferences option selectors in both Classic and Liquid Glass, with white selected title/helper text for contrast. It must not use the native prominent glass button style, because that introduces the system blue accent and extra inset around the theme buttons.
 - Theme preview swatches in the App Theme panel are small square boxes matching the mockup proportions, not wide rectangles.

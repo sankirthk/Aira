@@ -50,6 +50,15 @@ enum SettingsSelectionAffordances {
   static let managerInterfaceStyleSelectedTextUsesWhite = true
 }
 
+enum SettingsFrostedGlassToggleTypography {
+  static let titleUsesOverlayControlLabelTypography = true
+  static let titleRequestedSize: CGFloat = 22
+}
+
+enum SettingsFrostedGlassTogglePlacement {
+  static let appearsAfterOverlayFeelSliders = true
+}
+
 private enum SettingsFontRole {
   case display
   case body
@@ -691,7 +700,10 @@ private struct FrostedGlassToggleRow: View {
     HStack {
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .settingsFont(.body, size: 18)
+          .settingsFont(
+            .display,
+            size: SettingsFrostedGlassToggleTypography.titleRequestedSize
+          )
           .foregroundStyle(Color("colorText"))
         if let description {
           Text(description)
@@ -1509,15 +1521,15 @@ private struct NotchTabContent: View {
             "\(Int(appState.settings.defaultOverlayAppearance.opacity * 100))%",
             $appState.settings.defaultOverlayAppearance.opacity,
             0.2...1.0)
-          FrostedGlassToggleRow(
-            title: "Frosted Glass",
-            isOn: $appState.settings.notchFrostedGlassEnabled
-          )
           sliderRow(
             "Font Size",
             "\(Int(appState.settings.defaultOverlayAppearance.fontSize))pt",
             $appState.settings.defaultOverlayAppearance.fontSize,
             OverlayFontSizeConfiguration.minimum...OverlayFontSizeConfiguration.maximum)
+          FrostedGlassToggleRow(
+            title: "Frosted Glass",
+            isOn: $appState.settings.notchFrostedGlassEnabled
+          )
 
           HStack {
             Spacer()

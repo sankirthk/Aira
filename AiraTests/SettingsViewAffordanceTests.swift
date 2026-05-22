@@ -44,6 +44,11 @@ struct SettingsViewAffordanceTests {
     #expect(ScriptCardActionButtonAffordances.castUsesRoundedRectangle)
   }
 
+  @Test func scriptCardTitlesUseSingleLineTailTruncation() {
+    #expect(ScriptCardTitleLayout.lineLimit == 1)
+    #expect(ScriptCardTitleLayout.truncatesLongTitlesAtTail)
+  }
+
   @Test func classicDarkPreferencesChromeUsesOneGreenSurface() {
     #expect(SettingsChromePalette.classicDarkSurfaceHex == "#465649")
   }
@@ -72,5 +77,14 @@ struct SettingsViewAffordanceTests {
     #expect(!SettingsSelectionAffordances.managerInterfaceStyleUsesNativeProminentGlass)
     #expect(SettingsSelectionAffordances.managerInterfaceStyleOuterSpacing == 0)
     #expect(SettingsSelectionAffordances.managerInterfaceStyleSelectedTextUsesWhite)
+  }
+
+  @Test func frostedGlassToggleMatchesOverlayControlLabelTypography() {
+    #expect(SettingsFrostedGlassToggleTypography.titleUsesOverlayControlLabelTypography)
+    #expect(SettingsFrostedGlassToggleTypography.titleRequestedSize == 22)
+  }
+
+  @Test func frostedGlassToggleAppearsAfterOverlayFeelSliders() {
+    #expect(SettingsFrostedGlassTogglePlacement.appearsAfterOverlayFeelSliders)
   }
 }
