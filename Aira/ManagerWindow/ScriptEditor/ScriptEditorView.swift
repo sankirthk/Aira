@@ -185,19 +185,23 @@ struct ScriptEditorView: View {
   private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
 
   private var saveButtonForegroundColor: Color {
-    if usesGlass {
-      return colorScheme == .dark ? .white : Color("colorPrimary")
-    }
-
-    return Color("colorText")
+    colorScheme == .dark ? .white : managerTheme.actionAccent(for: colorScheme)
   }
 
   private var classicEditorHeaderBackground: Color {
-    colorScheme == .dark ? classicEditorSurfaceBackground : Color(hex: "#F0F4F0")
+    if managerTheme.colorPalette == .aira {
+      return colorScheme == .dark
+        ? managerTheme.contentBackground(for: colorScheme) : Color(hex: "#F0F4F0")
+    }
+    return managerTheme.surfaceFill(for: colorScheme)
   }
 
   private var classicEditorSurfaceBackground: Color {
-    colorScheme == .dark ? Color(hex: "#232B27") : Color("colorBackground")
+    return managerTheme.contentBackground(for: colorScheme)
+  }
+
+  private var classicEditorPanelBackground: Color {
+    return managerTheme.surfaceFill(for: colorScheme)
   }
 
   var wordCount: Int {
@@ -230,25 +234,31 @@ struct ScriptEditorView: View {
           } label: {
             AiraIcon(
               type: .back, size: 20,
-              color: usesGlass ? .primary : Color("colorText"),
+              color: colorScheme == .dark ? .white : managerTheme.actionAccent(for: colorScheme),
               animated: false
             )
             .padding(8)
             .background {
               if usesGlass {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .fill(Color.white.opacity(0.14))
+                  .fill(
+                    managerTheme.actionAccent(for: colorScheme).opacity(
+                      colorScheme == .dark ? 0.18 : 0.12)
+                  )
                   .background(
                     .ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
               } else {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .fill(Color.white.opacity(0.12))
+                  .fill(
+                    managerTheme.actionAccent(for: colorScheme).opacity(
+                      colorScheme == .dark ? 0.16 : 0.10))
               }
             }
             .overlay {
               if usesGlass {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                  .strokeBorder(Color.white.opacity(0.28), lineWidth: 0.5)
+                  .strokeBorder(
+                    managerTheme.actionAccent(for: colorScheme).opacity(0.30), lineWidth: 0.5)
               }
             }
             .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -263,7 +273,7 @@ struct ScriptEditorView: View {
             )
             .textFieldStyle(.plain)
             .foregroundStyle(usesGlass ? .primary : Color("colorText"))
-            .tint(Color("colorSecondary"))
+            .tint(managerTheme.actionAccent(for: colorScheme))
             .disabled(isReadOnly)
 
           Spacer()
@@ -353,14 +363,9 @@ struct ScriptEditorView: View {
         .padding(ManagerLayoutParity.scriptEditorHeaderPadding)
         .background(usesGlass ? Color.clear : classicEditorHeaderBackground)
 
-        ScriptEditorPanel(backgroundColor: classicEditorSurfaceBackground) {
+        ScriptEditorPanel(backgroundColor: classicEditorPanelBackground) {
           VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
-              if !usesGlass {
-                RoundedRectangle(cornerRadius: 10)
-                  .fill(classicEditorSurfaceBackground)
-              }
-
               ScriptTextEditor(
                 text: $script.body,
                 selectedRange: $selectedRange,
@@ -564,6 +569,9 @@ private struct ScriptEditorLaunchSplitButton: View {
   private var launchForegroundColor: Color {
     .white
   }
+  private var launchAccentColor: Color {
+    managerTheme.actionAccent(for: colorScheme)
+  }
   private var cornerRadius: CGFloat { ManagerLayoutParity.toolbarButtonCornerRadius }
   private var controlHeight: CGFloat { ManagerLayoutParity.toolbarButtonHeight }
   private var dividerHeight: CGFloat { 24 }
@@ -622,7 +630,10 @@ private struct ScriptEditorLaunchSplitButton: View {
       .overlay {
         if usesGlass {
           RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(Color("colorSecondary").opacity(isDark ? 0.45 : 0.60), lineWidth: 1)
+            .strokeBorder(
+              launchAccentColor.opacity(isDark ? 0.45 : 0.60),
+              lineWidth: 1
+            )
         } else {
           splitButtonBorder
         }
@@ -650,12 +661,17 @@ private struct ScriptEditorLaunchSplitButton: View {
     .foregroundStyle(usesGlass ? .primary : Color("colorText"))
     .background(
       RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .fill(usesGlass ? AnyShapeStyle(.background) : AnyShapeStyle(Color("colorBackground")))
+        .fill(
+          usesGlass
+            ? AnyShapeStyle(.background)
+            : AnyShapeStyle(managerTheme.controlFill(for: colorScheme))
+        )
     )
     .overlay(
       RoundedRectangle(cornerRadius: 8, style: .continuous)
         .stroke(
-          (usesGlass ? Color.primary : Color("colorText")).opacity(0.12),
+          (usesGlass ? managerTheme.actionAccent(for: colorScheme) : Color("colorText")).opacity(
+            0.18),
           lineWidth: 1
         )
     )
@@ -679,10 +695,10 @@ private struct ScriptEditorLaunchSplitButton: View {
     if usesGlass {
       let opacity: Double = isDark ? 0.48 : 0.76
       shape
-        .fill(Color("colorSecondary").opacity(opacity))
+        .fill(launchAccentColor.opacity(opacity))
         .background(.ultraThinMaterial, in: shape)
     } else {
-      shape.fill(ManagerClassicAccentPalette.secondary(for: colorScheme))
+      shape.fill(managerTheme.classicSelectedActionFill(for: colorScheme))
     }
   }
 }
@@ -708,10 +724,10 @@ struct ScriptEditorSatelliteLaunchPanel: View {
   private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
   private var isDark: Bool { colorScheme == .dark }
   private var classicSecondary: Color {
-    ManagerClassicAccentPalette.secondary(for: colorScheme)
+    managerTheme.actionAccent(for: colorScheme)
   }
   private var classicPrimary: Color {
-    ManagerClassicAccentPalette.primary(for: colorScheme)
+    managerTheme.actionAccent(for: colorScheme)
   }
 
   private var launchRequest: ScriptEditorSatelliteLaunchRequest {
@@ -779,7 +795,7 @@ struct ScriptEditorSatelliteLaunchPanel: View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: "exclamationmark.triangle.fill")
         .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(Color("colorSecondary"))
+        .foregroundStyle(managerTheme.actionAccent(for: colorScheme))
 
       Text(message)
         .font(
@@ -799,18 +815,19 @@ struct ScriptEditorSatelliteLaunchPanel: View {
           RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(.ultraThinMaterial)
           RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color("colorSecondary").opacity(isDark ? 0.10 : 0.12))
+            .fill(managerTheme.actionAccent(for: colorScheme).opacity(isDark ? 0.10 : 0.12))
         }
       } else {
         RoundedRectangle(cornerRadius: 12)
-          .fill(Color("colorBackground"))
+          .fill(managerTheme.controlFill(for: colorScheme))
       }
     }
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     .overlay(
       RoundedRectangle(cornerRadius: 12, style: .continuous)
         .strokeBorder(
-          Color("colorSecondary").opacity(usesGlass ? 0.30 : 0.24), lineWidth: usesGlass ? 0.5 : 1)
+          managerTheme.actionAccent(for: colorScheme).opacity(usesGlass ? 0.30 : 0.24),
+          lineWidth: usesGlass ? 0.5 : 1)
     )
   }
 
@@ -844,11 +861,14 @@ struct ScriptEditorSatelliteLaunchPanel: View {
           RoundedRectangle(cornerRadius: 14, style: .continuous)
             .fill(.ultraThinMaterial)
           RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .fill(isDark ? Color.white.opacity(0.04) : Color("colorBackground").opacity(0.44))
+            .fill(
+              isDark
+                ? Color.white.opacity(0.04)
+                : managerTheme.contentBackground(for: colorScheme).opacity(0.44))
         }
       } else {
         RoundedRectangle(cornerRadius: 14)
-          .fill(Color("colorBackground"))
+          .fill(managerTheme.controlFill(for: colorScheme))
       }
     }
     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -856,7 +876,9 @@ struct ScriptEditorSatelliteLaunchPanel: View {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .strokeBorder(
           usesGlass
-            ? (isDark ? Color.white.opacity(0.12) : Color("colorPrimary").opacity(0.18))
+            ? (isDark
+              ? Color.white.opacity(0.12)
+              : managerTheme.actionAccent(for: colorScheme).opacity(0.18))
             : Color("colorText").opacity(0.14),
           lineWidth: usesGlass ? 0.5 : 1
         )
@@ -904,7 +926,7 @@ struct ScriptEditorSatelliteLaunchPanel: View {
     if usesGlass {
       return isActive ? .white : .primary
     }
-    return isActive ? Color("colorBackground") : Color("colorText")
+    return isActive ? Color.white : Color("colorText")
   }
 
   @ViewBuilder
@@ -913,24 +935,32 @@ struct ScriptEditorSatelliteLaunchPanel: View {
     if usesGlass {
       if isActive {
         shape
-          .fill(Color("colorSecondary").opacity(isDark ? 0.48 : 0.76))
+          .fill(managerTheme.actionAccent(for: colorScheme).opacity(isDark ? 0.48 : 0.76))
           .background(.ultraThinMaterial, in: shape)
       } else {
         ZStack {
           shape.fill(.ultraThinMaterial)
-          shape.fill(isDark ? Color.white.opacity(0.06) : Color("colorBackground").opacity(0.46))
+          shape.fill(
+            isDark
+              ? Color.white.opacity(0.06)
+              : managerTheme.contentBackground(for: colorScheme).opacity(0.46))
         }
       }
     } else {
-      shape.fill(isActive ? classicSecondary : Color("colorBackground"))
+      shape.fill(
+        isActive
+          ? managerTheme.classicSelectedActionFill(for: colorScheme)
+          : managerTheme.controlFill(for: colorScheme))
     }
   }
 
   private func choiceButtonStroke(isActive: Bool) -> Color {
     if usesGlass {
       return isActive
-        ? Color("colorSecondary").opacity(isDark ? 0.45 : 0.60)
-        : (isDark ? Color.white.opacity(0.15) : Color("colorPrimary").opacity(0.18))
+        ? managerTheme.actionAccent(for: colorScheme).opacity(isDark ? 0.45 : 0.60)
+        : (isDark
+          ? Color.white.opacity(0.15)
+          : managerTheme.actionAccent(for: colorScheme).opacity(0.18))
     }
     return Color("colorText").opacity(0.12)
   }
@@ -977,10 +1007,10 @@ struct ScriptEditorSatelliteLaunchPanel: View {
         }
         .buttonStyle(.plain)
         .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
-        .foregroundStyle(Color("colorText"))
+        .foregroundStyle(colorScheme == .dark ? Color.white : Color("colorText"))
         .background(
           RoundedRectangle(cornerRadius: 10)
-            .fill(Color("colorSurface"))
+            .fill(managerTheme.surfaceFill(for: colorScheme))
         )
         .overlay(
           RoundedRectangle(cornerRadius: 10)
@@ -1040,10 +1070,10 @@ struct ScriptEditorSatelliteLaunchPanel: View {
     .buttonStyle(.plain)
     .frame(maxWidth: .infinity)
     .font(.custom("CrimsonText-Regular", size: 14 * managerFontScale))
-    .foregroundStyle(isSelected ? Color("colorBackground") : Color("colorText"))
+    .foregroundStyle(isSelected ? Color.white : Color("colorText"))
     .background(
       RoundedRectangle(cornerRadius: 10)
-        .fill(isSelected ? classicPrimary : Color("colorSurface"))
+        .fill(isSelected ? classicPrimary : managerTheme.surfaceFill(for: colorScheme))
     )
     .contentShape(RoundedRectangle(cornerRadius: 10))
     .pointingHandCursor()
@@ -1071,7 +1101,7 @@ private struct SatelliteLaunchPrimaryButtonStyle: ButtonStyle {
   private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
   private var isDark: Bool { colorScheme == .dark }
   private var classicSecondary: Color {
-    ManagerClassicAccentPalette.secondary(for: colorScheme)
+    managerTheme.actionAccent(for: colorScheme)
   }
 
   func makeBody(configuration: Configuration) -> some View {
@@ -1095,17 +1125,17 @@ private struct SatelliteLaunchPrimaryButtonStyle: ButtonStyle {
       .background {
         if usesGlass {
           shape
-            .fill(Color("colorSecondary").opacity(opacity))
+            .fill(managerTheme.actionAccent(for: colorScheme).opacity(opacity))
             .background(.ultraThinMaterial, in: shape)
         } else {
-          shape.fill(classicSecondary.opacity(pressed ? 0.82 : 1))
+          shape.fill(managerTheme.classicSelectedActionFill(for: colorScheme, isPressed: pressed))
         }
       }
       .clipShape(shape)
       .overlay {
         shape.strokeBorder(
           usesGlass
-            ? Color("colorSecondary").opacity(isDark ? 0.45 : 0.60)
+            ? managerTheme.actionAccent(for: colorScheme).opacity(isDark ? 0.45 : 0.60)
             : Color.white.opacity(0.8),
           lineWidth: usesGlass ? 1 : 1.5
         )
@@ -1159,7 +1189,7 @@ struct ScriptEditorPanel<Content: View>: View {
         .managerSurface(
           cornerRadius: ManagerLayoutParity.scriptEditorPanelCornerRadius,
           classicFill: backgroundColor,
-          strokeOpacity: 0.12
+          strokeOpacity: 0.20
         )
         .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
 
@@ -1170,10 +1200,15 @@ struct ScriptEditorPanel<Content: View>: View {
 }
 
 struct ScriptTextEditor: NSViewRepresentable {
+  @Environment(\.colorScheme) private var colorScheme
   @Binding var text: String
   @Binding var selectedRange: NSRange
   let isEditable: Bool
   let suppressInteractivity: Bool
+
+  private var resolvedTextColor: NSColor {
+    colorScheme == .dark ? .white : NSColor(Color("colorText"))
+  }
 
   func makeCoordinator() -> Coordinator {
     Coordinator(text: $text, selectedRange: $selectedRange)
@@ -1199,8 +1234,8 @@ struct ScriptTextEditor: NSViewRepresentable {
     textView.allowsUndo = true
     textView.backgroundColor = .clear
     textView.drawsBackground = false
-    textView.textColor = NSColor(Color("colorText"))
-    textView.insertionPointColor = NSColor(Color("colorText"))
+    textView.textColor = resolvedTextColor
+    textView.insertionPointColor = resolvedTextColor
     textView.font = NSFont(name: "CrimsonText-Regular", size: 18) ?? .systemFont(ofSize: 18)
     textView.configureInteractivity(
       isEditable: isEditable,
@@ -1229,6 +1264,8 @@ struct ScriptTextEditor: NSViewRepresentable {
 
     context.coordinator.text = $text
     context.coordinator.selectedRange = $selectedRange
+    textView.textColor = resolvedTextColor
+    textView.insertionPointColor = suppressInteractivity ? .clear : resolvedTextColor
     textView.configureInteractivity(
       isEditable: isEditable,
       suppressInteractivity: suppressInteractivity
@@ -1276,7 +1313,7 @@ struct ScriptTextEditor: NSViewRepresentable {
 
       let selectedRange = textView.selectedRange()
       let baseFont = textView.font ?? .systemFont(ofSize: 18)
-      let textColor = NSColor(Color("colorText"))
+      let textColor = textView.textColor ?? NSColor(Color("colorText"))
       let cueTextColor = NSColor(Color("colorBackground"))
       let cueBackgroundColor = NSColor(Color("colorSecondary"))
       let baseAttributes: [NSAttributedString.Key: Any] = [
@@ -1334,7 +1371,8 @@ final class ScriptEditorNSTextView: NSTextView {
     self.suppressInteractivity = suppressInteractivity
     self.isEditable = isEditable && !suppressInteractivity
     isSelectable = !suppressInteractivity
-    insertionPointColor = suppressInteractivity ? .clear : NSColor(Color("colorText"))
+    insertionPointColor =
+      suppressInteractivity ? .clear : (textColor ?? NSColor(Color("colorText")))
   }
 
   override func resetCursorRects() {

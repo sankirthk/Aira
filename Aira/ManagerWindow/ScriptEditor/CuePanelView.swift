@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct CuePopoverView: View {
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
   let isReadOnly: Bool
   var usesGlass: Bool = false
   let onInsertCue: (String) -> Void
@@ -38,7 +41,7 @@ struct CuePopoverView: View {
           .fill(.ultraThinMaterial)
       } else {
         RoundedRectangle(cornerRadius: 12)
-          .fill(Color("colorBackground"))
+          .fill(managerTheme.controlFill(for: colorScheme))
       }
     }
     .overlay {

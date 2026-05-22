@@ -258,12 +258,16 @@ struct SettingsStoreTests {
   @Test func managerInterfaceStyleDefaultsRoundTripsAndPersists() throws {
     var defaults = AppSettings()
     #expect(defaults.managerInterfaceStyle == .classic)
+    #expect(defaults.managerColorPalette == .aira)
+    #expect(defaults.managerAccentColorHex == ManagerColorPalette.defaultNeutralAccentHex)
 
     defaults.managerInterfaceStyle = .liquidGlass
+    defaults.managerColorPalette = .violet
     let data = try JSONEncoder().encode(defaults)
     let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
 
     #expect(decoded.managerInterfaceStyle == .liquidGlass)
+    #expect(decoded.managerColorPalette == .violet)
 
     let legacyJSON = """
       {
@@ -273,12 +277,32 @@ struct SettingsStoreTests {
       """.data(using: .utf8)!
     let legacyDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyJSON)
     #expect(legacyDecoded.managerInterfaceStyle == .classic)
+    #expect(legacyDecoded.managerColorPalette == .aira)
+    #expect(legacyDecoded.managerAccentColorHex == ManagerColorPalette.defaultNeutralAccentHex)
+
+    let legacyVioletJSON = """
+        {
+          "managerColorPalette": "violet"
+      }
+      """.data(using: .utf8)!
+    let legacyVioletDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyVioletJSON)
+    #expect(legacyVioletDecoded.managerColorPalette == .violet)
+    #expect(legacyVioletDecoded.managerAccentColorHex == ManagerColorPalette.violetAccentHex)
+
+    let legacyNeutralJSON = """
+      {
+        "managerColorPalette": "neutral"
+      }
+      """.data(using: .utf8)!
+    let legacyNeutralDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyNeutralJSON)
+    #expect(legacyNeutralDecoded.managerColorPalette == .blue)
 
     let (store, userDefaults, suiteName) = makeSettingsStore()
     defer { cleanupSettings(userDefaults, suiteName: suiteName) }
 
     try store.save(defaults)
     #expect(try store.load().managerInterfaceStyle == .liquidGlass)
+    #expect(try store.load().managerColorPalette == .violet)
   }
 
   @Test func overlayFrostedGlassTogglesDefaultToOffAndRoundTrip() throws {
