@@ -85,6 +85,7 @@ Repository automation is tracked here when it materially gates shipping quality.
 | UT-019w-b | Preferences Notch and Pill Windows `Frosted Glass` toggle labels use the same Overlay Feel control-label typography as adjacent controls in Classic and Liquid Glass modes — REQ-021 | `[x]` |
 | UT-019w-c | Document Library script-card titles stay to one line with tail truncation so long titles do not push metadata or action buttons out of alignment at the minimum Manager window size — REQ-021 | `[x]` |
 | UT-019w-d | Preferences Notch and Pill Windows `Frosted Glass` toggles appear after all Overlay Feel sliders and before the reset/defaults action — REQ-021 | `[x]` |
+| UT-019w-e | Preferences Pill Windows tab uses the same fixed-preview/static outer container policy as The Notch, so the preview stays pinned while controls scroll | `[x]` |
 | UT-019x | Manager top-left traffic-light hover tracking works before the window is key, keeps native controls visible without custom glyph overlays, and Dock reopen restores a miniaturized Manager window even when AppKit reports visible windows — REQ-021 | `[x]` |
 
 ### App Updater (Tasks T-043a, T-043b, T-043c, T-043d, T-043e)

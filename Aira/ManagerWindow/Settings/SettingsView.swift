@@ -59,6 +59,11 @@ enum SettingsFrostedGlassTogglePlacement {
   static let appearsAfterOverlayFeelSliders = true
 }
 
+enum SettingsTabContainerPolicy {
+  static let notchUsesStaticOuterContainer = true
+  static let pillWindowsUsesStaticOuterContainer = true
+}
+
 private enum SettingsFontRole {
   case display
   case body
@@ -473,11 +478,15 @@ struct SettingsView: View {
             AppearanceTabContent()
           }
         case .notch:
-          settingsStaticContainer {
+          settingsTabContainer(
+            usesStaticOuterContainer: SettingsTabContainerPolicy.notchUsesStaticOuterContainer
+          ) {
             NotchTabContent()
           }
         case .satellite:
-          settingsScrollContainer {
+          settingsTabContainer(
+            usesStaticOuterContainer: SettingsTabContainerPolicy.pillWindowsUsesStaticOuterContainer
+          ) {
             SatelliteTabContent()
           }
         case .shortcuts:
@@ -510,6 +519,22 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .top)
     }
     .scrollIndicators(.never)
+  }
+
+  @ViewBuilder
+  private func settingsTabContainer<Content: View>(
+    usesStaticOuterContainer: Bool,
+    @ViewBuilder content: () -> Content
+  ) -> some View {
+    if usesStaticOuterContainer {
+      settingsStaticContainer {
+        content()
+      }
+    } else {
+      settingsScrollContainer {
+        content()
+      }
+    }
   }
 
   private func settingsStaticContainer<Content: View>(
@@ -2211,6 +2236,7 @@ private struct SatelliteTabContent: View {
       }
       .scrollIndicators(.never)
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
   }
 
   private var satellitePreviewPanel: some View {

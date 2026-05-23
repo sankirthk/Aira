@@ -87,4 +87,9 @@ struct SettingsViewAffordanceTests {
   @Test func frostedGlassToggleAppearsAfterOverlayFeelSliders() {
     #expect(SettingsFrostedGlassTogglePlacement.appearsAfterOverlayFeelSliders)
   }
+
+  @Test func pillWindowsTabKeepsPreviewOutsideOuterScrollContainer() {
+    #expect(SettingsTabContainerPolicy.notchUsesStaticOuterContainer)
+    #expect(SettingsTabContainerPolicy.pillWindowsUsesStaticOuterContainer)
+  }
 }
