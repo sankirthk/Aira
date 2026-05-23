@@ -68,8 +68,8 @@ struct SettingsViewAffordanceTests {
     #expect(SettingsLayoutParity.panelCornerRadius == 20)
     #expect(SettingsLayoutParity.sectionTitleHeight == 34)
     #expect(SettingsLayoutParity.sectionDescriptionHeight == 40)
-    #expect(SettingsLayoutParity.appearanceThemeCardHeight == 160)
-    #expect(SettingsLayoutParity.managerInterfaceCardHeight == 92)
+    #expect(SettingsLayoutParity.appearanceThemeCardHeight == 120)
+    #expect(SettingsLayoutParity.managerInterfaceCardHeight == 72)
     #expect(SettingsLayoutParity.typographyControlHeight == 46)
   }
 

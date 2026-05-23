@@ -269,7 +269,7 @@ struct ScriptEditorView: View {
             .font(
               usesGlass
                 ? .system(size: scaled(20), weight: .semibold)
-                : .custom("Manrope-Bold", size: scaled(20))
+                : .custom("IndieFlower", size: scaled(20))
             )
             .textFieldStyle(.plain)
             .foregroundStyle(usesGlass ? .primary : Color("colorText"))
