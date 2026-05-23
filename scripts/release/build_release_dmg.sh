@@ -398,22 +398,28 @@ echo "==> Refreshing package metadata cleanup before archive"
 strip_bundle_metadata "$DERIVED_DATA_PATH/SourcePackages"
 
 echo "==> Archiving app"
-if ! xcodebuild archive \
-  -project "$PROJECT_PATH" \
-  -scheme "$SCHEME" \
-  -configuration "$CONFIGURATION" \
-  -archivePath "$ARCHIVE_PATH" \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
-  -clonedSourcePackagesDirPath "$DERIVED_DATA_PATH/SourcePackages" \
-  -disableAutomaticPackageResolution \
-  -destination "generic/platform=macOS" \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="Developer ID Application" \
-  DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-  OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
-  SPARKLE_FEED_URL="$ACTIVE_SPARKLE_FEED_URL" \
-  "${XCODE_VERSION_OVERRIDES[@]}" \
-  2>&1 | tee "$ARCHIVE_LOG_PATH"; then
+XCODEBUILD_ARCHIVE_ARGS=(
+  archive
+  -project "$PROJECT_PATH"
+  -scheme "$SCHEME"
+  -configuration "$CONFIGURATION"
+  -archivePath "$ARCHIVE_PATH"
+  -derivedDataPath "$DERIVED_DATA_PATH"
+  -clonedSourcePackagesDirPath "$DERIVED_DATA_PATH/SourcePackages"
+  -disableAutomaticPackageResolution
+  -destination "generic/platform=macOS"
+  CODE_SIGN_STYLE=Manual
+  CODE_SIGN_IDENTITY="Developer ID Application"
+  DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+  OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH"
+  SPARKLE_FEED_URL="$ACTIVE_SPARKLE_FEED_URL"
+)
+
+if [[ "${#XCODE_VERSION_OVERRIDES[@]}" -gt 0 ]]; then
+  XCODEBUILD_ARCHIVE_ARGS+=("${XCODE_VERSION_OVERRIDES[@]}")
+fi
+
+if ! xcodebuild "${XCODEBUILD_ARCHIVE_ARGS[@]}" 2>&1 | tee "$ARCHIVE_LOG_PATH"; then
   if [[ "$DEBUG_RELEASE" == "1" ]]; then
     dump_archive_diagnostics
   fi
