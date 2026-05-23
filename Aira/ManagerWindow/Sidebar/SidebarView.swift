@@ -470,6 +470,21 @@ struct SidebarView: View {
           button.frame = frame
         }
         button.needsDisplay = true
+        // On macOS 14.x the titlebar container clips subviews strictly —
+        // shifted buttons fall outside and become invisible. Disable masking
+        // on every ancestor between the button and the window frame view so
+        // the buttons remain visible at their shifted position.
+        disableClippingOnTitlebarAncestors(for: button)
+      }
+    }
+
+    private func disableClippingOnTitlebarAncestors(for button: NSButton) {
+      let frameView = window?.contentView?.superview
+      var view: NSView? = button.superview
+      while let v = view, v !== frameView {
+        v.wantsLayer = true
+        v.layer?.masksToBounds = false
+        view = v.superview
       }
     }
 

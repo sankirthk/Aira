@@ -968,7 +968,10 @@ struct DocumentLibraryView: View {
 struct EmptyLibraryView: View {
   @Environment(\.managerFontScale) private var managerFontScale
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.managerTheme) private var managerTheme
   var onNewScript: () -> Void
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
@@ -984,10 +987,18 @@ struct EmptyLibraryView: View {
         .font(.system(size: 48))
         .foregroundStyle(foreground.opacity(0.58))
       Text("Your first script is waiting")
-        .font(.custom("IndieFlower", size: scaled(28)))
+        .font(
+          usesGlass
+            ? .system(size: scaled(28), weight: .semibold)
+            : .custom("IndieFlower", size: scaled(28))
+        )
         .foregroundStyle(foreground)
       Text("Create a script to get started.")
-        .font(.custom("CrimsonText-Regular", size: scaled(16)))
+        .font(
+          usesGlass
+            ? .system(size: scaled(15))
+            : .custom("CrimsonText-Regular", size: scaled(16))
+        )
         .foregroundStyle(foreground.opacity(0.62))
       Button("Create Script") {
         onNewScript()
@@ -1001,8 +1012,11 @@ struct EmptyLibraryView: View {
 struct EmptyFilteredLibraryView: View {
   @Environment(\.managerFontScale) private var managerFontScale
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.managerTheme) private var managerTheme
   let filter: SidebarNav
   var onNewScript: () -> Void
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
 
   private func scaled(_ size: CGFloat) -> CGFloat {
     size * managerFontScale
@@ -1044,10 +1058,18 @@ struct EmptyFilteredLibraryView: View {
         .font(.system(size: 44))
         .foregroundStyle(foreground.opacity(0.58))
       Text(title)
-        .font(.custom("IndieFlower", size: scaled(28)))
+        .font(
+          usesGlass
+            ? .system(size: scaled(28), weight: .semibold)
+            : .custom("IndieFlower", size: scaled(28))
+        )
         .foregroundStyle(foreground)
       Text(subtitle)
-        .font(.custom("CrimsonText-Regular", size: scaled(16)))
+        .font(
+          usesGlass
+            ? .system(size: scaled(15))
+            : .custom("CrimsonText-Regular", size: scaled(16))
+        )
         .foregroundStyle(foreground.opacity(0.62))
         .multilineTextAlignment(.center)
         .frame(maxWidth: 320)
