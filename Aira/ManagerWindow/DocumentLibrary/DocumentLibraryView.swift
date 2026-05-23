@@ -87,7 +87,7 @@ struct DocumentLibraryView: View {
   }
 
   private var usesGlass: Bool {
-    managerTheme.surfaceTreatment == .nativeGlass
+    managerTheme.usesLiquidGlassMode
   }
 
   private var isDarkMode: Bool {
