@@ -115,18 +115,25 @@ cat > "$EXPORT_OPTIONS_PLIST" <<EOF
 EOF
 
 echo "==> Archiving App Store build"
-xcodebuild archive \
-  -project "$PROJECT_PATH" \
-  -scheme "$SCHEME" \
-  -configuration "$CONFIGURATION" \
-  -archivePath "$ARCHIVE_PATH" \
-  -derivedDataPath "$DERIVED_DATA_PATH" \
-  -destination "generic/platform=macOS" \
-  -allowProvisioningUpdates \
-  -authenticationKeyPath "$AUTH_KEY_PATH" \
-  -authenticationKeyID "$APPSTORE_CONNECT_KEY_ID" \
-  -authenticationKeyIssuerID "$APPSTORE_CONNECT_ISSUER_ID" \
-  "${XCODE_VERSION_OVERRIDES[@]}"
+XCODEBUILD_ARCHIVE_ARGS=(
+  archive
+  -project "$PROJECT_PATH"
+  -scheme "$SCHEME"
+  -configuration "$CONFIGURATION"
+  -archivePath "$ARCHIVE_PATH"
+  -derivedDataPath "$DERIVED_DATA_PATH"
+  -destination "generic/platform=macOS"
+  -allowProvisioningUpdates
+  -authenticationKeyPath "$AUTH_KEY_PATH"
+  -authenticationKeyID "$APPSTORE_CONNECT_KEY_ID"
+  -authenticationKeyIssuerID "$APPSTORE_CONNECT_ISSUER_ID"
+)
+
+if [[ "${#XCODE_VERSION_OVERRIDES[@]}" -gt 0 ]]; then
+  XCODEBUILD_ARCHIVE_ARGS+=("${XCODE_VERSION_OVERRIDES[@]}")
+fi
+
+xcodebuild "${XCODEBUILD_ARCHIVE_ARGS[@]}"
 
 APP_PATH="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -name '*.app' -print | head -n 1)"
 
