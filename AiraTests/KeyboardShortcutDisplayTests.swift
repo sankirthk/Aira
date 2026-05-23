@@ -982,7 +982,8 @@ struct KeyboardShortcutDisplayTests {
       baseContentOffset: 40
     )
 
-    #expect(progress == 14.0 / 15.0)
+    #expect(progress != nil)
+    #expect(abs((progress ?? 0) - (14.0 / 15.0)) < 0.000_001)
     #expect(middleProgress == 0)
   }
 
@@ -1001,7 +1002,8 @@ struct KeyboardShortcutDisplayTests {
       baseContentOffset: 40
     )
 
-    #expect(progress == 14.0 / 15.0)
+    #expect(progress != nil)
+    #expect(abs((progress ?? 0) - (14.0 / 15.0)) < 0.000_001)
   }
 
   @Test func wordTrackingProgressCanClampToRevealFinalParagraph() {
