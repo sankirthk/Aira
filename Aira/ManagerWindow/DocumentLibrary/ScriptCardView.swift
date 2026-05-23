@@ -365,12 +365,19 @@ private struct ScriptCardCastSplitButton: View {
           .fill(managerTheme.classicSelectedActionFill(for: colorScheme))
       }
     }
-    .overlay {
-      controlShape
-        .strokeBorder(
-          usesGlass ? castAccent.opacity(0.72) : Color.white.opacity(0.22), lineWidth: 1)
-    }
     .clipShape(controlShape)
+    .overlay {
+      if usesGlass {
+        controlShape.strokeBorder(castAccent.opacity(0.72), lineWidth: 1)
+      } else {
+        controlShape
+          .inset(by: 2)
+          .stroke(
+            Color.white.opacity(0.8),
+            style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+          )
+      }
+    }
     .frame(maxWidth: .infinity, minHeight: 36)
   }
 
