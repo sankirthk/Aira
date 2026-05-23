@@ -975,6 +975,27 @@ private struct AppearanceTabContent: View {
   var body: some View {
     VStack(spacing: SettingsLayoutParity.sectionSpacing) {
 
+      SettingsPanel {
+        SectionTitle(text: "Style")
+        Text("App chrome and surface treatment.")
+          .settingsFont(.body, size: 16)
+          .foregroundStyle(Color("colorText").opacity(0.68))
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(
+            maxWidth: .infinity,
+            minHeight: SettingsLayoutParity.sectionDescriptionHeight,
+            maxHeight: SettingsLayoutParity.sectionDescriptionHeight,
+            alignment: .topLeading
+          )
+          .padding(.top, 4)
+
+        HStack(spacing: 10) {
+          managerInterfaceStyleButton(.classic)
+          managerInterfaceStyleButton(.liquidGlass)
+        }
+        .padding(.top, 14)
+      }
+
       // App Theme
       SettingsPanel {
         SectionTitle(text: "Theme")
@@ -1012,27 +1033,6 @@ private struct AppearanceTabContent: View {
           }
         }
         .padding(.top, 10)
-      }
-
-      SettingsPanel {
-        SectionTitle(text: "Manager UI")
-        Text("How app chrome and surfaces are drawn.")
-          .settingsFont(.body, size: 16)
-          .foregroundStyle(Color("colorText").opacity(0.68))
-          .fixedSize(horizontal: false, vertical: true)
-          .frame(
-            maxWidth: .infinity,
-            minHeight: SettingsLayoutParity.sectionDescriptionHeight,
-            maxHeight: SettingsLayoutParity.sectionDescriptionHeight,
-            alignment: .topLeading
-          )
-          .padding(.top, 4)
-
-        HStack(spacing: 10) {
-          managerInterfaceStyleButton(.classic)
-          managerInterfaceStyleButton(.liquidGlass)
-        }
-        .padding(.top, 14)
       }
 
       // Typography

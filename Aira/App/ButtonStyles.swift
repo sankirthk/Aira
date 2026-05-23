@@ -144,9 +144,18 @@ struct AiraLibraryHeaderPrimaryButtonStyle: ButtonStyle {
             .strokeBorder(accent.opacity(0.72), lineWidth: 1)
         )
     } else {
+      let classicShape = RoundedRectangle(cornerRadius: 8)
       label
         .background(managerTheme.classicSelectedActionFill(for: colorScheme, isPressed: pressed))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(classicShape)
+        .overlay(
+          classicShape
+            .inset(by: 2)
+            .stroke(
+              Color.white.opacity(0.8),
+              style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+            )
+        )
     }
   }
 }
@@ -530,7 +539,7 @@ struct AiraCardEditButtonStyle: ButtonStyle {
       } else {
         configuration.isPressed ? 0.14 : 0.05
       }
-    let strokeOpacity: Double = isDark ? 0.72 : 0.54
+    let strokeOpacity: Double = isDark ? 0.80 : 0.62
 
     configuration.label
       .font(
@@ -548,7 +557,7 @@ struct AiraCardEditButtonStyle: ButtonStyle {
       .clipShape(shape)
       .overlay {
         shape
-          .strokeBorder(accent.opacity(strokeOpacity), lineWidth: usesGlass ? 1 : 1.25)
+          .strokeBorder(accent.opacity(strokeOpacity), lineWidth: usesGlass ? 1 : 1.5)
       }
   }
 }
@@ -592,8 +601,16 @@ struct AiraCardCastButtonStyle: ButtonStyle {
       }
       .clipShape(shape)
       .overlay {
-        shape
-          .strokeBorder(usesGlass ? accent.opacity(0.72) : Color.white.opacity(0.22), lineWidth: 1)
+        if usesGlass {
+          shape.strokeBorder(accent.opacity(0.72), lineWidth: 1)
+        } else {
+          shape
+            .inset(by: 2)
+            .stroke(
+              Color.white.opacity(0.8),
+              style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+            )
+        }
       }
   }
 }
