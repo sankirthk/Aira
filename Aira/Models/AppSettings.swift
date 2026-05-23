@@ -471,9 +471,9 @@ enum ManagerInterfaceStyle: String, Codable, CaseIterable {
   var settingsDescription: String {
     switch self {
     case .classic:
-      return "Keep Aira's current handcrafted manager chrome."
+      return "Organic, handcrafted chrome."
     case .liquidGlass:
-      return "Use native glass surfaces with warm Aira accents."
+      return "Native glass surfaces."
     }
   }
 }

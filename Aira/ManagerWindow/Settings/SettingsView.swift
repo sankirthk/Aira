@@ -193,9 +193,9 @@ enum SettingsLayoutParity {
   static let panelCornerRadius: CGFloat = 20
   static let sectionTitleHeight: CGFloat = 34
   static let sectionDescriptionHeight: CGFloat = 40
-  static let appearanceThemeCardHeight: CGFloat = 160
+  static let appearanceThemeCardHeight: CGFloat = 120
   static let paletteCardHeight: CGFloat = 58
-  static let managerInterfaceCardHeight: CGFloat = 92
+  static let managerInterfaceCardHeight: CGFloat = 72
   static let typographyControlHeight: CGFloat = 46
 }
 
@@ -975,10 +975,9 @@ private struct AppearanceTabContent: View {
   var body: some View {
     VStack(spacing: SettingsLayoutParity.sectionSpacing) {
 
-      // App Theme
       SettingsPanel {
-        SectionTitle(text: "Theme")
-        Text("Choose the Manager App color mode.")
+        SectionTitle(text: "Style")
+        Text("App chrome and surface treatment.")
           .settingsFont(.body, size: 16)
           .foregroundStyle(Color("colorText").opacity(0.68))
           .fixedSize(horizontal: false, vertical: true)
@@ -989,6 +988,17 @@ private struct AppearanceTabContent: View {
             alignment: .topLeading
           )
           .padding(.top, 4)
+
+        HStack(spacing: 10) {
+          managerInterfaceStyleButton(.classic)
+          managerInterfaceStyleButton(.liquidGlass)
+        }
+        .padding(.top, 14)
+      }
+
+      // App Theme
+      SettingsPanel {
+        SectionTitle(text: "Theme")
 
         HStack(spacing: 14) {
           themeCard(
@@ -1005,7 +1015,7 @@ private struct AppearanceTabContent: View {
 
       SettingsPanel {
         SectionTitle(text: "Palette")
-        Text("Choose Aira's signature palette, or a neutral app with blue or violet accents.")
+        Text("Accent colour for controls and highlights.")
           .settingsFont(.body, size: 16)
           .foregroundStyle(Color("colorText").opacity(0.68))
           .fixedSize(horizontal: false, vertical: true)
@@ -1023,29 +1033,6 @@ private struct AppearanceTabContent: View {
           }
         }
         .padding(.top, 10)
-      }
-
-      SettingsPanel {
-        SectionTitle(text: "Manager UI")
-        Text(
-          "Choose how the Manager App chrome is drawn. Overlay windows keep their current presentation."
-        )
-        .settingsFont(.body, size: 16)
-        .foregroundStyle(Color("colorText").opacity(0.68))
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(
-          maxWidth: .infinity,
-          minHeight: SettingsLayoutParity.sectionDescriptionHeight,
-          maxHeight: SettingsLayoutParity.sectionDescriptionHeight,
-          alignment: .topLeading
-        )
-        .padding(.top, 4)
-
-        HStack(spacing: 10) {
-          managerInterfaceStyleButton(.classic)
-          managerInterfaceStyleButton(.liquidGlass)
-        }
-        .padding(.top, 14)
       }
 
       // Typography
@@ -1115,12 +1102,6 @@ private struct AppearanceTabContent: View {
           .settingsFont(.display, size: 24)
           .foregroundStyle(Color("colorText"))
           .padding(.top, 10)
-        Text(tone)
-          .settingsFont(.body, size: 14)
-          .foregroundStyle(Color("colorText").opacity(0.64))
-          .lineSpacing(2)
-          .fixedSize(horizontal: false, vertical: true)
-          .padding(.top, 4)
       }
       .padding(14)
       .frame(height: SettingsLayoutParity.appearanceThemeCardHeight, alignment: .topLeading)

@@ -324,7 +324,7 @@ private struct ScriptCardCastSplitButton: View {
         .lineLimit(1)
         .minimumScaleFactor(0.8)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         .padding(.leading, 12)
         .padding(.trailing, 6)
         .contentShape(Rectangle())
@@ -341,7 +341,7 @@ private struct ScriptCardCastSplitButton: View {
         Image(systemName: "chevron.down")
           .font(.system(size: 9, weight: .semibold))
           .frame(width: 32)
-          .padding(.vertical, 10)
+          .padding(.vertical, 8)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -365,12 +365,19 @@ private struct ScriptCardCastSplitButton: View {
           .fill(managerTheme.classicSelectedActionFill(for: colorScheme))
       }
     }
-    .overlay {
-      controlShape
-        .strokeBorder(
-          usesGlass ? castAccent.opacity(0.72) : Color.white.opacity(0.22), lineWidth: 1)
-    }
     .clipShape(controlShape)
+    .overlay {
+      if usesGlass {
+        controlShape.strokeBorder(castAccent.opacity(0.72), lineWidth: 1)
+      } else {
+        controlShape
+          .inset(by: 2)
+          .stroke(
+            Color.white.opacity(0.8),
+            style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [2, 1])
+          )
+      }
+    }
     .frame(maxWidth: .infinity, minHeight: 36)
   }
 
