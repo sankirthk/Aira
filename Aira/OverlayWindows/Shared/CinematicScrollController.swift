@@ -20,6 +20,10 @@ class CinematicScrollController {
   private let postGlideGapSpeedMultiplier: Double = 1.6
   private var remainingPostSpeechGlide: Double = 0
 
+  var isRunningForTesting: Bool {
+    scrollTask != nil
+  }
+
   func configure(
     pointsPerSecond: Double,
     contentHeight: CGFloat,

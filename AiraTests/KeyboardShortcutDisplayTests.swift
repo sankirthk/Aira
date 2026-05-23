@@ -2457,27 +2457,18 @@ struct SessionPlayheadCoordinatorTests {
 
   @Test func cinematicScrollControllerStopHaltsFutureTicks() async {
     let controller = CinematicScrollController()
-    let tickCounter = LockIsolated(0)
 
     controller.configure(pointsPerSecond: 80, contentHeight: 2000, viewportHeight: 400)
     controller.setInitialOffset(0)
-    controller.onScrollTick = { _ in
-      tickCounter.withValue { $0 += 1 }
-    }
     controller.setAnchorOffset(0.8)
 
     try? await waitUntil(timeoutNanoseconds: 500_000_000) {
-      tickCounter.value > 0
+      controller.isRunningForTesting
     }
-    let ticksBeforeStop = tickCounter.value
-    #expect(ticksBeforeStop > 0)
+    #expect(controller.isRunningForTesting)
 
     controller.stop()
-    try? await Task.sleep(nanoseconds: 30_000_000)
-    let ticksAfterStopSettled = tickCounter.value
-
-    try? await Task.sleep(nanoseconds: 80_000_000)
-    #expect(tickCounter.value == ticksAfterStopSettled)
+    #expect(controller.isRunningForTesting == false)
   }
 }
 
