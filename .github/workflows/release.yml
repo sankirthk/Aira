@@ -22,7 +22,7 @@ concurrency:
 jobs:
   validate:
     name: Validate
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - name: Check out tagged source
@@ -48,7 +48,7 @@ jobs:
 
   package-and-notarize:
     name: Package And Notarize
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 60
     needs: validate
     outputs:
