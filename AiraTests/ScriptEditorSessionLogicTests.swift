@@ -94,21 +94,44 @@ struct ScriptEditorSessionLogicTests {
       ]
     )
     #expect(request.pillModes == [.manual(scriptId: validManualID)])
-    #expect(request.skippedSatelliteCount == 1)
+    #expect(request.skippedDueToEmptyScript == 1)
   }
 
   @Test func satelliteLaunchRequestReportsSkippedSatelliteFeedback() {
+    let emptyScriptID = UUID()
+    let scripts = [
+      ScriptMeta(
+        id: emptyScriptID,
+        title: "Empty Script",
+        lastEdited: Date(timeIntervalSince1970: 10),
+        wordCount: 0,
+        starred: false
+      )
+    ]
     var state = ScriptEditorSatelliteLaunchPanelState.make(enabledSatelliteCount: 2)
     state.sections[0].choice = .mirrorCurrentScript
     state.sections[1].choice = .manual
+    state.sections[1].selectedManualScriptID = emptyScriptID
+
+    let request = state.launchRequest(scripts: scripts)
+
+    #expect(request.skippedDueToEmptyScript == 1)
+    #expect(
+      request.skippedSatelliteFeedbackMessage
+        == "1 Pill Window will be skipped because the selected script is empty."
+    )
+  }
+
+  @Test func satelliteLaunchRequestNoWarningWhenNoScriptSelected() {
+    var state = ScriptEditorSatelliteLaunchPanelState.make(enabledSatelliteCount: 2)
+    state.sections[0].choice = .mirrorCurrentScript
+    state.sections[1].choice = .manual
+    // No selectedManualScriptID set — user hasn't picked a script yet
 
     let request = state.launchRequest(scripts: [])
 
-    #expect(request.skippedSatelliteCount == 1)
-    #expect(
-      request.skippedSatelliteFeedbackMessage
-        == "1 Pill Window will be skipped because it does not have a valid script."
-    )
+    #expect(request.skippedDueToEmptyScript == 0)
+    #expect(request.skippedSatelliteFeedbackMessage == nil)
   }
 
   @Test func satelliteLaunchPanelManualScriptDropdownTitleReflectsSelection() {

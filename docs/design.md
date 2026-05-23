@@ -102,6 +102,14 @@ Aira does not use heavy drop shadows. Elevation is communicated through:
 - No blur or glow effects on Manager App elements
 - The Notch/Pill overlay uses `backdropFilter: blur(8px)` to separate from the desktop — this is the one intentional blur usage
 
+### Manager Interface Modes
+
+The Manager App supports two persisted interface modes. **Classic** is the default and preserves the existing earthy, hand-drawn manager chrome. **Liquid Glass** is an optional mode for the Manager App only; it does not change Notch or Pill overlay windows.
+
+Liquid Glass keeps Aira's sage, terracotta, cream, and charcoal palette as restrained accents while using more native macOS surfaces. On macOS 26 and later, custom manager surfaces use SwiftUI Liquid Glass (`glassEffect`, `GlassEffectContainer`, `.glass`, and `.glassProminent`) where standard controls do not already provide the expected system treatment. On older supported macOS versions, the same mode falls back to adaptive material-backed panes and controls.
+
+The App Theme setting (Light Paper / Dark Studio / System) remains independent. Liquid Glass respects the resolved color scheme instead of forcing light or dark appearance. Typography also follows the selected Manager mode: Classic keeps the decorative Indie Flower / Crimson Text / Manrope mix, while Liquid Glass uses native system typography for dense chrome, controls, tabs, and panels.
+
 ---
 
 ## 3. Screen Inventory
@@ -111,7 +119,7 @@ Aira does not use heavy drop shadows. Elevation is communicated through:
 The persistent main window. This is the user's home base for authoring and managing scripts.
 
 **Window behavior:**
-- Standard macOS `NSWindow` with title bar and traffic lights
+- Borderless macOS `NSWindow` with full-size content and no titlebar/toolbar strip; Manager chrome is owned by the SwiftUI sidebar/content surface
 - Minimum size: 900 × 600pt
 - Opens centered on launch; position is saved and restored across sessions
 
@@ -119,6 +127,22 @@ The persistent main window. This is the user's home base for authoring and manag
 - Left sidebar (fixed width options: 64pt collapsed, 256pt expanded)
 - Right content area (fills remaining width, hosts all sub-screens)
 - Sidebar collapse state persists across sessions
+- The Manager window does not enter true macOS fullscreen in any Manager UI mode; the green window control uses normal zoom behavior so Classic and Liquid Glass share the same window-management policy.
+- The Manager uses ChatGPT/Settings-style app chrome in every Manager UI mode: borderless no-titlebar window, full-size rounded window content, no vertical divider bar between the sidebar and main content, and no visible toolbar/title region above the app content.
+- Dock reopen restores a miniaturized Manager window to the front. The top-left traffic-light area remains visible and responsive even before the Manager window is key; Aira does not draw custom hover symbols over those controls, so macOS owns the default close/minimize/zoom glyph treatment.
+- Manager window chrome configuration must be idempotent. Stale SwiftUI-generated Manager window frame defaults must be removed before launch, and restored Manager window frames must be clamped to the current visible display before layout; resizing, restoring, and opening Preferences must not trigger AppKit/SwiftUI recursive Update Constraints passes from an oversized/offscreen restored frame.
+- The top-left sidebar chrome is persistent for app navigation: the sidebar reserves a dedicated top band for sidebar toggle, Back, and Forward controls before the New Script action begins. The Manager window itself is borderless, so no native titlebar or traffic-light strip is shown above the app content.
+- In Classic mode, the sidebar uses a flat sage surface in both light and dark appearance. Dark mode uses a deeper forest sage (`#374A3D`) instead of the light `colorPrimary`; it must separate from the parent content surface without introducing a gradient or terracotta-tinted wash behind the sidebar content.
+- In Classic dark mode, manager action buttons use darker companion accents instead of the light-mode sage/terracotta: sage actions use `#5F755F`, terracotta actions use `#A96A60`, and outlined terracotta text uses `#D99B90`. This applies to script cards and Script Editor controls while light Classic keeps the original palette.
+
+**Liquid Glass mode:**
+- Top-left sidebar chrome uses app navigation controls over the sidebar. In Liquid Glass mode, the sidebar spans the full window height and there is no separate content-column navigation bar.
+- The Manager root selects Classic vs Liquid layout directly from `AppState.settings.managerInterfaceStyle`; the theme environment is for descendant styling and must not be used by the root to decide which layout branch to render.
+- The Manager root owns an opaque Liquid Glass substrate so wallpaper color does not dominate the app, matching the solid parent surface behavior of macOS Settings. Light Liquid Glass uses a clear sage-green substrate (`#849688`); dark Liquid Glass uses a dark green substrate (`#253D2E`) with a subtle dark stabilizer. Child containers stay glassy but sample this app-owned green base instead of raw wallpaper.
+- Sidebar becomes a distinct inset rail with Classic-weight sage in light appearance and dark sage glass in dark appearance. Light Liquid Glass must match Classic light sidebar opacity and sage presence instead of fading toward gray or wallpaper-tinted material; grouped transparent controls, softly illuminated hairline dividers, rounded glass rows, and restrained terracotta active-state accents remain. Decorative tint and stroke layers must sit behind content or opt out of hit testing so sidebar buttons remain fully clickable.
+- Sidebar section disclosure uses a compact chevron affordance, not visible "show" / "hide" text. Collection names wrap to their full readable height instead of truncating.
+- Document library, script editor, preferences, and manager popups use shared manager surface helpers so the mode is consistent across the Manager App. Classic and Liquid Glass must share the same layout geometry for the main content container, Document Library header/grid container, Script Editor outer shell, Script Editor inner text panel, and toolbar button hit areas; mode switches may change material, fill, stroke, and text styling only. Preferences is the exception to the opaque parent rule: in Liquid Glass mode, its parent surfaces use a frosted translucent material with a restrained sage/dark-green tint so the modal matches the glass treatment of the main app.
+- Business logic, document data, overlay behavior, and session behavior are unchanged.
 
 **Sidebar anatomy (top to bottom):**
 1. App wordmark ("Aira") and sidebar toggle button
@@ -160,12 +184,14 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 **Layout:**
 - Sort/filter bar at top: "Sort by" dropdown (Last edited, Alphabetical, Duration), search input
 - Script card grid: 3 columns, responsive (drops to 2 at narrow widths)
+- The Document Library follows the same layout in Classic and Liquid Glass: the "Scripts" title, selection controls, and scrollable card grid sit directly on the content root without an extra rounded Scripts container or border.
 - **Import drop zone**: a subtle dashed border area at the top of the grid with an Indie Flower label "Drop a .txt file to import". Visible at all times, not just on drag-hover. On drag-hover: border becomes solid sage green, background tints lightly.
 - Empty state below grid if no scripts exist
 - Entering `Scripts` or returning from editor must render current library contents immediately; document grid must not appear blank until user opens a recent script or otherwise forces a second navigation pass
 
 **Sort/filter bar — selection mode controls:**
 - Left side: **Select All checkbox** (always visible). Unchecked by default. Three states: unchecked (none selected), mixed/dash (some selected), checked (all selected). Clicking unchecked → selects all visible scripts and enters selection mode. Clicking checked or mixed → deselects all and exits selection mode.
+- The Select All label must remain readable in light Classic and light Liquid Glass at rest; do not tint the idle label sage over the sage Liquid Glass substrate or fade the whole control below readable contrast.
 - Right side: **Trash icon button** — appears only when 1+ scripts are selected. Terracotta color. Clicking shows a confirmation alert: "Delete [N] script[s]? This cannot be undone." with destructive Delete + Cancel. After confirming, deletes all selected, refreshes grid, exits selection mode.
 
 **Script card — selection state:**
@@ -185,6 +211,7 @@ The default view in the content area. Shows all user scripts (or a filtered subs
 - Collection tags (small Inter pills in sage green, if the script belongs to any collection)
 - Hover utility action: **Add to Collection** button shown to the left of the star toggle. Uses `folder.badge.plus` in terracotta, reserves layout space so hover reveal does not shift other utility buttons, and opens the same collection-membership manager used by the context menu.
 - Starred toggle (top-right corner of card, filled/outline star)
+- Script titles stay on one line and truncate with a tail ellipsis so long titles do not push metadata or action buttons out of alignment at the minimum Manager window size.
 - Primary action: **Edit** button
 - Secondary action: **Cast to Notch** button
 - Pill Window launch is intentionally excluded from library-card quick actions in this pass; Pill Window-inclusive launch belongs to the Script Editor where per-Pill Window content choice can be made explicitly.
@@ -233,6 +260,8 @@ The full-screen authoring experience within the content area.
 - Word count + estimated duration (Slate Blue, right-aligned)
 - **Save** button (sage green, with hand-drawn save icon)
 - **Split launch control**: `[ Cast to Notch ] [ chevron ]`
+- In Classic mode, the toolbar/header uses a very pale sage surface in light appearance (`#F0F4F0`) instead of pure white or saturated sage. In dark appearance, the full editor container uses a charcoal-green writing surface (`#232B27`) instead of pure black, including the title/action bar, content gutter, and writing panel. The full editor shell has a subtle rounded border so the title/buttons and text area read as one contained editor.
+- Classic and Liquid Glass share the same Script Editor layout geometry: 18pt outer shell corner radius, 12pt inner editor panel radius, 32pt panel padding, and the same connected split-launch control height/radius. In Classic mode, the split launch control keeps its existing terracotta fill and white text/icon color while using the same rounded 10pt border shape and compact toolbar height as the Cue, Import, and Save toolbar buttons. Liquid Glass changes the surface material treatment only; it must not introduce different rounding, padding, or border structure.
 
 **Launch behavior:**
 - Primary button press on `Cast to Notch` is deterministic and launches only the Notch Window with the current editor script.
@@ -253,7 +282,7 @@ The full-screen authoring experience within the content area.
 - Missing assignment never falls back silently to mirrored content; the app launches only valid targets and shows lightweight feedback for skipped Pill Windows.
 
 **Main text area:**
-- Full-height, no visible border — blends with content area background
+- Full-height text area inside the bordered editor shell; the text field itself stays visually quiet and blends with the editor content background
 - Font: Crimson Text, 18pt default (respects user's size setting from Settings)
 - Line height: 1.7 — intentionally generous for readability during delivery rehearsal
 - Cue annotations rendered inline as colored pill badges (see Cue formatting below)
@@ -266,11 +295,11 @@ The full-screen authoring experience within the content area.
 - Visually distinct from plain script text at a glance
 - Preserved when script is loaded into the prompter (rendered as subtle markers in the overlay)
 
-**Right cue panel:**
-- Fixed width (200pt), scrollable if cue list grows
-- Header: "Performance Cues" in Manrope Bold
-- Cue buttons: pill-shaped `RoundedRectangle` buttons in cream with terracotta border
-- Clicking a cue inserts the annotation at the current cursor position
+**Cue insertion:**
+- The editor toolbar includes a compact `Cue` button.
+- Clicking `Cue` opens a small popover of common annotations: Smile, Pause 2s, Eye Contact, Gesture, Breathe, and Emphasize.
+- Cue buttons use frosted glass `RoundedRectangle` controls in Liquid Glass mode, with readable terracotta tint in light and dark mode, cream labels, and subtle light borders; classic mode keeps the hand-drawn terracotta tile style.
+- Clicking a cue inserts the annotation at the current cursor position, then closes the popover.
 - Supporting copy tells users they can create custom cues by typing any cue inside square brackets, such as `[Look up]`.
 
 **No AI button in v1.** The AI enhancement feature is deferred. No AI-related controls appear in the editor.
@@ -350,7 +379,12 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - The horizontal Preferences tab strip uses the themed surface color: warm cream in light mode and dark charcoal in dark mode.
 - The active tab chip uses sage green fill in both light and dark mode.
 - Active tab label text stays white in both light and dark mode.
-- In dark mode, the Preferences top chrome uses `#484C49`.
+- In Classic dark mode, the full Preferences modal surface uses the same dark green `#465649` across the top chrome, sidebar, root background, and main content area so the modal does not mix charcoal edges with a green center.
+- In Liquid Glass mode, the Preferences `NSWindow` uses a transparent backing with a native frosted translucent titlebar so the custom title/header area, sidebar, content root, and panels read as glass without becoming fully see-through. Preferences parent surfaces use a translucent frosted material with a very low-opacity green tint instead of an opaque fill, and Preferences typography routes through the same system-style font treatment as the Liquid Glass Manager App. Dynamic overlay font previews still render in their selected preview font.
+- The Notch and Pill Windows `Frosted Glass` toggle labels in Preferences use the same typography as other Overlay Feel control labels: Classic uses the display settings font at the overlay-control label size, and Liquid Glass uses the matching system medium label treatment.
+- The `Frosted Glass` toggle appears after all Overlay Feel sliders in both The Notch and Pill Windows Preferences sections, before the reset/defaults action.
+- Switching Preferences > Appearance > Manager UI between Classic and Liquid Glass must not move the modal layout. The Appearance sections use the same panel padding, section spacing, title/description text frames, and option-card heights in both modes; only materials, color, and typography treatment change.
+- Preferences > Appearance > Manager UI uses the same plain green selected-card treatment as the other Preferences option selectors in both Classic and Liquid Glass, with white selected title/helper text for contrast. It must not use the native prominent glass button style, because that introduces the system blue accent and extra inset around the theme buttons.
 - Theme preview swatches in the App Theme panel are small square boxes matching the mockup proportions, not wide rectangles.
 - The App Theme preview swatches are horizontally centered within their cards.
 - The Light Paper preview swatch remains the same warm cream preview in both light and dark mode; it does not inherit the app theme.
@@ -361,6 +395,7 @@ This tab sets the **shared overlay appearance defaults** plus notch-only sizing 
 - The Cast to Notch button on script cards always uses the light text color.
 - The sidebar New Script action uses pure white label/icon color.
 - The script-card Cast button label/icon match the Edit button's white label color.
+- Script-card Edit and Cast actions use rectangular rounded 8pt controls, not capsule/pill buttons.
 - Script cards use a slightly larger gap between the outer solid border and inner dashed border than the previous implementation.
 - The Pill Windows count/config controls use the same switch dimensions and sage-green tint treatment as the Voice Tracking toggle.
 - The Sidebar Scripts navigation item uses a document icon with scribble lines, distinct from the New Script plus icon.
@@ -721,7 +756,7 @@ Aira follows a "warm native" principle: the structural chrome of the app is clea
 | REQ-011 Resume After Hover | Cursor exit resumes from paused offset |
 | REQ-012 Pre-Session Countdown | CountdownOverlay component in all overlay windows |
 | REQ-013 Configurable Countdown | Settings > Overlays > countdown duration stepper |
-| REQ-014 Built-In Script Editor | Screen 3 — full editor with title, body, cue panel |
+| REQ-014 Built-In Script Editor | Screen 3 — full editor with title, body, cue popover |
 | REQ-015 Local Script Storage | No cloud sync UI; no upload buttons; delete removes local file |
 | REQ-016 Speech Cue Formatting | Cue panel in editor; CueAnnotation inline rendering |
 | REQ-017 Report-To-Natural | Deferred — no UI in v1 |

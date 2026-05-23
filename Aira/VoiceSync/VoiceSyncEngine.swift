@@ -24,6 +24,7 @@ class VoiceSyncEngine: ObservableObject {
   weak var audioLevelMonitor: AudioLevelMonitor?
   private var silenceDeadlineTask: Task<Void, Never>?
   private let microphonePermissionGranted: () -> Bool
+  private let startsAudioEngine: Bool
 
   private var scriptWords: [String] = []
   private var cursorIndex: Int = 0
@@ -70,12 +71,14 @@ class VoiceSyncEngine: ObservableObject {
     recognitionBackend: SpeechRecognitionBackend? = nil,
     microphonePermissionGranted: @escaping () -> Bool = {
       AVAudioApplication.shared.recordPermission == .granted
-    }
+    },
+    startsAudioEngine: Bool = true
   ) {
     let wordTrackingBackend = recognitionBackend ?? WhisperSpeechRecognitionBackend()
     self.wordTrackingRecognitionBackend = wordTrackingBackend
     self.highlightRecognitionBackend = recognitionBackend ?? AppleSpeechRecognitionBackend()
     self.microphonePermissionGranted = microphonePermissionGranted
+    self.startsAudioEngine = startsAudioEngine
     configureRecognitionBackendCallbacks()
   }
 
@@ -84,13 +87,15 @@ class VoiceSyncEngine: ObservableObject {
     highlightRecognitionBackend: SpeechRecognitionBackend?,
     microphonePermissionGranted: @escaping () -> Bool = {
       AVAudioApplication.shared.recordPermission == .granted
-    }
+    },
+    startsAudioEngine: Bool = true
   ) {
     let wordTrackingBackend = recognitionBackend ?? WhisperSpeechRecognitionBackend()
     self.wordTrackingRecognitionBackend = wordTrackingBackend
     self.highlightRecognitionBackend =
       highlightRecognitionBackend ?? recognitionBackend ?? AppleSpeechRecognitionBackend()
     self.microphonePermissionGranted = microphonePermissionGranted
+    self.startsAudioEngine = startsAudioEngine
     configureRecognitionBackendCallbacks()
   }
 
@@ -344,6 +349,16 @@ class VoiceSyncEngine: ObservableObject {
     diagnostics = DiagnosticsState()
     diagnostics.sessionStart = Date()
     removeDiagnosticsObservers()
+
+    guard startsAudioEngine else {
+      if recognitionEnabled {
+        prepareRecognitionBackendIfNeeded()
+        scheduleSilenceDeadline()
+      }
+      state = .running
+      return
+    }
+
     let engine = AVAudioEngine()
     audioEngine = engine
     observeAudioEngineConfigurationChanges(engine)

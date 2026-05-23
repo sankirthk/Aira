@@ -58,6 +58,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     window.title = "Preferences"
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
+    configureWindowAppearance(window, appState: appState)
     window.minSize = CGSize(width: 760, height: 620)
     window.collectionBehavior.remove(.fullScreenPrimary)
     window.collectionBehavior.remove(.fullScreenAuxiliary)
@@ -74,12 +75,30 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
   }
 
   private func refreshContent(appState: AppState) {
+    if let window {
+      configureWindowAppearance(window, appState: appState)
+    }
+
     guard let hostingView = window?.contentView as? NSHostingView<AnyView> else {
       window?.contentView = NSHostingView(rootView: AnyView(rootView(appState: appState)))
       return
     }
 
     hostingView.rootView = AnyView(rootView(appState: appState))
+  }
+
+  private func configureWindowAppearance(_ window: NSWindow, appState: AppState) {
+    if appState.settings.managerInterfaceStyle == .liquidGlass {
+      if window.isOpaque { window.isOpaque = false }
+      if window.backgroundColor != .clear { window.backgroundColor = .clear }
+      if window.titlebarAppearsTransparent { window.titlebarAppearsTransparent = false }
+      if window.titleVisibility != .hidden { window.titleVisibility = .hidden }
+    } else {
+      if !window.isOpaque { window.isOpaque = true }
+      if window.backgroundColor != .windowBackgroundColor {
+        window.backgroundColor = .windowBackgroundColor
+      }
+    }
   }
 
   private func rootView(appState: AppState) -> some View {

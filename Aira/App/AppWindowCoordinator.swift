@@ -5,10 +5,17 @@ enum AppWindowCoordinator {
   static let settingsWindowIdentifier = NSUserInterfaceItemIdentifier("aira.settings.window")
   static let transientMenuBarWindowIdentifier = NSUserInterfaceItemIdentifier(
     "aira.menu-bar.window")
+  static let managerDefaultFrameSize = CGSize(width: 1200, height: 800)
 
   @MainActor
   static func markManagerWindow(_ window: NSWindow?) {
-    window?.identifier = managerWindowIdentifier
+    guard let window else {
+      return
+    }
+
+    window.identifier = managerWindowIdentifier
+    sanitizeManagerWindowFrame(window)
+    configureManagerWindowChrome(window)
   }
 
   @MainActor
@@ -135,24 +142,25 @@ enum AppWindowCoordinator {
       markManagerWindow(window)
     }
 
-    window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = false
+    configureManagerWindowChrome(window)
 
     if !window.styleMask.contains(.fullScreen) {
       window.orderFrontRegardless()
       window.makeKeyAndOrderFront(nil)
     }
 
-    // Force the hosting view to re-layout after the orderOut/orderFront
-    // round-trip.  Without this, NSHostingView may skip its first layout
-    // pass due to reentrant-layout guards in SwiftUI, leaving the content
-    // area blank until the user resizes or switches tabs.
-    if let hostingView = window.contentView {
-      hostingView.needsLayout = true
-      hostingView.needsDisplay = true
-    }
-
     activateApp(application)
+
+    // Force the hosting view to re-layout after the orderOut/orderFront
+    // round-trip.  Deferred to the next run-loop tick so the window is
+    // fully visible before SwiftUI runs its layout pass.  A single
+    // deferred invalidation avoids the reentrant-layout crash that
+    // occurred when two immediate + async invalidations competed.
+    DispatchQueue.main.async {
+      configureManagerWindowChrome(window)
+      window.contentView?.needsLayout = true
+      window.contentView?.needsDisplay = true
+    }
   }
 
   @MainActor
@@ -250,6 +258,51 @@ enum AppWindowCoordinator {
     styleMask.contains(.fullScreen)
   }
 
+  static func managerWindowFrameNeedsClamp(_ frame: CGRect, visibleFrame: CGRect) -> Bool {
+    frame.width <= 0
+      || frame.height <= 0
+      || frame.width > visibleFrame.width
+      || frame.height > visibleFrame.height
+      || visibleFrame.intersection(frame).width < min(frame.width, visibleFrame.width) * 0.45
+      || visibleFrame.intersection(frame).height < min(frame.height, visibleFrame.height) * 0.45
+  }
+
+  static func clampedManagerWindowFrame(_ frame: CGRect, visibleFrame: CGRect) -> CGRect {
+    guard managerWindowFrameNeedsClamp(frame, visibleFrame: visibleFrame) else {
+      return frame
+    }
+
+    let width = min(max(managerDefaultFrameSize.width, 900), visibleFrame.width)
+    let height = min(max(managerDefaultFrameSize.height, 600), visibleFrame.height)
+    return CGRect(
+      x: visibleFrame.midX - width / 2,
+      y: visibleFrame.midY - height / 2,
+      width: width,
+      height: height
+    ).integral
+  }
+
+  static func managerChromeNeedsConfiguration(
+    styleMask: NSWindow.StyleMask,
+    titleVisibility: NSWindow.TitleVisibility,
+    titlebarAppearsTransparent: Bool,
+    hasTitlebarSeparator: Bool,
+    hasToolbar: Bool,
+    isMovableByWindowBackground: Bool,
+    isOpaque: Bool,
+    hasClearBackground: Bool
+  ) -> Bool {
+    !styleMask.contains(.titled)
+      || !styleMask.contains(.fullSizeContentView)
+      || titleVisibility != .hidden
+      || titlebarAppearsTransparent == false
+      || hasTitlebarSeparator
+      || hasToolbar
+      || isMovableByWindowBackground == false
+      || isOpaque
+      || hasClearBackground == false
+  }
+
   @MainActor
   private static func activateApp(_ application: NSApplication) {
     if #available(macOS 14.0, *) {
@@ -265,6 +318,66 @@ enum AppWindowCoordinator {
       return nil
     }
     return window
+  }
+
+  @MainActor
+  private static func sanitizeManagerWindowFrame(_ window: NSWindow) {
+    guard let screen = window.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+      return
+    }
+
+    let clampedFrame = clampedManagerWindowFrame(window.frame, visibleFrame: screen.visibleFrame)
+    guard clampedFrame != window.frame else {
+      return
+    }
+
+    window.setFrame(clampedFrame, display: false)
+  }
+
+  @MainActor
+  private static func configureManagerWindowChrome(_ window: NSWindow) {
+    guard
+      managerChromeNeedsConfiguration(
+        styleMask: window.styleMask,
+        titleVisibility: window.titleVisibility,
+        titlebarAppearsTransparent: window.titlebarAppearsTransparent,
+        hasTitlebarSeparator: window.titlebarSeparatorStyle != .none,
+        hasToolbar: window.toolbar != nil,
+        isMovableByWindowBackground: window.isMovableByWindowBackground,
+        isOpaque: window.isOpaque,
+        hasClearBackground: window.backgroundColor == .clear
+      )
+    else {
+      return
+    }
+
+    if !window.styleMask.contains(.titled) {
+      window.styleMask.insert(.titled)
+    }
+    if !window.styleMask.contains(.fullSizeContentView) {
+      window.styleMask.insert(.fullSizeContentView)
+    }
+    if window.titleVisibility != .hidden {
+      window.titleVisibility = .hidden
+    }
+    if window.titlebarAppearsTransparent == false {
+      window.titlebarAppearsTransparent = true
+    }
+    if window.titlebarSeparatorStyle != .none {
+      window.titlebarSeparatorStyle = .none
+    }
+    if window.toolbar != nil {
+      window.toolbar = nil
+    }
+    if window.isMovableByWindowBackground == false {
+      window.isMovableByWindowBackground = true
+    }
+    if window.isOpaque {
+      window.isOpaque = false
+    }
+    if window.backgroundColor != .clear {
+      window.backgroundColor = .clear
+    }
   }
 
   @MainActor

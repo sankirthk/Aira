@@ -16,6 +16,7 @@ struct PrompterContentView: View {
   let showScriptProgress: Bool
   let pauseOnHoverEnabled: Bool
   let autoScrollWPM: Double
+  let drawsBackground: Bool
   @ObservedObject var playheadCoordinator: SessionPlayheadCoordinator
   @ObservedObject var scrollCoordinator: SessionScrollCoordinator
   let reportsPrimaryMetrics: Bool
@@ -61,6 +62,7 @@ struct PrompterContentView: View {
     showScriptProgress: Bool = false,
     pauseOnHoverEnabled: Bool = true,
     autoScrollWPM: Double = 0,
+    drawsBackground: Bool = true,
     playheadCoordinator: SessionPlayheadCoordinator,
     scrollCoordinator: SessionScrollCoordinator,
     reportsPrimaryMetrics: Bool = false,
@@ -87,6 +89,7 @@ struct PrompterContentView: View {
     self.showScriptProgress = showScriptProgress
     self.pauseOnHoverEnabled = pauseOnHoverEnabled
     self.autoScrollWPM = autoScrollWPM
+    self.drawsBackground = drawsBackground
     self.playheadCoordinator = playheadCoordinator
     self.scrollCoordinator = scrollCoordinator
     self.reportsPrimaryMetrics = reportsPrimaryMetrics
@@ -201,8 +204,10 @@ struct PrompterContentView: View {
   var body: some View {
     GeometryReader { geometry in
       ZStack(alignment: .bottom) {
-        Color(hex: appearance.backgroundColor)
-          .opacity(appearance.opacity)
+        if drawsBackground {
+          Color(hex: appearance.backgroundColor)
+            .opacity(appearance.opacity)
+        }
 
         if sessionStarted {
           VStack(spacing: 0) {
@@ -760,7 +765,7 @@ struct PrompterContentView: View {
     .frame(maxWidth: .infinity)
     .frame(height: embeddedAudioIndicatorLaneHeight)
     .background(
-      Color(hex: appearance.backgroundColor)
+      drawsBackground ? Color(hex: appearance.backgroundColor) : Color.clear
     )
   }
 
@@ -1770,6 +1775,19 @@ enum ScrollWheelMonitorRouting {
       return appIsActive
     case .global:
       return !appIsActive
+    }
+  }
+}
+
+struct OverlayFrostedGlassBackground: View {
+  let appearance: OverlayAppearance
+
+  var body: some View {
+    ZStack {
+      Rectangle()
+        .fill(.ultraThinMaterial)
+      Rectangle()
+        .fill(Color(hex: appearance.backgroundColor).opacity(appearance.opacity * 0.45))
     }
   }
 }

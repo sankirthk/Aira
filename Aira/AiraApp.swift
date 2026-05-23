@@ -38,7 +38,7 @@ struct AiraApp: App {
           installMenuBarController()
         }
     }
-    .windowStyle(.titleBar)
+    .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentMinSize)
     .commands {
       if appUpdaterController.showsCheckForUpdates {

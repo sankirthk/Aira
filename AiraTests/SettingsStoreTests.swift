@@ -51,6 +51,8 @@ struct SettingsStoreTests {
       autoScrollWPM: 150,
       screenCaptureExclusionEnabled: false,
       appearanceMode: .dark,
+      notchFrostedGlassEnabled: true,
+      pillFrostedGlassEnabled: true,
       managerTypography: .large,
       liveAnswerDisclosureAccepted: true,
       hasCompletedInitialPermissionPrompt: true,
@@ -109,6 +111,8 @@ struct SettingsStoreTests {
       autoScrollWPM: 120,
       screenCaptureExclusionEnabled: false,
       appearanceMode: .light,
+      notchFrostedGlassEnabled: true,
+      pillFrostedGlassEnabled: true,
       managerTypography: .small,
       liveAnswerDisclosureAccepted: false,
       hasCompletedInitialPermissionPrompt: true,
@@ -249,6 +253,103 @@ struct SettingsStoreTests {
     #expect(VoiceScrollMode.wordTracking.usesSpeechSensitivity)
     #expect(
       VoiceScrollMode.wordTracking.usesSpeechRecognition(spokenWordHighlightingEnabled: false))
+  }
+
+  @Test func managerInterfaceStyleDefaultsRoundTripsAndPersists() throws {
+    var defaults = AppSettings()
+    #expect(defaults.managerInterfaceStyle == .classic)
+    #expect(defaults.managerColorPalette == .aira)
+    #expect(defaults.managerAccentColorHex == ManagerColorPalette.defaultNeutralAccentHex)
+
+    defaults.managerInterfaceStyle = .liquidGlass
+    defaults.managerColorPalette = .violet
+    let data = try JSONEncoder().encode(defaults)
+    let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+    #expect(decoded.managerInterfaceStyle == .liquidGlass)
+    #expect(decoded.managerColorPalette == .violet)
+
+    let legacyJSON = """
+      {
+        "appearanceMode": "system",
+        "managerTypography": "medium"
+      }
+      """.data(using: .utf8)!
+    let legacyDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyJSON)
+    #expect(legacyDecoded.managerInterfaceStyle == .classic)
+    #expect(legacyDecoded.managerColorPalette == .aira)
+    #expect(legacyDecoded.managerAccentColorHex == ManagerColorPalette.defaultNeutralAccentHex)
+
+    let legacyVioletJSON = """
+        {
+          "managerColorPalette": "violet"
+      }
+      """.data(using: .utf8)!
+    let legacyVioletDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyVioletJSON)
+    #expect(legacyVioletDecoded.managerColorPalette == .violet)
+    #expect(legacyVioletDecoded.managerAccentColorHex == ManagerColorPalette.violetAccentHex)
+
+    let legacyNeutralJSON = """
+      {
+        "managerColorPalette": "neutral"
+      }
+      """.data(using: .utf8)!
+    let legacyNeutralDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyNeutralJSON)
+    #expect(legacyNeutralDecoded.managerColorPalette == .blue)
+
+    let (store, userDefaults, suiteName) = makeSettingsStore()
+    defer { cleanupSettings(userDefaults, suiteName: suiteName) }
+
+    try store.save(defaults)
+    #expect(try store.load().managerInterfaceStyle == .liquidGlass)
+    #expect(try store.load().managerColorPalette == .violet)
+  }
+
+  @Test func overlayFrostedGlassTogglesDefaultToOffAndRoundTrip() throws {
+    var defaults = AppSettings()
+    #expect(defaults.notchFrostedGlassEnabled == false)
+    #expect(defaults.pillFrostedGlassEnabled == false)
+
+    defaults.notchFrostedGlassEnabled = true
+    defaults.pillFrostedGlassEnabled = true
+
+    let data = try JSONEncoder().encode(defaults)
+    let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+    #expect(decoded.notchFrostedGlassEnabled)
+    #expect(decoded.pillFrostedGlassEnabled)
+
+    let legacyJSON = """
+      {
+        "appearanceMode": "system",
+        "managerTypography": "medium"
+      }
+      """.data(using: .utf8)!
+    let legacyDecoded = try JSONDecoder().decode(AppSettings.self, from: legacyJSON)
+
+    #expect(legacyDecoded.notchFrostedGlassEnabled == false)
+    #expect(legacyDecoded.pillFrostedGlassEnabled == false)
+  }
+
+  @Test func managerThemePolicyResolvesLiquidGlassAvailability() {
+    #expect(
+      ManagerThemePolicy.surfaceTreatment(
+        for: .classic,
+        operatingSystemMajorVersion: 26
+      ) == .classic
+    )
+    #expect(
+      ManagerThemePolicy.surfaceTreatment(
+        for: .liquidGlass,
+        operatingSystemMajorVersion: 26
+      ) == .nativeGlass
+    )
+    #expect(
+      ManagerThemePolicy.surfaceTreatment(
+        for: .liquidGlass,
+        operatingSystemMajorVersion: 25
+      ) == .materialFallback
+    )
   }
 
   @Test func loadCorruptDataThrows() {

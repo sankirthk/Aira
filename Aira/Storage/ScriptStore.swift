@@ -152,6 +152,24 @@ class ScriptStore {
     return script
   }
 
+  /// Extracts plain text from a supported file (txt, pdf, docx) without creating a script.
+  func extractText(from url: URL) throws -> String {
+    let format = try ImportFormat(url: url)
+    let isSecurityScoped = url.startAccessingSecurityScopedResource()
+    defer { if isSecurityScoped { url.stopAccessingSecurityScopedResource() } }
+
+    guard FileManager.default.isReadableFile(atPath: url.path) else {
+      throw ImportError.accessDenied
+    }
+
+    let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+    if let size = attrs[.size] as? Int, size > Self.maxImportFileSize {
+      throw ImportError.fileTooLarge
+    }
+
+    return try importedText(from: url, format: format)
+  }
+
   private func importedText(from url: URL, format: ImportFormat) throws -> String {
     let text: String
 
