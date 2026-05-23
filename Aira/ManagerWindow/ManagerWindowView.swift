@@ -197,16 +197,11 @@ struct ManagerWindowView: View {
   }
 
   /// Compact chrome strip shown when the sidebar is collapsed.
-  /// Contains a traffic-light host (buttons appear on hover) followed by
-  /// sidebar toggle, back, and forward buttons in a small pill.
   private var collapsedSidebarPill: some View {
     ZStack(alignment: .leading) {
-      // Traffic light host — reparents the window buttons into this area.
-      // They appear/hide via the host view's tracking area hover logic.
-      SidebarView.SidebarTrafficLightBridge(sidebarVisible: $sidebarVisible)
-        .frame(
-          width: SidebarView.SidebarChromeMetrics.appControlLeading,
-          height: SidebarView.SidebarChromeMetrics.height)
+      SidebarView.SidebarTrafficLightButtons()
+        .padding(.leading, 8)
+        .padding(.top, 17)
 
       // App control buttons — positioned after the traffic lights.
       HStack(spacing: 6) {

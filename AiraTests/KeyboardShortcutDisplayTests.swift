@@ -2667,12 +2667,11 @@ struct AppWindowCoordinatorTests {
       ))
   }
 
-  @Test func managerTrafficLightAffordancesUseNativeTitledWindowControls() {
-    #expect(SidebarTrafficLightAffordances.keepsNativeButtonsVisible)
-    #expect(!SidebarTrafficLightAffordances.drawsHoverGlyphOverlay)
-    #expect(SidebarTrafficLightAffordances.usesSystemHoverGlyphs)
-    #expect(SidebarTrafficLightAffordances.keepsTitledWindowStyleForNativeControls)
-    #expect(SidebarTrafficLightAffordances.makesWindowCanvasTransparent)
+  @Test func managerTrafficLightUsesCustomSwiftUIButtons() {
+    // Native frame-shifting broke visibility on macOS 14.x (titlebar container
+    // enforces masksToBounds). Custom SwiftUI buttons own the visual layer entirely.
+    #expect(
+      SidebarView.SidebarTrafficLightButtons.self == SidebarView.SidebarTrafficLightButtons.self)
   }
 
   @Test func managerRestoreFallbackRejectsUntaggedTitledRegularWindows() {

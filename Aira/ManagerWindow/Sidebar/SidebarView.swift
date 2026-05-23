@@ -1,14 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum SidebarTrafficLightAffordances {
-  static let keepsNativeButtonsVisible = true
-  static let drawsHoverGlyphOverlay = false
-  static let usesSystemHoverGlyphs = true
-  static let keepsTitledWindowStyleForNativeControls = true
-  static let makesWindowCanvasTransparent = true
-}
-
 struct SidebarView: View {
   @EnvironmentObject var appState: AppState
   @Environment(\.managerFontScale) private var managerFontScale
@@ -181,8 +173,9 @@ struct SidebarView: View {
 
     var body: some View {
       ZStack(alignment: .topLeading) {
-        SidebarTrafficLightBridge(sidebarVisible: $sidebarVisible)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        SidebarTrafficLightButtons()
+          .padding(.leading, 8)
+          .padding(.top, 17)
 
         HStack(spacing: 6) {
           chromeButton(
@@ -247,280 +240,90 @@ struct SidebarView: View {
     }
   }
 
-  struct SidebarTrafficLightBridge: NSViewRepresentable {
-    @Binding var sidebarVisible: Bool
+  // MARK: — Custom traffic light buttons
+  // Replaces the frame-shifting NSView approach that broke visibility on macOS 14.x
+  // because the titlebar container enforces masksToBounds on older OS versions.
 
-    func makeNSView(context: Context) -> SidebarTrafficLightHostView {
-      SidebarTrafficLightHostView()
+  struct SidebarTrafficLightButtons: View {
+    @State private var isHovering = false
+    @State private var isKey = true
+    @State private var windowRef: NSWindow? = nil
+
+    var body: some View {
+      HStack(spacing: 8) {
+        trafficButton(baseColor: Color(hex: "#FF605C"), symbol: "xmark") {
+          windowRef?.performClose(nil)
+        }
+        .help("Close")
+        trafficButton(baseColor: Color(hex: "#FFBD44"), symbol: "minus") {
+          windowRef?.miniaturize(nil)
+        }
+        .help("Miniaturize")
+        trafficButton(
+          baseColor: Color(hex: "#00CA4E"), symbol: "arrow.up.left.and.arrow.down.right"
+        ) {
+          windowRef?.zoom(nil)
+        }
+        .help("Zoom")
+      }
+      .onHover { isHovering = $0 }
+      .background(
+        SidebarWindowCapture { win in
+          windowRef = win
+          isKey = win.isKeyWindow
+          // Hide native buttons — we own the visuals now.
+          for buttonType: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+            win.standardWindowButton(buttonType)?.isHidden = true
+          }
+          // No-fullscreen enforcement.
+          win.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
+        }
+      )
+      .onReceive(
+        NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
+      ) { note in
+        if let w = note.object as? NSWindow, w === windowRef { isKey = true }
+      }
+      .onReceive(
+        NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)
+      ) { note in
+        if let w = note.object as? NSWindow, w === windowRef { isKey = false }
+      }
     }
 
-    func updateNSView(_ nsView: SidebarTrafficLightHostView, context: Context) {
-      nsView.sidebarVisible = sidebarVisible
-      nsView.syncTrafficLights()
+    private func trafficButton(
+      baseColor: Color, symbol: String, action: @escaping () -> Void
+    ) -> some View {
+      Button(action: action) {
+        ZStack {
+          Circle()
+            .fill(isKey ? baseColor : Color(hex: "#BFBFBF"))
+            .frame(width: 12, height: 12)
+          if isHovering && isKey {
+            Image(systemName: symbol)
+              .font(.system(size: 6.5, weight: .heavy))
+              .foregroundStyle(.black.opacity(0.45))
+          }
+        }
+      }
+      .buttonStyle(.plain)
+      .frame(width: 12, height: 12)
+      .contentShape(Circle())
     }
   }
 
-  final class SidebarTrafficLightHostView: NSView {
-    var sidebarVisible: Bool = true
-    private var windowObservers: [NSObjectProtocol] = []
-    /// Natural (macOS-set) origin of the traffic light row, shared across all instances
-    /// so that toggling the sidebar (which destroys one host and creates another) never
-    /// re-captures an already-shifted value.
-    private static var trafficLightBaseY: CGFloat?
-    /// Per-button natural X origins, keyed by button identity (pointer).
-    private static var trafficLightBaseXByButton: [ObjectIdentifier: CGFloat] = [:]
-    /// The window whose base position we captured — reset the cached values if the window changes.
-    private static weak var baseYWindow: NSWindow?
-    /// How far to shift the traffic lights downward (AppKit: decrease y = visually lower).
-    private let trafficLightDownShift: CGFloat = 22
-    /// How far to shift the traffic lights to the right.
-    private let trafficLightRightShift: CGFloat = 8
+  private struct SidebarWindowCapture: NSViewRepresentable {
+    var onCapture: (NSWindow) -> Void
 
-    override func viewDidMoveToWindow() {
-      super.viewDidMoveToWindow()
-      removeWindowObservers()
-      if let window {
-        installWindowObservers(window)
+    func makeNSView(context: Context) -> NSView {
+      let v = NSView()
+      DispatchQueue.main.async {
+        if let win = v.window { onCapture(win) }
       }
-      // Defer initial sync to ensure the view has a valid frame from layout.
-      DispatchQueue.main.async { [weak self] in
-        self?.captureAndSyncTrafficLights()
-      }
+      return v
     }
 
-    override func removeFromSuperview() {
-      removeWindowObservers()
-      super.removeFromSuperview()
-    }
-
-    deinit {
-      removeWindowObservers()
-    }
-
-    override func layout() {
-      super.layout()
-      DispatchQueue.main.async { [weak self] in
-        self?.syncTrafficLights()
-      }
-    }
-
-    // MARK: — Click forwarding for repositioned traffic lights
-
-    /// The traffic light buttons are shifted outside their titlebar container's bounds,
-    /// so normal hit testing never reaches them. We intercept clicks on this host view
-    /// and forward to the appropriate button based on position.
-    override func mouseDown(with event: NSEvent) {
-      guard let window else {
-        super.mouseDown(with: event)
-        return
-      }
-      let buttons: [(NSWindow.ButtonType, NSButton)] = [
-        (.closeButton, window.standardWindowButton(.closeButton)),
-        (.miniaturizeButton, window.standardWindowButton(.miniaturizeButton)),
-        (.zoomButton, window.standardWindowButton(.zoomButton)),
-      ].compactMap { type, btn in btn.map { (type, $0) } }
-
-      let locationInSelf = convert(event.locationInWindow, from: nil)
-
-      for (buttonType, button) in buttons {
-        let buttonFrameInSelf = button.convert(button.bounds, to: self)
-        // Use a slightly expanded rect for easier targeting
-        let hitRect = buttonFrameInSelf.insetBy(dx: -3, dy: -3)
-        if hitRect.contains(locationInSelf) {
-          switch buttonType {
-          case .closeButton:
-            window.performClose(nil)
-          case .miniaturizeButton:
-            window.miniaturize(nil)
-          case .zoomButton:
-            window.zoom(nil)
-          default:
-            break
-          }
-          return
-        }
-      }
-
-      super.mouseDown(with: event)
-    }
-
-    // MARK: — Window event observers
-
-    private func installWindowObservers(_ window: NSWindow) {
-      let nc = NotificationCenter.default
-
-      // Normal window state changes — just re-sync traffic light position/visibility.
-      let syncNames: [Notification.Name] = [
-        NSWindow.didDeminiaturizeNotification,
-        NSWindow.didBecomeKeyNotification,
-        NSWindow.didBecomeMainNotification,
-        NSWindow.didResizeNotification,
-        NSWindow.didEndLiveResizeNotification,
-        NSWindow.didExitFullScreenNotification,
-      ]
-      for name in syncNames {
-        windowObservers.append(
-          nc.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-            self?.syncTrafficLights()
-          }
-        )
-      }
-
-      // Fullscreen prevention: re-enforce collection behavior the moment macOS
-      // tries to push the window into fullscreen.
-      windowObservers.append(
-        nc.addObserver(
-          forName: NSWindow.willEnterFullScreenNotification,
-          object: window, queue: .main
-        ) { [weak self, weak window] _ in
-          guard let window else { return }
-          // Re-apply no-fullscreen policy (macOS may have reset it).
-          window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
-          self?.syncTrafficLights()
-        }
-      )
-
-      // Emergency exit: if the window enters fullscreen despite prevention,
-      // immediately toggle back out.
-      windowObservers.append(
-        nc.addObserver(
-          forName: NSWindow.didEnterFullScreenNotification,
-          object: window, queue: .main
-        ) { [weak window] _ in
-          window?.toggleFullScreen(nil)
-        }
-      )
-    }
-
-    private func removeWindowObservers() {
-      let nc = NotificationCenter.default
-      for observer in windowObservers {
-        nc.removeObserver(observer)
-      }
-      windowObservers.removeAll()
-    }
-
-    // MARK: — Traffic light management
-
-    private func captureAndSyncTrafficLights() {
-      guard let window else { return }
-      preserveNativeTitlebarForSystemControls(in: window)
-      syncTrafficLights()
-    }
-
-    func syncTrafficLights() {
-      guard let window else { return }
-      preserveNativeTitlebarForSystemControls(in: window)
-      let buttons = [
-        window.standardWindowButton(.closeButton),
-        window.standardWindowButton(.miniaturizeButton),
-        window.standardWindowButton(.zoomButton),
-      ].compactMap { $0 }
-
-      buttons.forEach { button in
-        button.isHidden = false
-        button.alphaValue = 1
-        button.isEnabled = true
-      }
-
-      shiftTrafficLightsDown(buttons: buttons)
-    }
-
-    private func shiftTrafficLightsDown(buttons: [NSButton]) {
-      guard let reference = buttons.first else { return }
-      let currentY = reference.frame.origin.y
-
-      // Reset the cached base when the window changes (e.g. window replacement).
-      if let win = window, Self.baseYWindow !== win {
-        Self.trafficLightBaseY = nil
-        Self.trafficLightBaseXByButton.removeAll()
-        Self.baseYWindow = win
-      }
-
-      // Capture natural position once across ALL instances so toggling the sidebar
-      // (which creates a fresh host view) cannot re-capture an already-shifted value.
-      if Self.trafficLightBaseY == nil {
-        Self.trafficLightBaseY = currentY
-      }
-      for button in buttons {
-        let key = ObjectIdentifier(button)
-        if Self.trafficLightBaseXByButton[key] == nil {
-          Self.trafficLightBaseXByButton[key] = button.frame.origin.x
-        }
-      }
-
-      let targetY = Self.trafficLightBaseY! - trafficLightDownShift
-
-      buttons.forEach { button in
-        var frame = button.frame
-        let key = ObjectIdentifier(button)
-        let baseX = Self.trafficLightBaseXByButton[key] ?? frame.origin.x
-        let targetX = baseX + trafficLightRightShift
-        var needsUpdate = false
-
-        if abs(frame.origin.y - targetY) > 0.5 {
-          frame.origin.y = targetY
-          needsUpdate = true
-        }
-        if abs(frame.origin.x - targetX) > 0.5 {
-          frame.origin.x = targetX
-          needsUpdate = true
-        }
-        if needsUpdate {
-          button.frame = frame
-        }
-        button.needsDisplay = true
-        // On macOS 14.x the titlebar container clips subviews strictly —
-        // shifted buttons fall outside and become invisible. Disable masking
-        // on every ancestor between the button and the window frame view so
-        // the buttons remain visible at their shifted position.
-        disableClippingOnTitlebarAncestors(for: button)
-      }
-    }
-
-    private func disableClippingOnTitlebarAncestors(for button: NSButton) {
-      let frameView = window?.contentView?.superview
-      var view: NSView? = button.superview
-      while let v = view, v !== frameView {
-        v.wantsLayer = true
-        v.layer?.masksToBounds = false
-        view = v.superview
-      }
-    }
-
-    private func preserveNativeTitlebarForSystemControls(in window: NSWindow) {
-      if !window.styleMask.contains(.titled) {
-        window.styleMask.insert(.titled)
-      }
-      if !window.styleMask.contains(.fullSizeContentView) {
-        window.styleMask.insert(.fullSizeContentView)
-      }
-      if window.titleVisibility != .hidden {
-        window.titleVisibility = .hidden
-      }
-      if window.titlebarAppearsTransparent == false {
-        window.titlebarAppearsTransparent = true
-      }
-      if window.titlebarSeparatorStyle != .none {
-        window.titlebarSeparatorStyle = .none
-      }
-      if window.toolbar != nil {
-        window.toolbar = nil
-      }
-      if window.isOpaque {
-        window.isOpaque = false
-      }
-      if window.backgroundColor != .clear {
-        window.backgroundColor = .clear
-      }
-      // Re-enforce no-fullscreen policy on every sync — macOS 26 may reset it.
-      if window.collectionBehavior.contains(.fullScreenPrimary)
-        || !window.collectionBehavior.contains(.fullScreenNone)
-      {
-        window.collectionBehavior = [.managed, .participatesInCycle, .fullScreenNone]
-      }
-    }
-
+    func updateNSView(_ nsView: NSView, context: Context) {}
   }
 
   @ViewBuilder
