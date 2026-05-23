@@ -1191,7 +1191,8 @@ struct VoiceSyncMatchingTests {
     backend.prepareError = FakeSpeechRecognitionBackendError.prepareFailed
     let engine = VoiceSyncEngine(
       recognitionBackend: backend,
-      microphonePermissionGranted: { true }
+      microphonePermissionGranted: { true },
+      startsAudioEngine: false
     )
     engine.loadScript(text: "one two three four", startingAt: 0)
     engine.voiceScrollMode = .classicScroll
@@ -1217,7 +1218,8 @@ struct VoiceSyncMatchingTests {
     backend.prepareError = FakeSpeechRecognitionBackendError.prepareFailed
     let engine = VoiceSyncEngine(
       recognitionBackend: backend,
-      microphonePermissionGranted: { true }
+      microphonePermissionGranted: { true },
+      startsAudioEngine: false
     )
     engine.loadScript(text: "one two three four", startingAt: 0)
     engine.voiceScrollMode = .classicScroll
