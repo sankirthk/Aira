@@ -104,24 +104,8 @@ struct AiraMessagePopup: View {
 
   @ViewBuilder
   private var dismissButton: some View {
-    if usesGlass {
-      Button(content.primaryActionTitle, action: onDismiss)
-        .modifier(GlassPopupButtonModifier())
-    } else {
-      Button(content.primaryActionTitle, action: onDismiss)
-        .buttonStyle(AiraCardCastButtonStyle())
-    }
-  }
-}
-
-private struct GlassPopupButtonModifier: ViewModifier {
-  @ViewBuilder
-  func body(content: Content) -> some View {
-    if #available(macOS 26.0, *) {
-      content.buttonStyle(.glassProminent)
-    } else {
-      content.buttonStyle(AiraCardCastButtonStyle())
-    }
+    Button(content.primaryActionTitle, action: onDismiss)
+      .buttonStyle(AiraCardCastButtonStyle())
   }
 }
 

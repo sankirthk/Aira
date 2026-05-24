@@ -31,14 +31,6 @@ struct ManagerWindowView: View {
     contentView
       .frame(minWidth: 900, minHeight: 600)
       .ignoresSafeArea(.container, edges: .top)
-      .environment(
-        \.managerTheme,
-        ManagerTheme(
-          interfaceStyle: appState.settings.managerInterfaceStyle,
-          colorPalette: appState.settings.managerColorPalette,
-          accentColorHex: appState.settings.managerAccentColorHex
-        )
-      )
       .background(
         ManagerWindowAccessor { window in
           managerWindow = window
@@ -113,6 +105,14 @@ struct ManagerWindowView: View {
       .task(id: managerShortcutConfiguration) {
         refreshShortcutMonitors()
       }
+      .environment(
+        \.managerTheme,
+        ManagerTheme(
+          interfaceStyle: appState.settings.managerInterfaceStyle,
+          colorPalette: appState.settings.managerColorPalette,
+          accentColorHex: appState.settings.managerAccentColorHex
+        )
+      )
   }
 
   private var contentView: some View {
