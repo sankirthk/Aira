@@ -383,6 +383,8 @@ These are verified by a human tester and noted in this file when confirmed. They
 | MT-058 | Optional review-submission automation, if enabled later, only runs after explicit approval/manual dispatch and never from direct-release tag flow | `[ ]` |
 | UT-056 | Release metadata rendering for `v1.0.1` preserves an existing `v1.0.0` changelog entry while prepending the new release entry | `[x]` |
 | UT-057 | `AiraAppStore` `AppStoreRelease` build settings resolve `MARKETING_VERSION` to `1.0.1` for the next App Store upload train | `[x]` |
+| UT-058 | App Store and direct release archive scripts can build their `xcodebuild archive` argument lists when optional version override arrays are empty under Bash `set -u` | `[x]` |
+| UT-059 | App Store workflow package/upload jobs run on `macos-26`, matching the SDK required by Liquid Glass app code | `[x]` |
 
 | ID | Test | Status |
 |---|---|---|
