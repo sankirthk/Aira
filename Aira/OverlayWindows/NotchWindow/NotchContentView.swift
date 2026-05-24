@@ -213,7 +213,7 @@ struct NotchContentView: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let usesFrostedGlass = isDocked && frostedGlassEnabled
+      let usesFrostedGlass = frostedGlassEnabled
       let contentShape: AnyNotchShape =
         isDocked ? .notch(notchSize: notchSize) : .roundedRectangle
 
