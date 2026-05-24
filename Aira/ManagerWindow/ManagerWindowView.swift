@@ -346,54 +346,15 @@ struct ManagerWindowView: View {
     activeScript = appState.makeDraftScript(inCollection: collectionID)
   }
 
-  @ViewBuilder
+  // Extracted to a separate View so @Environment(\.managerTheme) resolves from the overlay
+  // context (after the .environment(\.managerTheme, ...) modifier in body), not from
+  // ManagerWindowView's own parent context which has no managerTheme set.
   private func deleteCollectionOverlay(collection: AiraCollection) -> some View {
-    ZStack {
-      Color.black.opacity(0.18)
-        .ignoresSafeArea()
-        .onTapGesture {
-          pendingDeleteCollection = nil
-        }
-
-      VStack(alignment: .leading, spacing: 12) {
-        Text("Delete Collection?")
-          .font(
-            managerTheme.usesLiquidGlassMode
-              ? .system(size: 22, weight: .bold)
-              : .custom("IndieFlower", size: 24)
-          )
-          .foregroundStyle(managerTheme.usesLiquidGlassMode ? .primary : Color("colorText"))
-
-        Text("Deleting \"\(collection.name)\" will not delete any scripts.")
-          .font(
-            managerTheme.usesLiquidGlassMode
-              ? .system(size: 14)
-              : .custom("CrimsonText-Regular", size: 15)
-          )
-          .foregroundStyle(
-            managerTheme.usesLiquidGlassMode ? .secondary : Color("colorText").opacity(0.72)
-          )
-          .fixedSize(horizontal: false, vertical: true)
-
-        HStack(spacing: 10) {
-          Button("Cancel") {
-            pendingDeleteCollection = nil
-          }
-          .buttonStyle(AiraSecondaryButtonStyle())
-
-          Button("Delete") {
-            confirmDeleteCollection()
-          }
-          .buttonStyle(AiraCardCastButtonStyle())
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-      }
-      .padding(20)
-      .frame(width: 320)
-      .managerSurface(cornerRadius: 20, classicFill: Color("colorBackground"), strokeOpacity: 0.12)
-      .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
-      .padding(16)
-    }
+    DeleteCollectionOverlay(
+      collection: collection,
+      onCancel: { pendingDeleteCollection = nil },
+      onConfirm: { confirmDeleteCollection() }
+    )
   }
 
   private func confirmDeleteCollection() {
@@ -898,6 +859,58 @@ struct ScriptEditorSessionLogic {
 
   static func canStartPresenterSession(withBody body: String) -> Bool {
     !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+}
+
+private struct DeleteCollectionOverlay: View {
+  let collection: AiraCollection
+  let onCancel: () -> Void
+  let onConfirm: () -> Void
+
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+
+  var body: some View {
+    ZStack {
+      Color.black.opacity(0.18)
+        .ignoresSafeArea()
+        .onTapGesture { onCancel() }
+
+      VStack(alignment: .leading, spacing: 12) {
+        Text("Delete Collection?")
+          .font(
+            usesGlass
+              ? .system(size: 22, weight: .bold)
+              : .custom("IndieFlower", size: 24)
+          )
+          .foregroundStyle(usesGlass ? .primary : Color("colorText"))
+
+        Text("Deleting \"\(collection.name)\" will not delete any scripts.")
+          .font(
+            usesGlass
+              ? .system(size: 14)
+              : .custom("CrimsonText-Regular", size: 15)
+          )
+          .foregroundStyle(usesGlass ? .secondary : Color("colorText").opacity(0.72))
+          .fixedSize(horizontal: false, vertical: true)
+
+        HStack(spacing: 10) {
+          Button("Cancel", action: onCancel)
+            .buttonStyle(AiraSecondaryButtonStyle())
+
+          Button("Delete", action: onConfirm)
+            .buttonStyle(AiraCardCastButtonStyle())
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+      }
+      .padding(20)
+      .frame(width: 320)
+      .managerSurface(cornerRadius: 20, classicFill: Color("colorBackground"), strokeOpacity: 0.12)
+      .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
+      .padding(16)
+    }
   }
 }
 
