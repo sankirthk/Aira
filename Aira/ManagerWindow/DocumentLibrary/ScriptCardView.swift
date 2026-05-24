@@ -6,17 +6,16 @@ struct ScriptCardView: View {
   @Environment(\.colorScheme) private var colorScheme
   let meta: ScriptMeta
   let isSelected: Bool
-  let showsSelectionControls: Bool
-  let selectionIsAvailable: Bool
+  let selectedCount: Int
   let editingIsAvailable: Bool
   let deletionIsAvailable: Bool
   var onEdit: () -> Void
   var onCast: () -> Void
   var onRequestCastWithSatellite: () -> Void = {}
   var onDelete: () -> Void
+  var onDeleteSelected: () -> Void = {}
   var onManageCollections: () -> Void
   var onToggleStarred: () -> Void
-  var onToggleSelection: () -> Void
   var onCardTap: () -> Void
 
   @State private var isHovered = false
@@ -74,10 +73,6 @@ struct ScriptCardView: View {
     max(142, scaled(142))
   }
 
-  private var selectionCheckboxTopPadding: CGFloat {
-    usesGlass ? 4 : 8
-  }
-
   var body: some View {
     AppKitContextMenuHost {
       cardBody
@@ -91,11 +86,6 @@ struct ScriptCardView: View {
 
       // MARK: Title row
       HStack(alignment: .top, spacing: 8) {
-        selectionCheckbox
-          .padding(.top, selectionCheckboxTopPadding)
-          .opacity(selectionIsAvailable && (showsSelectionControls || isHovered) ? 1 : 0)
-          .allowsHitTesting(selectionIsAvailable && (showsSelectionControls || isHovered))
-
         Text(meta.title)
           .font(titleFont)
           .fontWeight(usesGlass ? nil : .bold)
@@ -126,8 +116,6 @@ struct ScriptCardView: View {
         cardActionRow
         cardActionStack
       }
-      .opacity(showsSelectionControls ? 0 : 1)
-      .allowsHitTesting(!showsSelectionControls)
     }
     .padding(12)
     .frame(height: cardHeight, alignment: .top)
@@ -153,13 +141,20 @@ struct ScriptCardView: View {
     colorScheme == .dark
   }
 
+  private var isBulkContext: Bool { isSelected && selectedCount > 1 }
+
   @ViewBuilder
   private var cardContextMenu: some View {
-    if !showsSelectionControls {
+    if isBulkContext {
+      if deletionIsAvailable {
+        Button("Delete", role: .destructive) { onDeleteSelected() }
+      }
+    } else {
       Button("Edit") { onEdit() }
         .disabled(!editingIsAvailable)
       Button(meta.starred ? "Unstar" : "Star") { onToggleStarred() }
       Button("Add to Collection…") { onManageCollections() }
+      Divider()
       Button("Cast to Notch") { onCast() }
       Button("Cast with Pill Windows") { onRequestCastWithSatellite() }
       if deletionIsAvailable {
@@ -167,22 +162,6 @@ struct ScriptCardView: View {
         Button("Delete", role: .destructive) { onDelete() }
       }
     }
-  }
-
-  private var selectionCheckbox: some View {
-    Button {
-      onToggleSelection()
-    } label: {
-      Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-        .font(.system(size: 16, weight: .semibold))
-        .foregroundStyle(
-          isSelected
-            ? managerTheme.actionAccent(for: colorScheme)
-            : Color("colorText").opacity(0.55)
-        )
-    }
-    .buttonStyle(.plain)
-    .frame(width: 18, height: 18)
   }
 
   private var cardActionRow: some View {
@@ -202,18 +181,7 @@ struct ScriptCardView: View {
   }
 
   private var cardUtilityButtons: some View {
-    HStack(spacing: 8) {
-      Button {
-        onManageCollections()
-      } label: {
-        Image(systemName: "folder.badge.plus")
-          .font(.system(size: usesGlass ? 12 : 14))
-          .foregroundStyle(utilityIconColor)
-      }
-      .buttonStyle(.plain)
-      .opacity(isHovered && !showsSelectionControls ? 1 : 0)
-      .allowsHitTesting(isHovered && !showsSelectionControls)
-
+    HStack(spacing: 6) {
       Button {
         onToggleStarred()
       } label: {
@@ -223,19 +191,39 @@ struct ScriptCardView: View {
             meta.starred ? managerTheme.actionAccent(for: colorScheme) : inactiveStarColor)
       }
       .buttonStyle(.plain)
+      .opacity(isHovered || meta.starred ? 1 : 0)
+      .allowsHitTesting(isHovered || meta.starred)
 
-      Button {
-        onDelete()
+      Menu {
+        if isBulkContext {
+          if deletionIsAvailable {
+            Button("Delete", role: .destructive) { onDeleteSelected() }
+          }
+        } else {
+          Button("Edit") { onEdit() }.disabled(!editingIsAvailable)
+          Button(meta.starred ? "Unstar" : "Star") { onToggleStarred() }
+          Button("Add to Collection…") { onManageCollections() }
+          Divider()
+          Button("Cast to Notch") { onCast() }
+          Button("Cast with Pill Windows") { onRequestCastWithSatellite() }
+          if deletionIsAvailable {
+            Divider()
+            Button("Delete", role: .destructive) { onDelete() }
+          }
+        }
       } label: {
-        Image(systemName: "trash")
-          .font(.system(size: usesGlass ? 12 : 14))
-          .foregroundStyle(Color.red)
+        Image(systemName: "ellipsis")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(utilityIconColor)
+          .frame(width: 22, height: 22)
+          .contentShape(RoundedRectangle(cornerRadius: 4))
       }
-      .buttonStyle(.plain)
+      .menuStyle(.borderlessButton)
+      .menuIndicator(.hidden)
+      .fixedSize()
+      .opacity(isHovered ? 1 : 0)
+      .allowsHitTesting(isHovered)
     }
-    .frame(width: 66, alignment: .trailing)
-    .opacity((showsSelectionControls || !deletionIsAvailable) ? 0 : 1)
-    .allowsHitTesting(!showsSelectionControls && deletionIsAvailable)
   }
 
   private var editButton: some View {

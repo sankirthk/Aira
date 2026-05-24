@@ -57,7 +57,7 @@ struct SettingsViewAffordanceTests {
     #expect(SettingsChromePalette.liquidGlassDarkSurfaceHex == "#253D2E")
     #expect(SettingsChromePalette.liquidGlassLightSurfaceHex == "#849688")
     #expect(SettingsChromePalette.liquidGlassParentSurfaceOpacity < 1)
-    #expect(SettingsChromePalette.liquidGlassParentSurfaceOpacity <= 0.1)
+    #expect(SettingsChromePalette.liquidGlassParentSurfaceOpacity <= 0.25)
     #expect(SettingsChromePalette.liquidGlassTitlebarSurfaceOpacity < 0.5)
     #expect(SettingsChromePalette.liquidGlassPanelTintOpacity <= 0.2)
   }

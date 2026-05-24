@@ -155,7 +155,7 @@ enum SettingsChromePalette {
   static let classicDarkSurfaceHex = "#465649"
   static let liquidGlassDarkSurfaceHex = "#253D2E"
   static let liquidGlassLightSurfaceHex = "#849688"
-  static let liquidGlassParentSurfaceOpacity = 0.08
+  static let liquidGlassParentSurfaceOpacity = 0.20
   static let liquidGlassTitlebarSurfaceOpacity = 0.34
   static let liquidGlassPanelTintOpacity = 0.16
 
@@ -429,22 +429,45 @@ struct SettingsView: View {
         Text(tab.label)
           .settingsFont(.display, size: 23)
           .foregroundStyle(
-            appState.settings.appearanceMode == .dark
-              ? Color.white
-              : (isActive
-                ? activeManagerTheme.readableAccentForeground(
-                  for: colorScheme,
-                  accent: activeManagerTheme.primaryAccent(for: colorScheme)
-                )
-                : Color("colorText").opacity(0.82))
+            usesLiquidGlassMode
+              ? (isActive
+                ? AnyShapeStyle(.primary) : AnyShapeStyle(Color("colorText").opacity(0.82)))
+              : (appState.settings.appearanceMode == .dark
+                ? AnyShapeStyle(Color.white)
+                : (isActive
+                  ? AnyShapeStyle(
+                    activeManagerTheme.readableAccentForeground(
+                      for: colorScheme,
+                      accent: activeManagerTheme.primaryAccent(for: colorScheme)
+                    ))
+                  : AnyShapeStyle(Color("colorText").opacity(0.82))))
           )
         Spacer(minLength: 0)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 14)
       .padding(.vertical, 14)
-      .background(isActive ? activeManagerTheme.primaryAccent(for: colorScheme) : Color.clear)
-      .clipShape(RoundedRectangle(cornerRadius: 16))
+      .background {
+        if isActive {
+          let isDark = colorScheme == .dark
+          if usesLiquidGlassMode {
+            let accent = activeManagerTheme.primaryAccent(for: colorScheme)
+            ZStack {
+              RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial)
+              RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(accent.opacity(isDark ? 0.30 : 0.22))
+            }
+            .overlay(
+              RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1)
+            )
+          } else {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+              .fill(activeManagerTheme.primaryAccent(for: colorScheme))
+          }
+        }
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
       .shadow(color: Color("colorText").opacity(isActive ? 0.15 : 0), radius: 8, y: 8)
     }
     .buttonStyle(.plain)
@@ -687,7 +710,11 @@ private struct SettingsPanel<Content: View>: View {
       .clipShape(shape)
       .overlay {
         shape.stroke(
-          Color("colorText").opacity(usesGlass ? 0.08 : 0.10),
+          Color("colorText").opacity(
+            usesGlass
+              ? (colorScheme == .dark ? 0.10 : 0.20)
+              : (colorScheme == .dark ? 0.14 : 0.22)
+          ),
           lineWidth: usesGlass ? 1 : 1.5
         )
       }
@@ -845,6 +872,8 @@ private struct ShortcutKeyCapsView: View {
 
 private struct KeyCapView: View {
   let label: String
+  @Environment(\.managerTheme) private var managerTheme
+  @Environment(\.colorScheme) private var colorScheme
 
   private var fontSize: CGFloat {
     switch label {
@@ -864,19 +893,21 @@ private struct KeyCapView: View {
   }
 
   var body: some View {
+    let accent = managerTheme.primaryAccent(for: colorScheme)
+    let isDark = colorScheme == .dark
     Text(label)
       .font(.system(size: fontSize, weight: .semibold, design: .rounded))
-      .foregroundStyle(Color("colorText"))
+      .foregroundStyle(isDark ? Color.white : accent)
       .padding(.horizontal, 7)
       .padding(.vertical, 6)
       .frame(minWidth: minWidth)
       .background(
         RoundedRectangle(cornerRadius: 6)
-          .fill(Color("colorTertiary"))
+          .fill(accent.opacity(isDark ? 0.14 : 0.10))
       )
       .overlay(
         RoundedRectangle(cornerRadius: 6)
-          .stroke(Color("colorText").opacity(0.18), lineWidth: 1)
+          .stroke(accent.opacity(isDark ? 0.42 : 0.35), lineWidth: 1)
       )
   }
 }
@@ -993,6 +1024,9 @@ private struct AppearanceTabContent: View {
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
 
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+
   private let sizes: [(String, ManagerTypography)] = [
     ("Small", .small), ("Medium", .medium), ("Large", .large),
   ]
@@ -1081,19 +1115,32 @@ private struct AppearanceTabContent: View {
                     .foregroundStyle(Color("colorText"))
                     .frame(maxWidth: .infinity)
                     .frame(height: SettingsLayoutParity.typographyControlHeight)
-                    .background(
-                      isActive
-                        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.1)
-                        : managerTheme.controlFill(for: colorScheme).opacity(0.75)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                      RoundedRectangle(cornerRadius: 14)
-                        .stroke(
-                          isActive
-                            ? managerTheme.primaryAccent(for: colorScheme)
-                            : Color("colorText").opacity(0.14),
-                          lineWidth: isActive ? 3 : 2))
+                    .background {
+                      let accent = managerTheme.primaryAccent(for: colorScheme)
+                      if isActive && usesGlass {
+                        ZStack {
+                          RoundedRectangle(cornerRadius: 14, style: .continuous).fill(
+                            .ultraThinMaterial)
+                          RoundedRectangle(cornerRadius: 14, style: .continuous).fill(
+                            accent.opacity(isDark ? 0.30 : 0.22))
+                        }
+                        .overlay(
+                          RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(
+                            accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+                      } else {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                          .fill(
+                            isActive
+                              ? accent.opacity(0.1)
+                              : managerTheme.controlFill(for: colorScheme).opacity(0.75)
+                          )
+                          .overlay(
+                            RoundedRectangle(cornerRadius: 14).stroke(
+                              isActive ? accent : Color("colorText").opacity(0.14),
+                              lineWidth: isActive ? 3 : 2))
+                      }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
                 .buttonStyle(.plain)
               }
@@ -1131,19 +1178,29 @@ private struct AppearanceTabContent: View {
       .padding(14)
       .frame(height: SettingsLayoutParity.appearanceThemeCardHeight, alignment: .topLeading)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        isActive
-          ? managerTheme.primaryAccent(for: colorScheme).opacity(0.1)
-          : managerTheme.surfaceFill(for: colorScheme).opacity(0.82)
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 18))
-      .overlay(
-        RoundedRectangle(cornerRadius: 18)
-          .stroke(
-            isActive
-              ? managerTheme.primaryAccent(for: colorScheme)
-              : Color("colorText").opacity(0.16),
-            lineWidth: isActive ? 3 : 2))
+      .background {
+        let accent = managerTheme.primaryAccent(for: colorScheme)
+        if isActive && usesGlass {
+          ZStack {
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(
+              accent.opacity(isDark ? 0.30 : 0.22))
+          }
+          .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(
+              accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+        } else {
+          RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+              isActive
+                ? accent.opacity(0.1) : managerTheme.surfaceFill(for: colorScheme).opacity(0.82)
+            )
+            .overlay(
+              RoundedRectangle(cornerRadius: 18).stroke(
+                isActive ? accent : Color("colorText").opacity(0.16), lineWidth: isActive ? 3 : 2))
+        }
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
     .buttonStyle(.plain)
   }
@@ -1210,11 +1267,15 @@ private struct AppearanceTabContent: View {
       VStack(alignment: .leading, spacing: 6) {
         Text(style.settingsTitle)
           .settingsFont(.body, size: 18)
-          .foregroundStyle(isActive ? activeForeground : Color("colorText"))
+          .foregroundStyle(
+            isActive && !usesGlass
+              ? AnyShapeStyle(activeForeground) : AnyShapeStyle(Color("colorText")))
         Text(style.settingsDescription)
           .settingsFont(.body, size: 13)
           .foregroundStyle(
-            isActive ? activeForeground.opacity(0.82) : Color("colorText").opacity(0.64)
+            isActive && !usesGlass
+              ? AnyShapeStyle(activeForeground.opacity(0.82))
+              : AnyShapeStyle(Color("colorText").opacity(0.64))
           )
           .lineSpacing(2)
           .fixedSize(horizontal: false, vertical: true)
@@ -1222,19 +1283,26 @@ private struct AppearanceTabContent: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(14)
       .frame(height: SettingsLayoutParity.managerInterfaceCardHeight, alignment: .topLeading)
-      .background(
-        isActive
-          ? managerTheme.primaryAccent(for: colorScheme)
-          : managerTheme.controlFill(for: colorScheme).opacity(0.72)
-      )
+      .background {
+        let accent = managerTheme.primaryAccent(for: colorScheme)
+        if isActive && usesGlass {
+          ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(
+              accent.opacity(isDark ? 0.30 : 0.22))
+          }
+          .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(
+              accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+        } else {
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isActive ? accent : managerTheme.controlFill(for: colorScheme).opacity(0.72))
+            .overlay(
+              RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(
+                Color("colorText").opacity(isActive ? 0.08 : 0.14), lineWidth: isActive ? 2 : 1.5))
+        }
+      }
       .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-      .overlay(
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(
-            Color("colorText").opacity(isActive ? 0.08 : 0.14),
-            lineWidth: isActive ? 2 : 1.5
-          )
-      )
       .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     .buttonStyle(.plain)
@@ -1247,6 +1315,10 @@ private struct NotchTabContent: View {
   @EnvironmentObject var appState: AppState
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+
   private let swatchRowMaxWidth: CGFloat = 700
   private let swatchSpacing: CGFloat = 10
 
@@ -1544,12 +1616,29 @@ private struct NotchTabContent: View {
             } label: {
               Text("Reset to Defaults")
                 .settingsFont(.body, size: 16)
-                .foregroundStyle(Color.white)
+                .foregroundStyle(
+                  usesGlass ? AnyShapeStyle(Color.primary) : AnyShapeStyle(Color.white)
+                )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(managerTheme.primaryAccent(for: colorScheme))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .contentShape(RoundedRectangle(cornerRadius: 12))
+                .background {
+                  let accent = managerTheme.primaryAccent(for: colorScheme)
+                  if usesGlass {
+                    ZStack {
+                      RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                        .ultraThinMaterial)
+                      RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                        accent.opacity(isDark ? 0.30 : 0.22))
+                    }
+                    .overlay(
+                      RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
+                        accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+                  } else {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous).fill(accent)
+                  }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .settingsPointingHandCursor()
@@ -1696,19 +1785,29 @@ private struct NotchTabContent: View {
     }
     .padding(8)
     .frame(maxWidth: .infinity)
-    .background(
-      isActive
-        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.12)
-        : managerTheme.controlFill(for: colorScheme).opacity(0.7)
-    )
-    .clipShape(RoundedRectangle(cornerRadius: 13))
-    .overlay(
-      RoundedRectangle(cornerRadius: 13)
-        .stroke(
-          isActive ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.1),
-          lineWidth: isActive ? 2.5 : 1.5
-        )
-    )
+    .background {
+      let accent = managerTheme.primaryAccent(for: colorScheme)
+      if isActive && usesGlass {
+        ZStack {
+          RoundedRectangle(cornerRadius: 13, style: .continuous).fill(.ultraThinMaterial)
+          RoundedRectangle(cornerRadius: 13, style: .continuous).fill(
+            accent.opacity(isDark ? 0.30 : 0.22))
+        }
+        .overlay(
+          RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(
+            accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+      } else {
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+          .fill(
+            isActive
+              ? accent.opacity(0.12) : managerTheme.controlFill(for: colorScheme).opacity(0.7)
+          )
+          .overlay(
+            RoundedRectangle(cornerRadius: 13).stroke(
+              isActive ? accent : Color("colorText").opacity(0.1), lineWidth: isActive ? 2.5 : 1.5))
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
   }
 
   private func customColorSwatch(selection: Binding<Color>) -> some View {
@@ -1762,23 +1861,32 @@ private struct NotchTabContent: View {
     } label: {
       Text(label)
         .settingsFont(.body, size: 17)
-        .foregroundStyle(isSelected ? Color.white : Color("colorText"))
+        .foregroundStyle(
+          isSelected && !usesGlass ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color("colorText"))
+        )
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(
-          isSelected
-            ? managerTheme.primaryAccent(for: colorScheme)
-            : managerTheme.controlFill(for: colorScheme)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-          RoundedRectangle(cornerRadius: 12)
-            .stroke(
-              isSelected
-                ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.14),
-              lineWidth: isSelected ? 2.5 : 1.5
-            )
-        )
+        .background {
+          let accent = managerTheme.primaryAccent(for: colorScheme)
+          if isSelected && usesGlass {
+            ZStack {
+              RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.ultraThinMaterial)
+              RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                accent.opacity(isDark ? 0.30 : 0.22))
+            }
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
+                accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+          } else {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .fill(isSelected ? accent : managerTheme.controlFill(for: colorScheme))
+              .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(
+                  isSelected ? accent : Color("colorText").opacity(0.14),
+                  lineWidth: isSelected ? 2.5 : 1.5))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
     .buttonStyle(.plain)
   }
@@ -1827,6 +1935,9 @@ private struct SatelliteTabContent: View {
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
   @State private var selectedSatelliteSlot = 1
+
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
   private let swatchRowMaxWidth: CGFloat = 700
   private let swatchSpacing: CGFloat = 10
 
@@ -2126,16 +2237,33 @@ private struct SatelliteTabContent: View {
                 } label: {
                   Text(selectedSlotIsInherited ? "Using Notch Defaults" : "Use Notch Defaults")
                     .settingsFont(.body, size: 16)
-                    .foregroundStyle(Color.white)
+                    .foregroundStyle(
+                      usesGlass ? AnyShapeStyle(Color.primary) : AnyShapeStyle(Color.white)
+                    )
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(
-                      selectedSlotIsInherited
-                        ? Color("colorText").opacity(0.35)
-                        : managerTheme.primaryAccent(for: colorScheme)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                    .background {
+                      let accent = managerTheme.primaryAccent(for: colorScheme)
+                      if usesGlass {
+                        ZStack {
+                          RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                            .ultraThinMaterial)
+                          RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(
+                              (selectedSlotIsInherited ? Color("colorText") : accent).opacity(
+                                isDark ? 0.20 : 0.15))
+                        }
+                        .overlay(
+                          RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
+                            (selectedSlotIsInherited ? Color("colorText") : accent).opacity(
+                              isDark ? 0.35 : 0.30), lineWidth: 1))
+                      } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                          .fill(selectedSlotIsInherited ? Color("colorText").opacity(0.35) : accent)
+                      }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .settingsPointingHandCursor()
@@ -2280,19 +2408,32 @@ private struct SatelliteTabContent: View {
     } label: {
       Text("\(count)")
         .settingsFont(.body, size: 16)
-        .foregroundStyle(isActive ? Color.white : Color("colorText").opacity(0.7))
+        .foregroundStyle(
+          isActive && !usesGlass
+            ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color("colorText").opacity(0.7))
+        )
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(
-          isActive
-            ? managerTheme.primaryAccent(for: colorScheme)
-            : managerTheme.controlFill(for: colorScheme)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-          RoundedRectangle(cornerRadius: 12)
-            .stroke(Color("colorText").opacity(0.12), lineWidth: isActive ? 2 : 1.5)
-        )
+        .background {
+          let accent = managerTheme.primaryAccent(for: colorScheme)
+          if isActive && usesGlass {
+            ZStack {
+              RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.ultraThinMaterial)
+              RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                accent.opacity(isDark ? 0.30 : 0.22))
+            }
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
+                accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+          } else {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .fill(isActive ? accent : managerTheme.controlFill(for: colorScheme))
+              .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(
+                  Color("colorText").opacity(0.12), lineWidth: isActive ? 2 : 1.5))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
     .buttonStyle(.plain)
   }
@@ -2320,20 +2461,32 @@ private struct SatelliteTabContent: View {
           )
           .clipShape(Capsule())
       }
-      .foregroundStyle(isActive ? Color.white : Color("colorText"))
+      .foregroundStyle(
+        isActive && !usesGlass ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color("colorText"))
+      )
       .padding(.horizontal, 14)
       .padding(.vertical, 12)
       .frame(maxWidth: .infinity)
-      .background(
-        isActive
-          ? managerTheme.primaryAccent(for: colorScheme)
-          : managerTheme.controlFill(for: colorScheme)
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 14))
-      .overlay(
-        RoundedRectangle(cornerRadius: 14)
-          .stroke(Color("colorText").opacity(isActive ? 0.08 : 0.12), lineWidth: isActive ? 2 : 1.5)
-      )
+      .background {
+        let accent = managerTheme.primaryAccent(for: colorScheme)
+        if isActive && usesGlass {
+          ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(
+              accent.opacity(isDark ? 0.30 : 0.22))
+          }
+          .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(
+              accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+        } else {
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isActive ? accent : managerTheme.controlFill(for: colorScheme))
+            .overlay(
+              RoundedRectangle(cornerRadius: 14).stroke(
+                Color("colorText").opacity(isActive ? 0.08 : 0.12), lineWidth: isActive ? 2 : 1.5))
+        }
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     .buttonStyle(.plain)
   }
@@ -2409,19 +2562,29 @@ private struct SatelliteTabContent: View {
     }
     .padding(8)
     .frame(maxWidth: .infinity)
-    .background(
-      isActive
-        ? managerTheme.primaryAccent(for: colorScheme).opacity(0.12)
-        : managerTheme.controlFill(for: colorScheme).opacity(0.7)
-    )
-    .clipShape(RoundedRectangle(cornerRadius: 13))
-    .overlay(
-      RoundedRectangle(cornerRadius: 13)
-        .stroke(
-          isActive ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.1),
-          lineWidth: isActive ? 2.5 : 1.5
-        )
-    )
+    .background {
+      let accent = managerTheme.primaryAccent(for: colorScheme)
+      if isActive && usesGlass {
+        ZStack {
+          RoundedRectangle(cornerRadius: 13, style: .continuous).fill(.ultraThinMaterial)
+          RoundedRectangle(cornerRadius: 13, style: .continuous).fill(
+            accent.opacity(isDark ? 0.30 : 0.22))
+        }
+        .overlay(
+          RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(
+            accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+      } else {
+        RoundedRectangle(cornerRadius: 13, style: .continuous)
+          .fill(
+            isActive
+              ? accent.opacity(0.12) : managerTheme.controlFill(for: colorScheme).opacity(0.7)
+          )
+          .overlay(
+            RoundedRectangle(cornerRadius: 13).stroke(
+              isActive ? accent : Color("colorText").opacity(0.1), lineWidth: isActive ? 2.5 : 1.5))
+      }
+    }
+    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
   }
 
   private func customColorSwatch(selection: Binding<Color>) -> some View {
@@ -2471,23 +2634,32 @@ private struct SatelliteTabContent: View {
     } label: {
       Text(label)
         .settingsFont(.body, size: 17)
-        .foregroundStyle(isSelected ? Color.white : Color("colorText"))
+        .foregroundStyle(
+          isSelected && !usesGlass ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color("colorText"))
+        )
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
-        .background(
-          isSelected
-            ? managerTheme.primaryAccent(for: colorScheme)
-            : managerTheme.controlFill(for: colorScheme)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-          RoundedRectangle(cornerRadius: 12)
-            .stroke(
-              isSelected
-                ? managerTheme.primaryAccent(for: colorScheme) : Color("colorText").opacity(0.14),
-              lineWidth: isSelected ? 2.5 : 1.5
-            )
-        )
+        .background {
+          let accent = managerTheme.primaryAccent(for: colorScheme)
+          if isSelected && usesGlass {
+            ZStack {
+              RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.ultraThinMaterial)
+              RoundedRectangle(cornerRadius: 12, style: .continuous).fill(
+                accent.opacity(isDark ? 0.30 : 0.22))
+            }
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(
+                accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+          } else {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .fill(isSelected ? accent : managerTheme.controlFill(for: colorScheme))
+              .overlay(
+                RoundedRectangle(cornerRadius: 12).stroke(
+                  isSelected ? accent : Color("colorText").opacity(0.14),
+                  lineWidth: isSelected ? 2.5 : 1.5))
+          }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
     .buttonStyle(.plain)
   }
@@ -2649,6 +2821,9 @@ private struct SystemTabContent: View {
   @Environment(\.managerTheme) private var managerTheme
   @Environment(\.colorScheme) private var colorScheme
 
+  private var usesGlass: Bool { managerTheme.usesLiquidGlassMode }
+  private var isDark: Bool { colorScheme == .dark }
+
   private var countdownDurationBinding: Binding<Int> {
     Binding(
       get: { appState.settings.countdownDuration },
@@ -2692,35 +2867,43 @@ private struct SystemTabContent: View {
       VStack(alignment: .leading, spacing: 5) {
         Text(mode.settingsTitle)
           .settingsFont(.body, size: 17)
-          .foregroundStyle(isActive ? Color.white : Color("colorText"))
+          .foregroundStyle(
+            isActive && !usesGlass ? AnyShapeStyle(Color.white) : AnyShapeStyle(Color("colorText")))
         Text(mode.settingsDescription)
           .settingsFont(.body, size: 13)
           .foregroundStyle(
-            isActive
-              ? Color.white.opacity(0.82)
-              : Color("colorText").opacity(0.62)
+            isActive && !usesGlass
+              ? AnyShapeStyle(Color.white.opacity(0.82))
+              : AnyShapeStyle(Color("colorText").opacity(0.62))
           )
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.horizontal, 14)
       .padding(.vertical, 12)
-      .background(
-        isActive
-          ? managerTheme.primaryAccent(for: colorScheme)
-          : managerTheme.controlFill(for: colorScheme).opacity(0.82)
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 14))
-      .overlay(
-        RoundedRectangle(cornerRadius: 14)
-          .stroke(
-            isActive
-              ? Color.white.opacity(colorScheme == .dark ? 0.42 : 0.58)
-              : Color("colorText").opacity(0.14),
-            lineWidth: isActive ? 2 : 1.5
-          )
-      )
-      .contentShape(RoundedRectangle(cornerRadius: 14))
+      .background {
+        let accent = managerTheme.primaryAccent(for: colorScheme)
+        if isActive && usesGlass {
+          ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 14, style: .continuous).fill(
+              accent.opacity(isDark ? 0.30 : 0.22))
+          }
+          .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(
+              accent.opacity(isDark ? 0.54 : 0.48), lineWidth: 1))
+        } else {
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(isActive ? accent : managerTheme.controlFill(for: colorScheme).opacity(0.82))
+            .overlay(
+              RoundedRectangle(cornerRadius: 14).stroke(
+                isActive
+                  ? Color.white.opacity(isDark ? 0.42 : 0.58) : Color("colorText").opacity(0.14),
+                lineWidth: isActive ? 2 : 1.5))
+        }
+      }
+      .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+      .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
     .buttonStyle(.plain)
     .settingsPointingHandCursor()
